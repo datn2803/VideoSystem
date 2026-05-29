@@ -1,0 +1,29 @@
+node_modules/
+.next/
+build/
+dist/
+.data/
+
+.env
+.env.local
+.env*.local
+!.env.example
+
+*.log
+.DS_Store
+.vercel
+.cache/
+
+next-env.d.ts.bak
+
+# Generated outputs: keep .md docs (knowledge), skip binaries (reproducible)
+out/*
+!out/*.md
+# ...but NEVER commit the system export — it contains live secrets (Supabase keys, vault key)
+out/00-SYSTEM-EXPORT.md
+
+# Generated assets are reproducible from scripts/, skip from VCS
+assets/
+
+# Intermediate build artifacts
+tsconfig.tsbuildinfo

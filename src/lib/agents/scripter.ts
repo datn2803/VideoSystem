@@ -1,0 +1,143 @@
+import { hub } from "@/lib/integration-hub/hub";
+import { store, type ProfileRecord } from "@/lib/integration-hub/storage";
+
+export type ScriptResult = {
+  hook: string;
+  body: string;
+  cta: string;
+  caption: string;
+  hashtags: string[];
+  variantPrompts: {
+    talking: string;
+    broll: { shotList: { footageTag: string; durationSec: number; note: string }[]; voiceOver: string };
+    animation: { keyMessages: string[]; dataPoints: string[]; visualCues: string[]; voiceOver: string };
+  };
+  estimatedDurationSec: number;
+  raw?: string;
+  costUsd: number;
+};
+
+const SYSTEM = `Bạn là content writer chuyên ngành tài chính ngân hàng tại Việt Nam, viết content cho TikTok/Reels.
+Đặc trưng phong cách:
+- Tự nhiên, gần gũi, không sáo rỗng
+- Hook 3-5 giây thật mạnh, dùng số liệu cụ thể hoặc câu hỏi gây tò mò
+- Body có data, có ví dụ thực tế, có insight chuyên môn
+- CTA rõ ràng, mời tương tác chứ không spam quảng cáo
+- Tone: chuyên nghiệp + đáng tin + tôn trọng người xem
+- TUYỆT ĐỐI không hứa lợi nhuận cụ thể, không nói "an toàn 100%", không so sánh tiêu cực với ngân hàng khác`;
+
+function buildPrompt(profile: ProfileRecord, topic: string, pain: string, persona: string, lengthSec: number): string {
+  return `Profile chuyên gia:
+- Tên: ${profile.name}
+- Vị trí: ${profile.role || "Personal Banker"}
+- Năm kinh nghiệm: ${profile.expertise?.yearsExp || "N/A"}
+- Sản phẩm phụ trách: ${(profile.expertise?.products || []).join(", ") || "N/A"}
+- USP: ${profile.usp || "N/A"}
+- Tone: ${profile.tone?.voice || "professional"}
+
+Chủ đề video: ${topic}
+Pain point cần giải quyết: ${pain}
+Target persona: ${persona}
+Độ dài mục tiêu: ${lengthSec} giây
+
+Hãy viết script chi tiết cho video này, đồng thời cung cấp prompt cho 3 phong cách dựng video khác nhau.
+
+CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema sau:
+{
+  "hook": "câu mở 3-5s (≤25 từ, phải gây stop scroll)",
+  "body": "nội dung chính, dạng đoạn văn, ${Math.round(lengthSec * 0.7)} giây",
+  "cta": "call-to-action 5-10s (mời comment/follow, không spam)",
+  "caption": "caption post social, có line break, có emoji vừa phải",
+  "hashtags": ["#hashtag1", "#hashtag2"],
+  "variantPrompts": {
+    "talking": "script đầy đủ cho AI avatar (hoặc người thật) đọc trực tiếp camera",
+    "broll": {
+      "shotList": [
+        {"footageTag": "intro|talking|broll|cta|outro", "durationSec": 3, "note": "mô tả shot"}
+      ],
+      "voiceOver": "voice-over text cho video b-roll"
+    },
+    "animation": {
+      "keyMessages": ["thông điệp 1", "thông điệp 2"],
+      "dataPoints": ["số liệu 1", "số liệu 2"],
+      "visualCues": ["icon/animation 1", "icon/animation 2"],
+      "voiceOver": "voice-over text cho video animation"
+    }
+  },
+  "estimatedDurationSec": ${lengthSec}
+}`;
+}
+
+async function recordLLMUsage(costUsd: number, tokensIn: number, tokensOut: number) {
+  const providers = (await store.listProviders()).filter((p) => p.kind === "llm" && p.enabled);
+  const def = providers.find((p) => p.isDefault) || providers[0];
+  if (!def) return;
+  await store.recordUsage({
+    providerId: def.id,
+    date: new Date().toISOString().slice(0, 10),
+    unitsUsed: tokensIn + tokensOut,
+    costEstimateUsd: costUsd,
+    requestCount: 1,
+  });
+}
+
+export async function generateScript(input: {
+  profile: ProfileRecord;
+  topic: string;
+  painPoint: string;
+  targetPersona: string;
+  lengthSec?: number;
+}): Promise<ScriptResult> {
+  const lengthSec = input.lengthSec || 60;
+  const llm = await hub.llm();
+  const result = await llm.complete({
+    system: SYSTEM,
+    messages: [{ role: "user", content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec) }],
+    maxTokens: 3000,
+    responseFormat: "json",
+  });
+
+  await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
+
+  let parsed: Partial<ScriptResult> = {};
+  try {
+    const cleaned = result.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned);
+    }
+  } catch {
+    // Fallback: trả raw text
+    return {
+      hook: "",
+      body: result.text,
+      cta: "",
+      caption: "",
+      hashtags: [],
+      variantPrompts: {
+        talking: result.text,
+        broll: { shotList: [], voiceOver: result.text },
+        animation: { keyMessages: [], dataPoints: [], visualCues: [], voiceOver: result.text },
+      },
+      estimatedDurationSec: lengthSec,
+      raw: result.text,
+      costUsd: result.costUsd,
+    };
+  }
+
+  return {
+    hook: parsed.hook || "",
+    body: parsed.body || "",
+    cta: parsed.cta || "",
+    caption: parsed.caption || "",
+    hashtags: parsed.hashtags || [],
+    variantPrompts: parsed.variantPrompts || {
+      talking: "",
+      broll: { shotList: [], voiceOver: "" },
+      animation: { keyMessages: [], dataPoints: [], visualCues: [], voiceOver: "" },
+    },
+    estimatedDurationSec: parsed.estimatedDurationSec || lengthSec,
+    costUsd: result.costUsd,
+  };
+}
