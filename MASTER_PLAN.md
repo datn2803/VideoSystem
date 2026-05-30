@@ -1,7 +1,7 @@
 # MASTER PLAN — VideoSystem × "Vũ ở Shinhan"
 ### Tự động hóa video TikTok bằng HeyGen (avatar) + ElevenLabs (voice clone)
 
-> Phiên bản: 1.0 · Ngày: 2026-05-29 · Owner: Tommy (TOMGROUP)
+> Phiên bản: 1.0 · Ngày: 2026-05-29 · Owner: Tommy 
 > Mục tiêu tối cao: làm CHUẨN, test kỹ, **không đốt credit HeyGen/ElevenLabs oan**.
 > Nguyên tắc vàng: **Tiền chỉ được tiêu ở Track C. Track A + B phải xong và đạt trước.**
 
