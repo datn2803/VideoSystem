@@ -5,6 +5,7 @@ import type {
   TTSProvider,
   AvatarProvider,
   RenderProvider,
+  ImageProvider,
   ProviderKind,
   ProviderConfig,
 } from "./types";
@@ -16,7 +17,21 @@ import { makeFptTtsAdapter } from "./adapters/fpt-tts";
 import { makeHeyGenAdapter } from "./adapters/heygen";
 import { makeDIDAdapter } from "./adapters/d-id";
 import { makeCreatomateAdapter } from "./adapters/creatomate";
+import { makeGeminiImageAdapter } from "./adapters/gemini-image";
+import { makeOpenAIImageAdapter } from "./adapters/openai-image";
 import { makeMockLLM, makeMockTTS, makeMockAvatar, makeMockRender } from "./adapters/mock";
+
+// Không có mock image (sinh ảnh là PAID) — stub để Test báo lỗi rõ khi thiếu key.
+function makeStubImage(): ImageProvider {
+  return {
+    async generate() {
+      throw new Error("Image provider chưa có API key");
+    },
+    async testConnection() {
+      return { ok: false, error: "Chưa có API key", latencyMs: 0 };
+    },
+  };
+}
 
 async function getDefaultProvider(kind: ProviderKind): Promise<ProviderConfig | undefined> {
   const providers = (await store.listProviders()).filter((p) => p.kind === kind && p.enabled);
@@ -93,6 +108,15 @@ async function buildRender(p: ProviderConfig): Promise<RenderProvider> {
   return makeMockRender();
 }
 
+async function buildImage(p: ProviderConfig): Promise<ImageProvider> {
+  const apiKey = await loadSecret(p);
+  if (!apiKey) return makeStubImage();
+  if (p.name === "gemini-image") return makeGeminiImageAdapter({ apiKey, modelId: p.config?.modelId as string });
+  if (p.name === "openai-image")
+    return makeOpenAIImageAdapter({ apiKey, modelId: p.config?.modelId as string, size: p.config?.size as string });
+  return makeStubImage();
+}
+
 export const hub = {
   async llm(): Promise<LLMProvider> {
     const p = await getDefaultProvider("llm");
@@ -110,6 +134,10 @@ export const hub = {
     const p = await getDefaultProvider("render");
     return p ? await buildRender(p) : makeMockRender();
   },
+  async image(): Promise<ImageProvider | null> {
+    const p = await getDefaultProvider("image");
+    return p ? await buildImage(p) : null;
+  },
   async testConnection(id: string): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
     const p = await store.getProvider(id);
     if (!p) return { ok: false, error: "Provider not found" };
@@ -119,6 +147,7 @@ export const hub = {
         tts: buildTTS,
         avatar: buildAvatar,
         render: buildRender,
+        image: buildImage,
       };
       const builder = builders[p.kind];
       if (!builder) return { ok: true };

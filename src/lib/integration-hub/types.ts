@@ -1,4 +1,4 @@
-export type ProviderKind = "llm" | "tts" | "avatar" | "render" | "publish" | "storage";
+export type ProviderKind = "llm" | "tts" | "avatar" | "render" | "image" | "publish" | "storage";
 
 export type ProviderName =
   | "claude"
@@ -10,6 +10,8 @@ export type ProviderName =
   | "heygen"
   | "d-id"
   | "creatomate"
+  | "gemini-image"
+  | "openai-image"
   | "mock";
 
 export interface ProviderConfig {
@@ -108,7 +110,18 @@ export interface RenderProvider {
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }
 
-export type AnyProvider = LLMProvider | TTSProvider | AvatarProvider | RenderProvider;
+export interface ImageResult {
+  imageBase64: string;
+  mimeType: string;
+  costUsd: number;
+}
+
+export interface ImageProvider {
+  generate(input: { prompt: string }): Promise<ImageResult>;
+  testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
+}
+
+export type AnyProvider = LLMProvider | TTSProvider | AvatarProvider | RenderProvider | ImageProvider;
 
 export interface ProviderMeta {
   name: ProviderName;

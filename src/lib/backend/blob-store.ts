@@ -13,7 +13,7 @@ import path from "node:path";
 import { dataPath } from "@/lib/paths";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase-client";
 
-export type BlobBucket = "uploads" | "audio" | "videos";
+export type BlobBucket = "uploads" | "audio" | "videos" | "broll-images";
 
 export async function blobUpload(input: {
   bucket: BlobBucket;

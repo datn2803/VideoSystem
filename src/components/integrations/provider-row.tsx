@@ -25,7 +25,7 @@ type ProviderWithStatus = {
 };
 
 const kindLabel: Record<string, string> = {
-  llm: "LLM", tts: "TTS", avatar: "Avatar", render: "Render", storage: "Storage", publish: "Publish",
+  llm: "LLM", tts: "TTS", avatar: "Avatar", render: "Render", image: "Image", storage: "Storage", publish: "Publish",
 };
 
 export function ProviderRow({ provider }: { provider: ProviderWithStatus }) {

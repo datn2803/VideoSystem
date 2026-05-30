@@ -169,6 +169,58 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { key: "animationTemplateId", label: "Animation Template ID", type: "text", required: false },
     ],
   },
+
+  // ── Image (sinh ảnh AI cho C2 b-roll) ──
+  {
+    name: "gemini-image",
+    kind: "image",
+    label: "Gemini Image (Nano Banana)",
+    homepage: "https://aistudio.google.com/apikey",
+    authType: "api_key",
+    fields: [
+      { key: "apiKey", label: "API Key (có thể dùng chung key Gemini)", type: "password", required: true, placeholder: "AIza..." },
+      {
+        key: "modelId",
+        label: "Model",
+        type: "select",
+        required: false,
+        options: [{ value: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image (Nano Banana)" }],
+      },
+    ],
+    defaultConfig: { modelId: "gemini-2.5-flash-image" },
+  },
+  {
+    name: "openai-image",
+    kind: "image",
+    label: "OpenAI GPT Image",
+    homepage: "https://platform.openai.com/api-keys",
+    authType: "api_key",
+    fields: [
+      { key: "apiKey", label: "API Key", type: "password", required: true, placeholder: "sk-..." },
+      {
+        key: "modelId",
+        label: "Model",
+        type: "select",
+        required: false,
+        options: [
+          { value: "gpt-image-1", label: "GPT Image 1 (ổn định)" },
+          { value: "gpt-image-2", label: "GPT Image 2 (mới nhất)" },
+          { value: "gpt-image-1-mini", label: "GPT Image 1 Mini (rẻ nhất)" },
+        ],
+      },
+      {
+        key: "size",
+        label: "Kích thước",
+        type: "select",
+        required: false,
+        options: [
+          { value: "1024x1536", label: "Dọc 1024x1536 (9:16, đề xuất)" },
+          { value: "1024x1024", label: "Vuông 1024x1024" },
+        ],
+      },
+    ],
+    defaultConfig: { modelId: "gpt-image-1", size: "1024x1536" },
+  },
 ];
 
 export function getProviderMeta(name: string): ProviderMeta | undefined {

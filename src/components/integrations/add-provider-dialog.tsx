@@ -14,6 +14,7 @@ const kindLabel: Record<string, string> = {
   tts: "TTS / Voice",
   avatar: "Avatar",
   render: "Render",
+  image: "Image (B-roll AI)",
   storage: "Storage",
   publish: "Publish",
 };

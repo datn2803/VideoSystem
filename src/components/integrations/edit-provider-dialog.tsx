@@ -10,7 +10,7 @@ import { updateProviderAction, testProviderAction } from "@/lib/integration-hub/
 import { ProviderFieldsForm } from "./provider-fields-form";
 
 const kindLabel: Record<string, string> = {
-  llm: "LLM", tts: "TTS", avatar: "Avatar", render: "Render", storage: "Storage", publish: "Publish",
+  llm: "LLM", tts: "TTS", avatar: "Avatar", render: "Render", image: "Image", storage: "Storage", publish: "Publish",
 };
 
 export type EditableProvider = {

@@ -1,13 +1,49 @@
+import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
 import { hub } from "@/lib/integration-hub/hub";
 import { footageStore } from "@/lib/footage/storage";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
+import { blobUpload } from "@/lib/backend/blob-store";
+import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { videoStore, type VideoDraftRecord } from "../storage";
 
 async function pickRenderProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "render" && p.enabled);
   return providers.find((p) => p.isDefault) || providers[0];
+}
+
+async function pickImageProvider() {
+  const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
+  return providers.find((p) => p.isDefault) || providers[0];
+}
+
+// Ảnh AI là PAID → chỉ sinh tối đa MAX_IMAGES shot + hậu tố style cố định cho đồng nhất.
+const MAX_IMAGES = 5;
+const STYLE_SUFFIX =
+  ". Vertical 9:16 cinematic photo, high detail, realistic, Vietnamese context, natural lighting, no text, no watermark.";
+const IMG_CACHE_KEY = "broll-image-cache"; // hash -> public URL (tránh re-render đốt tiền)
+
+function hashImage(scriptId: string, idx: number, prompt: string, model: string): string {
+  return crypto.createHash("sha256").update(`${scriptId}::${idx}::${prompt}::${model}`).digest("hex");
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+function extFromMime(mime: string): string {
+  if (mime.includes("png")) return ".png";
+  if (mime.includes("webp")) return ".webp";
+  return ".jpg";
 }
 
 const MOCK_MP4_HEADER = Buffer.from([
@@ -66,15 +102,58 @@ export async function buildBroll(input: {
 
       const modifications: Record<string, unknown> = {
         voice_track: toAbsoluteUrl(audio?.storagePath),
+        caption: script.script.caption,
       };
-      usedFootage.forEach((f, i) => {
-        if (f) modifications[`shot_${i + 1}`] = toAbsoluteUrl(f.storagePath);
-      });
+
+      // Cost-guard: chỉ sinh ảnh AI (PAID) khi RENDER_LIVE="1" VÀ có image provider.
+      const imageProvider = await pickImageProvider();
+      const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
+      let imageCost = 0;
+
+      if (useAI) {
+        const imgAdapter = await hub.image();
+        if (!imgAdapter) throw new Error("Không khởi tạo được image provider");
+        const model = (imageProvider!.config?.modelId as string) || "";
+        const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
+        let cacheDirty = false;
+
+        const shots = shotList.slice(0, MAX_IMAGES);
+        for (let i = 0; i < shots.length; i++) {
+          const note = shots[i].note?.trim();
+          if (!note) continue;
+          const prompt = `${note}${STYLE_SUFFIX}`;
+          const h = hashImage(input.scriptId, i, prompt, model);
+          let url = cache[h];
+          if (!url) {
+            // sinh thật + retry 1 lần; chỉ chạy khi chưa có trong cache
+            const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
+            url = await blobUpload({
+              bucket: "broll-images",
+              filename: `${input.scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
+              buffer: Buffer.from(img.imageBase64, "base64"),
+              contentType: img.mimeType,
+            });
+            cache[h] = url;
+            cacheDirty = true;
+            imageCost += img.costUsd;
+          }
+          modifications[`image_${i + 1}`] = toAbsoluteUrl(url);
+        }
+        if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
+      } else {
+        // Fallback: footage upload theo footageTag (giữ nguyên hành vi cũ).
+        usedFootage.forEach((f, i) => {
+          if (f) modifications[`shot_${i + 1}`] = toAbsoluteUrl(f.storagePath);
+        });
+      }
+
       const job = await renderer.render({ templateId, modifications });
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
         providerJobId: job.jobId,
+        providerName: useAI ? `creatomate+${imageProvider!.name}` : "creatomate",
+        costUsd: imageCost,
       }))!;
     } catch (e) {
       return (await videoStore.update(draft.id, {
