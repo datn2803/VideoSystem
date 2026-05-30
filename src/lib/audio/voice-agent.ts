@@ -2,6 +2,7 @@ import { hub } from "@/lib/integration-hub/hub";
 import { store } from "@/lib/integration-hub/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { audioStore, type AudioPart } from "./storage";
+import { sanitizeForTTS } from "./sanitize-tts";
 
 async function recordTTSUsage(costUsd: number, chars: number, providerId?: string) {
   const providers = (await store.listProviders()).filter((p) => p.kind === "tts" && p.enabled);
@@ -39,8 +40,10 @@ export async function generateAudioForScript(input: {
     broll: record.script.variantPrompts.broll.voiceOver,
     animation: record.script.variantPrompts.animation.voiceOver,
   };
-  const text = textMap[input.part] || "";
-  if (!text.trim()) throw new Error(`Không có text cho part "${input.part}"`);
+  const rawText = textMap[input.part] || "";
+  if (!rawText.trim()) throw new Error(`Không có text cho part "${input.part}"`);
+  // Làm sạch text TRƯỚC khi đưa vào TTS (không đổi text hiển thị/đã lưu).
+  const text = sanitizeForTTS(rawText);
 
   const provider = await getDefaultTTSProvider();
   const providerName = provider?.name || "mock";
