@@ -7,6 +7,7 @@ export type ReviewState = "draft" | "in_review" | "approved" | "rejected" | "exp
 export type ScriptRecord = {
   id: string;
   profileId: string;
+  projectId?: string; // optional — script cũ (chưa có project) không vỡ
   topic: string;
   painPoint: string;
   targetPersona: string;

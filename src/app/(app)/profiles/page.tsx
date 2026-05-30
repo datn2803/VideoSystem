@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { store } from "@/lib/integration-hub/storage";
 import { CreateProfileDialog } from "@/components/profiles/create-profile-dialog";
-import { GenerateSampleButton, DeleteProfileButton } from "@/components/profiles/profile-actions";
+import { CreatePlanButton, DeleteProfileButton } from "@/components/profiles/profile-actions";
 import { UserCircle2, Briefcase, Target, Mic, Award, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -95,7 +95,7 @@ export default async function ProfilesPage() {
 
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <DeleteProfileButton profileId={p.id} name={p.name} />
-                    <GenerateSampleButton profileId={p.id} />
+                    <CreatePlanButton profileId={p.id} />
                   </div>
                 </CardContent>
               </Card>

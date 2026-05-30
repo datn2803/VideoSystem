@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { store, type ProfileRecord } from "@/lib/integration-hub/storage";
-import { generateSampleScript, generateContentPlan } from "@/lib/agents/planner";
+import { generateSampleScript } from "@/lib/agents/planner";
 
 const DEFAULT_OWNER = "demo-user";
 
@@ -55,13 +55,6 @@ export async function generateSampleScriptAction(profileId: string) {
   const profile = await store.getProfile(profileId);
   if (!profile) throw new Error("Profile not found");
   const result = await generateSampleScript(profile);
-  return result;
-}
-
-export async function generatePlanAction(profileId: string, n: number = 12) {
-  const profile = await store.getProfile(profileId);
-  if (!profile) throw new Error("Profile not found");
-  const result = await generateContentPlan(profile, n);
   return result;
 }
 

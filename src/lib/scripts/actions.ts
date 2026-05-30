@@ -3,10 +3,12 @@ import { revalidatePath } from "next/cache";
 import { store } from "@/lib/integration-hub/storage";
 import { generateScript } from "@/lib/agents/scripter";
 import { auditScript } from "@/lib/agents/auditor";
+import { projectStore } from "@/lib/projects/storage";
 import { scriptStore } from "./storage";
 
 export async function generateScriptAction(input: {
   profileId: string;
+  projectId?: string;
   topic: string;
   painPoint: string;
   targetPersona: string;
@@ -32,6 +34,7 @@ export async function generateScriptAction(input: {
 
   const record = await scriptStore.create({
     profileId: input.profileId,
+    projectId: input.projectId,
     topic: input.topic,
     painPoint: input.painPoint,
     targetPersona: input.targetPersona,
@@ -40,6 +43,12 @@ export async function generateScriptAction(input: {
     script,
     audit,
   });
+
+  // Nếu sinh từ 1 project → gắn script vào project đó để hiện trong detail.
+  if (input.projectId) {
+    await projectStore.addScript(input.projectId, record.id);
+    revalidatePath(`/projects/${input.projectId}`);
+  }
 
   revalidatePath("/scripts");
   revalidatePath("/projects");
