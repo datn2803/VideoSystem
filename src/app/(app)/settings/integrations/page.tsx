@@ -2,6 +2,7 @@ import { Topbar } from "@/components/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { listProvidersWithStatus } from "@/lib/integration-hub/actions";
 import { AddProviderDialog } from "@/components/integrations/add-provider-dialog";
+import { ImagePreviewDialog } from "@/components/integrations/image-preview-dialog";
 import { ProviderRow } from "@/components/integrations/provider-row";
 import { Sparkles, KeyRound, Activity } from "lucide-react";
 
@@ -71,7 +72,10 @@ export default async function IntegrationsPage() {
               Thêm API key cho từng dịch vụ. Key được mã hóa AES-256-GCM trước khi lưu.
             </p>
           </div>
-          <AddProviderDialog />
+          <div className="flex items-center gap-2">
+            <ImagePreviewDialog />
+            <AddProviderDialog />
+          </div>
         </div>
 
         {providers.length === 0 ? (
