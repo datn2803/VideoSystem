@@ -7,9 +7,21 @@ export function makeElevenLabsAdapter(opts: {
   apiKey: string;
   voiceId?: string;
   modelId?: string;
+  stability?: number;
+  similarityBoost?: number;
+  style?: number;
+  useSpeakerBoost?: boolean;
 }): TTSProvider {
   const defaultVoice = opts.voiceId || "21m00Tcm4TlvDq8ikWAM"; // Rachel
   const modelId = opts.modelId || "eleven_multilingual_v2";
+
+  // Default tự nhiên hơn cho tiếng Việt; cho phép override qua provider config.
+  const voiceSettings = {
+    stability: opts.stability ?? 0.4,
+    similarity_boost: opts.similarityBoost ?? 0.85,
+    style: opts.style ?? 0.3,
+    use_speaker_boost: opts.useSpeakerBoost ?? true,
+  };
 
   return {
     async synthesize({ text, voiceId }) {
@@ -24,7 +36,7 @@ export function makeElevenLabsAdapter(opts: {
         body: JSON.stringify({
           text,
           model_id: modelId,
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          voice_settings: voiceSettings,
         }),
       });
       if (!res.ok) {

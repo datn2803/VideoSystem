@@ -43,11 +43,31 @@ async function buildLLM(p: ProviderConfig): Promise<LLMProvider> {
   return makeMockLLM();
 }
 
+function numOrUndef(v: unknown): number | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function boolOrUndef(v: unknown): boolean | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  if (typeof v === "boolean") return v;
+  return v === "true" || v === "1" || v === "on";
+}
+
 async function buildTTS(p: ProviderConfig): Promise<TTSProvider> {
   const apiKey = await loadSecret(p);
   if (!apiKey) return makeMockTTS();
   if (p.name === "elevenlabs")
-    return makeElevenLabsAdapter({ apiKey, voiceId: p.config?.voiceId as string, modelId: p.config?.modelId as string });
+    return makeElevenLabsAdapter({
+      apiKey,
+      voiceId: p.config?.voiceId as string,
+      modelId: p.config?.modelId as string,
+      stability: numOrUndef(p.config?.stability),
+      similarityBoost: numOrUndef(p.config?.similarityBoost),
+      style: numOrUndef(p.config?.style),
+      useSpeakerBoost: boolOrUndef(p.config?.useSpeakerBoost),
+    });
   if (p.name === "fpt-tts") return makeFptTtsAdapter({ apiKey, voiceId: p.config?.voiceId as string });
   return makeMockTTS();
 }

@@ -116,6 +116,6 @@ export interface ProviderMeta {
   label: string;
   homepage: string;
   authType: "api_key" | "oauth";
-  fields: { key: string; label: string; type: "text" | "password" | "select"; required: boolean; placeholder?: string; options?: { value: string; label: string }[] }[];
+  fields: { key: string; label: string; type: "text" | "password" | "select" | "number" | "toggle"; required: boolean; placeholder?: string; options?: { value: string; label: string }[] }[];
   defaultConfig?: Record<string, unknown>;
 }

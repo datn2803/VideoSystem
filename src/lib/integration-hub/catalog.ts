@@ -87,11 +87,22 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
         required: false,
         options: [
           { value: "eleven_multilingual_v2", label: "Multilingual v2 (đề xuất cho VN)" },
+          { value: "eleven_v3", label: "Eleven v3 (biểu cảm nhất, mới)" },
           { value: "eleven_turbo_v2_5", label: "Turbo v2.5 (rẻ, nhanh)" },
         ],
       },
+      { key: "stability", label: "Stability (0–1, thấp = biểu cảm hơn)", type: "number", required: false, placeholder: "0.4" },
+      { key: "similarityBoost", label: "Similarity boost (0–1)", type: "number", required: false, placeholder: "0.85" },
+      { key: "style", label: "Style (0–1, cao = nhiều ngữ điệu)", type: "number", required: false, placeholder: "0.3" },
+      { key: "useSpeakerBoost", label: "Speaker boost", type: "toggle", required: false, placeholder: "Tăng độ giống giọng gốc" },
     ],
-    defaultConfig: { modelId: "eleven_multilingual_v2" },
+    defaultConfig: {
+      modelId: "eleven_multilingual_v2",
+      stability: 0.4,
+      similarityBoost: 0.85,
+      style: 0.3,
+      useSpeakerBoost: true,
+    },
   },
   {
     name: "fpt-tts",

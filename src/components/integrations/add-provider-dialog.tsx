@@ -135,6 +135,26 @@ export function AddProviderDialog() {
                           </option>
                         ))}
                       </select>
+                    ) : f.type === "toggle" ? (
+                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input accent-accent"
+                          checked={(formData[f.key] ?? String(selected.defaultConfig?.[f.key] ?? "false")) === "true"}
+                          onChange={(e) => setFormData({ ...formData, [f.key]: e.target.checked ? "true" : "false" })}
+                        />
+                        {f.placeholder || "Bật"}
+                      </label>
+                    ) : f.type === "number" ? (
+                      <Input
+                        type="number"
+                        step="0.05"
+                        min="0"
+                        max="1"
+                        placeholder={f.placeholder}
+                        value={formData[f.key] ?? String(selected.defaultConfig?.[f.key] ?? "")}
+                        onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
+                      />
                     ) : (
                       <Input
                         type={f.type}
