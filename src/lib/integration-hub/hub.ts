@@ -63,6 +63,7 @@ async function buildTTS(p: ProviderConfig): Promise<TTSProvider> {
       apiKey,
       voiceId: p.config?.voiceId as string,
       modelId: p.config?.modelId as string,
+      languageCode: p.config?.languageCode as string,
       stability: numOrUndef(p.config?.stability),
       similarityBoost: numOrUndef(p.config?.similarityBoost),
       style: numOrUndef(p.config?.style),

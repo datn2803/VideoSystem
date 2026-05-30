@@ -3,29 +3,47 @@ import type { TTSProvider, TTSResult } from "../types";
 // ElevenLabs pricing approximate — Creator $22 / 100k chars = $0.00022/char
 const COST_PER_CHAR = 0.00022;
 
+// Chỉ Turbo v2.5 & Flash v2.5 nhận language_code để ÉP ngôn ngữ.
+// multilingual_v2 / v3 nếu gửi language_code sẽ LỖI API → gửi có điều kiện.
+const LANG_ENFORCED_MODELS = new Set(["eleven_turbo_v2_5", "eleven_flash_v2_5"]);
+
 export function makeElevenLabsAdapter(opts: {
   apiKey: string;
   voiceId?: string;
   modelId?: string;
+  languageCode?: string;
   stability?: number;
   similarityBoost?: number;
   style?: number;
   useSpeakerBoost?: boolean;
 }): TTSProvider {
-  const defaultVoice = opts.voiceId || "21m00Tcm4TlvDq8ikWAM"; // Rachel
-  const modelId = opts.modelId || "eleven_multilingual_v2";
+  // Rachel là giọng ENGLISH — chỉ là fallback. Khuyến nghị set Voice ID người Việt
+  // (Voice Library → Language=Vietnamese) qua provider config để đọc tự nhiên.
+  const defaultVoice = opts.voiceId || "21m00Tcm4TlvDq8ikWAM";
+  // Turbo v2.5 hỗ trợ tiếng Việt; multilingual_v2 KHÔNG → mặc định Turbo v2.5.
+  const modelId = opts.modelId || "eleven_turbo_v2_5";
+  const langCode = opts.languageCode || "vi";
 
-  // Default tự nhiên hơn cho tiếng Việt; cho phép override qua provider config.
+  // Default cho tiếng Việt (ngôn ngữ có thanh điệu): style cao dễ méo dấu thanh.
   const voiceSettings = {
-    stability: opts.stability ?? 0.4,
+    stability: opts.stability ?? 0.5,
     similarity_boost: opts.similarityBoost ?? 0.85,
-    style: opts.style ?? 0.3,
+    style: opts.style ?? 0.0,
     use_speaker_boost: opts.useSpeakerBoost ?? true,
   };
 
   return {
     async synthesize({ text, voiceId }) {
       const vid = voiceId || defaultVoice;
+      const body: Record<string, unknown> = {
+        text,
+        model_id: modelId,
+        voice_settings: voiceSettings,
+      };
+      // Chỉ ép language_code với model hỗ trợ; tránh lỗi API trên multilingual_v2/v3.
+      if (LANG_ENFORCED_MODELS.has(modelId) && langCode) {
+        body.language_code = langCode;
+      }
       const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}`, {
         method: "POST",
         headers: {
@@ -33,11 +51,7 @@ export function makeElevenLabsAdapter(opts: {
           "content-type": "application/json",
           accept: "audio/mpeg",
         },
-        body: JSON.stringify({
-          text,
-          model_id: modelId,
-          voice_settings: voiceSettings,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const errText = await res.text();
