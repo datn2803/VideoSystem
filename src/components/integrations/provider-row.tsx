@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertCircle, XCircle, KeyRound, Loader2, Trash2, Star } from "lucide-react";
 import { testProviderAction, deleteProviderAction, setDefaultProviderAction } from "@/lib/integration-hub/actions";
 import { Card, CardContent } from "@/components/ui/card";
+import type { ProviderName } from "@/lib/integration-hub/types";
+import { EditProviderDialog } from "./edit-provider-dialog";
 
 type ProviderWithStatus = {
   id: string;
@@ -13,6 +15,7 @@ type ProviderWithStatus = {
   label: string;
   enabled: boolean;
   isDefault: boolean;
+  config: Record<string, unknown>;
   maskedKey: string;
   hasKey: boolean;
   totalCost: number;
@@ -90,6 +93,19 @@ export function ProviderRow({ provider }: { provider: ProviderWithStatus }) {
           <Button variant="outline" size="sm" onClick={handleTest} disabled={isPending}>
             {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
           </Button>
+          <EditProviderDialog
+            provider={{
+              id: provider.id,
+              name: provider.name as ProviderName,
+              label: provider.label,
+              kind: provider.kind,
+              config: provider.config || {},
+              maskedKey: provider.maskedKey,
+              hasKey: provider.hasKey,
+              isDefault: provider.isDefault,
+              enabled: provider.enabled,
+            }}
+          />
           {!provider.isDefault && (
             <Button variant="outline" size="sm" onClick={handleSetDefault} disabled={isPending}>
               Đặt default

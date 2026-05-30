@@ -1,13 +1,13 @@
 "use client";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Plus, KeyRound, ExternalLink, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { PROVIDER_CATALOG } from "@/lib/integration-hub/catalog";
 import type { ProviderMeta, ProviderName } from "@/lib/integration-hub/types";
 import { addProviderAction, testProviderAction } from "@/lib/integration-hub/actions";
+import { ProviderFieldsForm } from "./provider-fields-form";
 
 const kindLabel: Record<string, string> = {
   llm: "LLM",
@@ -117,54 +117,7 @@ export function AddProviderDialog() {
               </DialogHeader>
 
               <div className="space-y-3">
-                {selected.fields.map((f) => (
-                  <div key={f.key} className="space-y-1.5">
-                    <label className="text-sm font-medium">
-                      {f.label} {f.required && <span className="text-rose-500">*</span>}
-                    </label>
-                    {f.type === "select" ? (
-                      <select
-                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                        value={formData[f.key] || (selected.defaultConfig?.[f.key] as string) || ""}
-                        onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
-                      >
-                        <option value="">— Chọn —</option>
-                        {f.options?.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : f.type === "toggle" ? (
-                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input accent-accent"
-                          checked={(formData[f.key] ?? String(selected.defaultConfig?.[f.key] ?? "false")) === "true"}
-                          onChange={(e) => setFormData({ ...formData, [f.key]: e.target.checked ? "true" : "false" })}
-                        />
-                        {f.placeholder || "Bật"}
-                      </label>
-                    ) : f.type === "number" ? (
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="0"
-                        max="1"
-                        placeholder={f.placeholder}
-                        value={formData[f.key] ?? String(selected.defaultConfig?.[f.key] ?? "")}
-                        onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
-                      />
-                    ) : (
-                      <Input
-                        type={f.type}
-                        placeholder={f.placeholder}
-                        value={formData[f.key] || ""}
-                        onChange={(e) => setFormData({ ...formData, [f.key]: e.target.value })}
-                      />
-                    )}
-                  </div>
-                ))}
+                <ProviderFieldsForm meta={selected} values={formData} onChange={setFormData} mode="add" />
 
                 {testResult && (
                   <div
