@@ -38,7 +38,8 @@ export async function kvRead<T>(name: string, defaultValue: T): Promise<T> {
     const client = getSupabaseClient()!;
     const { data, error } = await client.from(TABLE).select("value").eq("key", name).maybeSingle();
     if (error) {
-      console.error(`[kv-store] read ${name} error`, error);
+      // Lỗi đọc thường do RLS chặn (đang dùng anon key thay vì SERVICE_ROLE) hoặc thiếu bảng kv_store.
+      console.error(`[kv-store] read "${name}" lỗi — kiểm tra SUPABASE_SERVICE_ROLE_KEY & bảng kv_store:`, error.message);
       return defaultValue;
     }
     return (data?.value as T) ?? defaultValue;
@@ -58,7 +59,12 @@ export async function kvWrite<T>(name: string, value: T): Promise<void> {
       { key: name, value: value as object, updated_at: new Date().toISOString() },
       { onConflict: "key" }
     );
-    if (error) console.error(`[kv-store] write ${name} error`, error);
+    if (error) {
+      // KHÔNG nuốt lỗi: trước đây write fail âm thầm (vd RLS chặn vì dùng anon key) khiến
+      // UI tưởng đã lưu nhưng kv_store rỗng. Ném lỗi để server action báo ngay.
+      console.error(`[kv-store] write "${name}" lỗi:`, error.message);
+      throw new Error(`Supabase kv_store write "${name}" thất bại: ${error.message}. Kiểm tra SUPABASE_SERVICE_ROLE_KEY (cần service_role, không phải anon) và bảng kv_store đã tạo.`);
+    }
     return;
   }
   ensureLocal(name, value);

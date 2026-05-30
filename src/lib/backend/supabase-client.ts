@@ -9,6 +9,11 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (!url || !key) return null;
   _client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      // Next.js App Router patches global fetch và có thể cache response của Supabase.
+      // Ép no-store để mọi query (đặc biệt SELECT) luôn đọc dữ liệu mới nhất trên serverless.
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return _client;
 }

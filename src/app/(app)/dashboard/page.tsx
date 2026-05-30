@@ -24,7 +24,7 @@ import { IS_SERVERLESS } from "@/lib/paths";
 import { isSupabaseConfigured } from "@/lib/backend/supabase-client";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function DashboardPage() {
   const [profiles, providers, usage, scripts, footage, audios, videos, exports, hubStatus] = await Promise.all([
     store.listProfiles(),

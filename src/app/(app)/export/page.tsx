@@ -11,7 +11,7 @@ import { ExportCard } from "@/components/export/export-card";
 import { localizeCaption } from "@/lib/export/caption-localizer";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function ExportPage() {
   const scripts = await scriptStore.list();
   const allDrafts = await videoStore.list();

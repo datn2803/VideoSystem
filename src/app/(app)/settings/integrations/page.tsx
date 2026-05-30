@@ -6,7 +6,7 @@ import { ProviderRow } from "@/components/integrations/provider-row";
 import { Sparkles, KeyRound, Activity } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function IntegrationsPage() {
   const providers = await listProvidersWithStatus();
   const totalCost = providers.reduce((s, p) => s + p.totalCost, 0);

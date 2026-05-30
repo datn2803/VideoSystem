@@ -15,7 +15,7 @@ import { RenderStudio } from "@/components/video/render-studio";
 import { ReviewStateBar } from "@/components/review/send-to-review-button";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const record = await scriptStore.get(id);

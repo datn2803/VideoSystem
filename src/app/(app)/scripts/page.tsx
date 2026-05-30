@@ -15,7 +15,7 @@ const REVIEW_BADGE: Record<string, { label: string; variant: "outline" | "warnin
 };
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function ScriptsPage() {
   const scripts = (await scriptStore.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const profilesById = Object.fromEntries((await store.listProfiles()).map((p) => [p.id, p]));

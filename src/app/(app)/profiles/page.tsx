@@ -7,7 +7,7 @@ import { GenerateSampleButton, DeleteProfileButton } from "@/components/profiles
 import { UserCircle2, Briefcase, Target, Mic, Award, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function ProfilesPage() {
   const profiles = await store.listProfiles();
 

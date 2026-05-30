@@ -8,7 +8,7 @@ import { videoStore } from "@/lib/video/storage";
 import { KanbanBoard, type ReviewItem } from "@/components/review/kanban-board";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function ReviewPage() {
   const scripts = await scriptStore.list();
   const allDrafts = await videoStore.list();

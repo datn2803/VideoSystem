@@ -5,7 +5,7 @@ import { FootageUploadForm } from "@/components/footage/upload-form";
 import { FootageGrid } from "@/components/footage/footage-grid";
 
 export const dynamic = "force-dynamic";
-
+export const revalidate = 0;
 export default async function FootagePage() {
   const profiles = (await store.listProfiles()).map((p) => ({ id: p.id, name: `${p.name} — ${p.role}` }));
   const defaultProfileId = await getDefaultProfileId();
