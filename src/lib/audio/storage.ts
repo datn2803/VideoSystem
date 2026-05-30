@@ -27,6 +27,19 @@ async function write(list: AudioRecord[]): Promise<void> {
   await kvWrite(KEY, list);
 }
 
+// Mảng "audio" lưu dạng 1 blob JSON → đọc-sửa-ghi không an toàn khi nhiều part
+// chạy SONG SONG (generateAllAudioAction). Khóa tuần tự cho vùng critical (read→write)
+// để tránh ghi đè mất bản ghi. Upload file vẫn chạy song song bên ngoài khóa.
+let _writeLock: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const result = _writeLock.then(fn, fn);
+  _writeLock = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
+
 export const audioStore = {
   async list(): Promise<AudioRecord[]> {
     return await read();
@@ -73,16 +86,19 @@ export const audioStore = {
       costUsd: input.costUsd,
       createdAt: new Date().toISOString(),
     };
-    const list = await read();
-    // Replace existing same-part for this script
-    const olds = list.filter((a) => a.scriptId === input.scriptId && a.part === input.part);
-    for (const old of olds) {
-      await blobDelete({ bucket: "audio", pathOrUrl: old.storagePath });
-    }
-    const filtered = list.filter((a) => !(a.scriptId === input.scriptId && a.part === input.part));
-    filtered.push(record);
-    await write(filtered);
-    return record;
+    // Vùng critical: đọc list → xoá file cũ cùng part → ghi list. Tuần tự để an toàn khi parallel.
+    return await withWriteLock(async () => {
+      const list = await read();
+      // Replace existing same-part for this script
+      const olds = list.filter((a) => a.scriptId === input.scriptId && a.part === input.part);
+      for (const old of olds) {
+        await blobDelete({ bucket: "audio", pathOrUrl: old.storagePath });
+      }
+      const filtered = list.filter((a) => !(a.scriptId === input.scriptId && a.part === input.part));
+      filtered.push(record);
+      await write(filtered);
+      return record;
+    });
   },
   async delete(id: string): Promise<boolean> {
     const list = await read();

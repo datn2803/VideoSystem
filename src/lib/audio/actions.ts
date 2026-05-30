@@ -24,15 +24,18 @@ export async function generateAudioAction(input: {
 
 export async function generateAllAudioAction(scriptId: string, voiceId?: string, voiceName?: string) {
   const parts: AudioPart[] = ["full", "broll", "animation"];
-  const results = [];
-  for (const part of parts) {
-    try {
-      const r = await generateAudioForScript({ scriptId, part, voiceId, voiceName });
-      results.push({ part, ok: true, id: r.id });
-    } catch (e) {
-      results.push({ part, ok: false, error: e instanceof Error ? e.message : String(e) });
-    }
-  }
+  // Chạy SONG SONG: mỗi part poll FPT ~30s, tuần tự sẽ ~90s (vượt timeout 60s).
+  // Song song → tổng ~30s. (audioStore.save có khóa ghi nên không mất bản ghi.)
+  const results = await Promise.all(
+    parts.map(async (part) => {
+      try {
+        const r = await generateAudioForScript({ scriptId, part, voiceId, voiceName });
+        return { part, ok: true, id: r.id };
+      } catch (e) {
+        return { part, ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+    })
+  );
   revalidatePath(`/scripts/${scriptId}`);
   return results;
 }
