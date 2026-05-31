@@ -10,6 +10,7 @@ export type ProviderName =
   | "heygen"
   | "d-id"
   | "creatomate"
+  | "hyperframes"
   | "gemini-image"
   | "openai-image"
   | "mock";

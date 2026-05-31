@@ -9,7 +9,7 @@ export type VideoDraftRecord = {
   scriptId: string;
   audioId?: string;
   concept: ConceptKind;
-  mode?: "heygen" | "d-id" | "footage" | "creatomate" | "mock";
+  mode?: "heygen" | "d-id" | "footage" | "creatomate" | "hyperframes" | "mock";
   providerName: string;
   providerJobId?: string;
   /** sha256(scriptId + voiceId + avatarImageUrl) — cost-guard cache key cho render trả phí */

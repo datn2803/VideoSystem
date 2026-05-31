@@ -169,6 +169,18 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { key: "animationTemplateId", label: "Animation Template ID", type: "text", required: false },
     ],
   },
+  {
+    name: "hyperframes",
+    kind: "render",
+    label: "HyperFrames (VPS self-host)",
+    homepage: "https://github.com/heygen-com/hyperframes",
+    authType: "api_key",
+    fields: [
+      { key: "serviceUrl", label: "Service URL (vd http://<vps-ip>:8080)", type: "text", required: true, placeholder: "http://<vps-ip>:8080" },
+      { key: "apiKey", label: "Render token (Bearer)", type: "password", required: true },
+    ],
+    defaultConfig: {},
+  },
 
   // ── Image (sinh ảnh AI cho C2 b-roll) ──
   {

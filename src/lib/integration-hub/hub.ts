@@ -17,6 +17,7 @@ import { makeFptTtsAdapter } from "./adapters/fpt-tts";
 import { makeHeyGenAdapter } from "./adapters/heygen";
 import { makeDIDAdapter } from "./adapters/d-id";
 import { makeCreatomateAdapter } from "./adapters/creatomate";
+import { makeHyperframesAdapter } from "./adapters/hyperframes";
 import { makeGeminiImageAdapter } from "./adapters/gemini-image";
 import { makeOpenAIImageAdapter } from "./adapters/openai-image";
 import { makeMockLLM, makeMockTTS, makeMockAvatar, makeMockRender } from "./adapters/mock";
@@ -98,6 +99,10 @@ async function buildAvatar(p: ProviderConfig): Promise<AvatarProvider> {
 
 async function buildRender(p: ProviderConfig): Promise<RenderProvider> {
   const apiKey = await loadSecret(p);
+  if (p.name === "hyperframes") {
+    // KHÁC provider khác: serviceUrl từ config, token từ credential.
+    return makeHyperframesAdapter({ serviceUrl: (p.config?.serviceUrl as string) || "", apiKey: apiKey || "" });
+  }
   if (!apiKey) return makeMockRender();
   if (p.name === "creatomate")
     return makeCreatomateAdapter({

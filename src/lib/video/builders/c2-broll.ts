@@ -62,6 +62,36 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
   return `${process.env.PUBLIC_APP_URL || ""}${path}`;
 }
 
+type CaptionLine = { text: string; start: number; dur: number; keyword?: string };
+
+/**
+ * Tách văn bản voice-over thành các dòng caption ngắn (~8 từ), phân bổ start/dur
+ * theo tỉ lệ độ dài chữ trên tổng thời lượng. Dùng cho template HyperFrames broll.
+ */
+function buildCaptionLines(text: string, totalDur: number): CaptionLine[] {
+  const clean = (text || "").trim();
+  if (!clean) return [];
+  const sentences = clean
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const chunks: string[] = [];
+  for (const sen of sentences) {
+    const words = sen.split(/\s+/);
+    if (words.length <= 10) chunks.push(sen);
+    else for (let i = 0; i < words.length; i += 8) chunks.push(words.slice(i, i + 8).join(" "));
+  }
+  if (chunks.length === 0) return [];
+  const totalChars = chunks.reduce((sum, c) => sum + c.length, 0) || 1;
+  let t = 0;
+  return chunks.map((c) => {
+    const dur = Math.max(1.2, (c.length / totalChars) * totalDur);
+    const line: CaptionLine = { text: c, start: Math.round(t * 100) / 100, dur: Math.round(dur * 100) / 100 };
+    t += dur;
+    return line;
+  });
+}
+
 export async function buildBroll(input: {
   scriptId: string;
   audioId?: string;
@@ -76,7 +106,8 @@ export async function buildBroll(input: {
     : audios.find((a) => a.part === "broll") || audios.find((a) => a.part === "full");
 
   const provider = await pickRenderProvider();
-  const mode = provider?.name === "creatomate" ? "creatomate" : "mock";
+  const mode =
+    provider?.name === "creatomate" ? "creatomate" : provider?.name === "hyperframes" ? "hyperframes" : "mock";
 
   const brollFootage = await footageStore.listByProfile(profile);
   const shotList = script.script.variantPrompts.broll.shotList || [];
@@ -93,6 +124,88 @@ export async function buildBroll(input: {
     status: "queued",
     progress: 0,
   });
+
+  if (mode === "hyperframes") {
+    try {
+      const renderer = await hub.render();
+      const duration = script.script.estimatedDurationSec || 30;
+      // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
+      const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+
+      const bgUrls: string[] = [];
+      let bgType: "image" | "video" = "image";
+      let imageCost = 0;
+
+      // Cost-guard: chỉ sinh ảnh AI (PAID) khi RENDER_LIVE="1" VÀ có image provider.
+      const imageProvider = await pickImageProvider();
+      const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
+
+      if (useAI) {
+        const imgAdapter = await hub.image();
+        if (!imgAdapter) throw new Error("Không khởi tạo được image provider");
+        const model = (imageProvider!.config?.modelId as string) || "";
+        const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
+        let cacheDirty = false;
+        const shots = shotList.slice(0, MAX_IMAGES);
+        for (let i = 0; i < shots.length; i++) {
+          const note = shots[i].note?.trim();
+          if (!note) continue;
+          const prompt = `${note}${STYLE_SUFFIX}`;
+          const h = hashImage(input.scriptId, i, prompt, model);
+          let url = cache[h];
+          if (!url) {
+            const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
+            url = await blobUpload({
+              bucket: "broll-images",
+              filename: `${input.scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
+              buffer: Buffer.from(img.imageBase64, "base64"),
+              contentType: img.mimeType,
+            });
+            cache[h] = url;
+            cacheDirty = true;
+            imageCost += img.costUsd;
+          }
+          const abs = toAbsoluteUrl(url);
+          if (abs) bgUrls.push(abs);
+        }
+        if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
+      } else {
+        // Footage có sẵn (URL công khai) làm nền video; không có → để rỗng (template dùng gradient).
+        bgType = "video";
+        usedFootage.forEach((f) => {
+          if (f) {
+            const abs = toAbsoluteUrl(f.storagePath);
+            if (abs) bgUrls.push(abs);
+          }
+        });
+        if (bgUrls.length === 0) bgType = "image";
+      }
+
+      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      const variables: Record<string, unknown> = {
+        duration,
+        bg_type: bgType,
+        bg_urls: JSON.stringify(bgUrls),
+        voice_url: voiceUrl,
+        caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
+        accent_color: "#e11d2a",
+      };
+
+      const job = await renderer.render({ templateId: "broll", modifications: variables });
+      return (await videoStore.update(draft.id, {
+        status: "rendering",
+        progress: 10,
+        providerJobId: job.jobId,
+        providerName: useAI ? `hyperframes+${imageProvider!.name}` : "hyperframes",
+        costUsd: imageCost,
+      }))!;
+    } catch (e) {
+      return (await videoStore.update(draft.id, {
+        status: "failed",
+        error: e instanceof Error ? e.message : String(e),
+      }))!;
+    }
+  }
 
   if (mode === "creatomate") {
     try {
@@ -180,7 +293,7 @@ export async function buildBroll(input: {
 export async function pollBrollJob(draftId: string): Promise<VideoDraftRecord | undefined> {
   const draft = await videoStore.get(draftId);
   if (!draft || draft.status === "done" || draft.status === "failed") return draft;
-  if (draft.mode !== "creatomate" || !draft.providerJobId) return draft;
+  if ((draft.mode !== "creatomate" && draft.mode !== "hyperframes") || !draft.providerJobId) return draft;
 
   try {
     const renderer = await hub.render();
