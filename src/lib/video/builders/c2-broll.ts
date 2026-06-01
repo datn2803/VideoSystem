@@ -95,23 +95,24 @@ async function shotNotesToQueries(notes: string[]): Promise<string[]> {
 }
 
 /**
- * Tìm 1 video Pexels DỌC (portrait) cho 1 từ khoá. Trả link hotlink ~1080p hoặc
- * gần nhất. null nếu không có key / không ra clip dọc (→ bỏ shot, không bịa).
+ * Tìm 1 ẢNH Pexels DỌC (portrait) cho 1 từ khoá. Trả URL ảnh (large2x/large).
+ * null nếu không có key / không ra ảnh (→ bỏ shot, không bịa).
+ *
+ * Dùng ẢNH thay VIDEO: video Pexels là file lớn ở CDN ngoài → headless Chrome
+ * buffer/seek từng frame → timeout/OOM trên VPS nhỏ. Ảnh tải tức thì, render ổn
+ * định; Ken Burns ở template cho chuyển động.
  */
-async function pexelsPortraitVideo(query: string, apiKey: string): Promise<string | null> {
+async function pexelsPortraitPhoto(query: string, apiKey: string): Promise<string | null> {
   try {
-    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=3&size=medium`;
+    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=3&size=large`;
     const res = await fetch(url, { headers: { authorization: apiKey } });
     if (!res.ok) return null;
     const data = (await res.json()) as {
-      videos?: { video_files?: { link: string; width: number; height: number; quality?: string }[] }[];
+      photos?: { src?: { large2x?: string; large?: string; original?: string } }[];
     };
-    for (const video of data.videos || []) {
-      const portrait = (video.video_files || []).filter((f) => f.width && f.height && f.width < f.height);
-      if (portrait.length === 0) continue;
-      // chọn file có height gần 1920 nhất (≈1080p dọc)
-      portrait.sort((a, b) => Math.abs(a.height - 1920) - Math.abs(b.height - 1920));
-      return portrait[0].link;
+    for (const photo of data.photos || []) {
+      const src = photo.src?.large2x || photo.src?.large || photo.src?.original;
+      if (src) return src;
     }
     return null;
   } catch {
@@ -120,8 +121,8 @@ async function pexelsPortraitVideo(query: string, apiKey: string): Promise<strin
 }
 
 /**
- * shotList → clips Pexels [{ url, durationSec }]. Phân bổ durationSec theo shot
- * (hoặc chia đều totalDur). Bỏ shot không tìm được clip (không chèn clip lạc đề).
+ * shotList → ảnh Pexels [{ url, durationSec }]. Phân bổ durationSec theo shot
+ * (hoặc chia đều totalDur). Bỏ shot không tìm được ảnh (không chèn ảnh lạc đề).
  * Thiếu PEXELS_API_KEY → trả [] (template tự dùng gradient).
  */
 async function fetchPexelsClips(
@@ -134,9 +135,9 @@ async function fetchPexelsClips(
   if (shots.length === 0) return [];
 
   const queries = await shotNotesToQueries(shots.map((s) => s.note));
-  const found = await Promise.all(queries.map((q) => pexelsPortraitVideo(q, apiKey)));
+  const found = await Promise.all(queries.map((q) => pexelsPortraitPhoto(q, apiKey)));
 
-  // Giữ shot tìm được clip; phân bổ lại thời lượng đều trên các clip hợp lệ.
+  // Giữ shot tìm được ảnh; phân bổ lại thời lượng đều trên các ảnh hợp lệ.
   const valid = shots.map((s, i) => ({ shot: s, url: found[i] })).filter((x) => x.url);
   if (valid.length === 0) return [];
   const even = totalDur / valid.length;
@@ -220,13 +221,15 @@ export async function buildBroll(input: {
       // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
       const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
 
-      // B-roll THẬT: footage stock Pexels khớp từng shot (free, hotlink được).
-      // shotList note (VN) → từ khoá EN (1 call LLM) → Pexels video dọc → clips.
-      // Thiếu PEXELS_API_KEY hoặc không ra clip → bgUrls rỗng → template dùng gradient.
+      // B-roll THẬT: ẢNH stock Pexels khớp từng shot (free, hotlink được).
+      // shotList note (VN) → từ khoá EN (1 call LLM) → Pexels ảnh dọc → Ken Burns.
+      // Dùng ẢNH thay VIDEO: video Pexels file lớn ở CDN ngoài → Chrome buffer/seek
+      // từng frame → timeout/OOM trên VPS nhỏ. Ảnh tải tức thì, render ổn định.
+      // Thiếu PEXELS_API_KEY hoặc không ra ảnh → bgUrls rỗng → template dùng gradient.
       const clips = await fetchPexelsClips(shotList, duration);
       const bgUrls = clips.map((c) => c.url);
       const shotDurations = clips.map((c) => c.durationSec);
-      const bgType: "image" | "video" = bgUrls.length ? "video" : "image";
+      const bgType: "image" | "video" = "image"; // ảnh + Ken Burns
 
       const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
       const variables: Record<string, unknown> = {
