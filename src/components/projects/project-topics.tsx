@@ -42,6 +42,11 @@ export function ProjectTopics({
           formatHint: t.format_hint,
           priority: t.priority,
         });
+        if (result.error || !result.id) {
+          setError(result.error || "Tạo script không thành công, thử lại sau.");
+          setScriptingIdx(null);
+          return;
+        }
         router.push(`/scripts/${result.id}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));

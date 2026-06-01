@@ -18,19 +18,32 @@ export async function generateScriptAction(input: {
   skipAudit?: boolean;
 }) {
   const profile = await store.getProfile(input.profileId);
-  if (!profile) throw new Error("Profile not found");
+  if (!profile) return { error: "Không tìm thấy profile." } as const;
 
-  const script = await generateScript({
-    profile,
-    topic: input.topic,
-    painPoint: input.painPoint,
-    targetPersona: input.targetPersona,
-    lengthSec: input.lengthSec,
-  });
-
-  // Compose full text for audit
-  const scriptText = `${script.hook}\n\n${script.body}\n\n${script.cta}`;
-  const audit = input.skipAudit ? undefined : await auditScript(scriptText);
+  // Bọc LLM (Gemini) — lỗi 429/quota/credit trả message RÕ RÀNG thay vì để Next
+  // production che thành "Server Components render error" khó hiểu.
+  let script: Awaited<ReturnType<typeof generateScript>>;
+  let audit: Awaited<ReturnType<typeof auditScript>> | undefined;
+  try {
+    script = await generateScript({
+      profile,
+      topic: input.topic,
+      painPoint: input.painPoint,
+      targetPersona: input.targetPersona,
+      lengthSec: input.lengthSec,
+    });
+    const scriptText = `${script.hook}\n\n${script.body}\n\n${script.cta}`;
+    audit = input.skipAudit ? undefined : await auditScript(scriptText);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/\b429\b|quota|prepayment|rate.?limit|RESOURCE_EXHAUSTED|exhausted/i.test(msg)) {
+      return {
+        error:
+          "Gemini đang hết quota/credit (lỗi 429). Đợi quota reset (free-tier reset theo phút/ngày) hoặc kiểm tra billing / đổi key Gemini, rồi thử lại.",
+      } as const;
+    }
+    return { error: `Tạo script lỗi: ${msg}` } as const;
+  }
 
   const record = await scriptStore.create({
     profileId: input.profileId,
