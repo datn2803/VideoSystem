@@ -134,6 +134,23 @@ function injectBrollImages(html, bgUrls, shotDurations, totalDur) {
     const even = totalDur / bgUrls.length;
     durs = bgUrls.map(() => even);
   }
+  // Khử ẢNH TRÙNG (cùng src liền kề — cache có thể trả cùng URL cho 2 shot) → gộp
+  // vào clip trước (cộng dồn duration) thay vì tạo 2 <img> trùng src/timing. Giữ
+  // NGUYÊN tổng thời lượng; chỉ bỏ phần media-discovery trùng.
+  {
+    const u = [];
+    const ud = [];
+    for (let i = 0; i < bgUrls.length; i++) {
+      if (u.length && u[u.length - 1] === bgUrls[i]) {
+        ud[ud.length - 1] += durs[i];
+      } else {
+        u.push(bgUrls[i]);
+        ud.push(durs[i]);
+      }
+    }
+    bgUrls = u;
+    durs = ud;
+  }
   let start = 0;
   const tags = bgUrls.map((url, i) => {
     const isLast = i === bgUrls.length - 1;

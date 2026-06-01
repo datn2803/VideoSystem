@@ -244,7 +244,7 @@
             wordTweens.push({ sel: "#cap" + gi + "w" + wi, on: ws, off: we });
           });
           capHost.appendChild(el);
-          capInfo.push({ sel: "#cap" + gi, start });
+          capInfo.push({ sel: "#cap" + gi, start, end });
         });
       } else {
         // Fallback: caption_lines (evenly-split phrases + optional keyword).
@@ -277,7 +277,7 @@
             el.textContent = text;
           }
           capHost.appendChild(el);
-          capInfo.push({ sel: "#cap" + i, start });
+          capInfo.push({ sel: "#cap" + i, start, end: start + dur });
         });
       }
 
@@ -365,11 +365,14 @@
       });
 
 
-      // Caption entrance pops.
+      // Caption entrance pops + deterministic HARD-KILL ở thời điểm kết thúc của
+      // mỗi cụm → caption không bị kẹt khi karaoke word-tween còn treo class .on
+      // (1 cụm hiển thị 1 lúc; seekable, không callback/Date.now).
       capInfo.forEach((c) => {
         tl.fromTo(c.sel,
           { y: 40, opacity: 0, scale: 0.92 },
           { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)" }, c.start);
+        tl.set(c.sel, { opacity: 0, visibility: "hidden" }, c.end);
       });
 
       // Karaoke: toggle each word's `.on` class at its word timestamp. Uses tl.set
