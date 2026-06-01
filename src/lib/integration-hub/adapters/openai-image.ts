@@ -9,10 +9,10 @@ function estimateCost(model: string, size: string): number {
 export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string; size?: string; quality?: string }): ImageProvider {
   const model = opts.modelId || "gpt-image-1";
   const size = opts.size || "1024x1536";
-  // QUAN TRỌNG (latency): gpt-image quality "high"/"auto" có thể >60s/ảnh → vượt
-  // Vercel maxDuration 60s → render kẹt "queued". "low" ~5-15s/ảnh, đủ đẹp cho
-  // ảnh NỀN B-roll (có Ken Burns + caption đè lên). Đổi "medium" nếu cần nét hơn.
-  const quality = opts.quality || "low";
+  // QUAN TRỌNG (latency): gpt-image "high"/"auto" có thể >60s/ảnh → vượt Vercel
+  // maxDuration 60s → render kẹt. "medium" (~15-25s/ảnh) nét hơn "low" rõ rệt mà
+  // sinh SONG SONG vẫn lọt 60s. "low" nếu cần nhanh tối đa.
+  const quality = opts.quality || "medium";
   return {
     async generate({ prompt }): Promise<ImageResult> {
       const body: Record<string, unknown> = { model, prompt, n: 1, size };

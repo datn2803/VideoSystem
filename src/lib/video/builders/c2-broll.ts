@@ -66,7 +66,7 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
 // ── B-roll ảnh AI theo topic (GPT Image) ──────────────────────────────────────
 // Hậu tố style cố định cho MỌI shot → bộ ảnh đồng nhất, không lộn xộn, KHÔNG chữ.
 const BROLL_STYLE_SUFFIX =
-  ". Cinematic vertical 9:16 editorial photo, consistent cool color grade, modern, Vietnamese context, soft natural light, shallow depth of field, NO text, NO watermark, no logo.";
+  ". Professional cinematic photograph, vertical 9:16 composition, shot on a cinema camera, dramatic directional lighting, rich detail and texture, photorealistic, consistent moody cool-toned color grade, modern realistic Vietnamese context, shallow depth of field, natural authentic subjects, no text, no captions, no watermark, no logo.";
 
 // Quy tắc 3 góc (toàn–trung–cận) — luân phiên để cảnh cắt sinh động, không trùng khung.
 const SHOT_SIZES = [
@@ -77,32 +77,47 @@ const SHOT_SIZES = [
   "wide cinematic shot, low angle",
 ];
 
+/** Chia voiceOver thành `n` đoạn ~đều (ưu tiên theo câu, không đủ thì theo từ).
+ * Mỗi đoạn dùng làm NGỮ CẢNH cho 1 ảnh → ảnh minh hoạ đúng câu đang nói. */
+function splitIntoSegments(text: string, n: number): string[] {
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return Array.from({ length: n }, () => "");
+  const sentences = clean.split(/(?<=[.!?…])\s+/).map((s) => s.trim()).filter(Boolean);
+  if (sentences.length >= n) {
+    const per = Math.ceil(sentences.length / n);
+    return Array.from({ length: n }, (_, i) => sentences.slice(i * per, (i + 1) * per).join(" ").trim() || clean);
+  }
+  const words = clean.split(" ");
+  const per = Math.ceil(words.length / n);
+  return Array.from({ length: n }, (_, i) => words.slice(i * per, (i + 1) * per).join(" ").trim() || clean);
+}
+
 /**
- * "Đạo diễn" B-roll (1 call Gemini free): topic + lời thoại + số cảnh N → N prompt
- * ảnh TIẾNG ANH minh hoạ mạch lời nói, ÁP DỤNG QUY TẮC 3 GÓC (toàn–trung–cận) +
- * đổi góc/chủ thể cho cảnh cắt sinh động, KHÔNG chữ trong ảnh.
- * Fallback (LLM lỗi/parse fail): ghép cỡ-cảnh luân phiên + topic + gợi ý.
+ * "Đạo diễn" B-roll (1 call Gemini free): CHIA lời thoại thành N đoạn → mỗi ảnh
+ * minh hoạ ĐÚNG đoạn đang nói (b-roll có chủ đích, khớp content). Áp QUY TẮC 3 GÓC
+ * (toàn–trung–cận, luân phiên) + ảnh điện ảnh CỤ THỂ, KHÔNG chữ.
+ * Fallback (LLM lỗi/parse fail): ghép cỡ-cảnh + topic + đoạn lời thoại tương ứng.
  */
 async function planShotPrompts(topic: string, voiceOver: string, hints: string[], count: number): Promise<string[]> {
   const cleanHints = hints.map((h) => (h || "").trim()).filter(Boolean);
+  const segments = splitIntoSegments(voiceOver, count);
   const fallback = () =>
     Array.from({ length: count }, (_, i) => {
-      const hint = cleanHints[i % (cleanHints.length || 1)] || topic;
-      return `${SHOT_SIZES[i % SHOT_SIZES.length]} of ${topic}: ${hint}`;
+      const ctx = (segments[i] || cleanHints[i] || topic).trim();
+      return `${SHOT_SIZES[i % SHOT_SIZES.length]} of ${topic}: ${ctx}`;
     });
   try {
     const llm = await hub.llm();
-    const vo = (voiceOver || "").replace(/\s+/g, " ").slice(0, 1200);
-    const hintBlock = cleanHints.length
-      ? `\n\nGỢI Ý CẢNH (tham khảo):\n${cleanHints.map((h, i) => `${i + 1}. ${h}`).join("\n")}`
-      : "";
+    const segBlock = segments
+      .map((s, i) => `${i + 1}. [${SHOT_SIZES[i % SHOT_SIZES.length]}] ${s || topic}`)
+      .join("\n");
     const res = await llm.complete({
       system:
-        "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video ngắn dọc 9:16. Cho CHỦ ĐỀ + lời thoại (tiếng Việt) + số cảnh N, trả JSON mảng N prompt ảnh TIẾNG ANH minh hoạ mạch lời thoại theo trình tự. BẮT BUỘC ÁP DỤNG QUY TẮC 3 GÓC: luân phiên cỡ cảnh (wide establishing / medium / close-up detail) và ĐỔI góc + chủ thể giữa các cảnh để khi cắt thật SINH ĐỘNG, KHÔNG trùng khung. Mỗi prompt: BẮT ĐẦU bằng cỡ cảnh, rồi mô tả cảnh/chủ thể CỤ THỂ hợp chủ đề, bối cảnh Việt Nam, ánh sáng điện ảnh, KHÔNG có chữ/text trong ảnh. CHỈ trả JSON mảng string, KHÔNG giải thích.",
+        "Bạn là ĐẠO DIỄN HÌNH ẢNH + nhiếp ảnh điện ảnh cho video ngắn dọc 9:16. Mỗi CẢNH gồm CỠ CẢNH gợi ý + ĐOẠN lời thoại tương ứng. Trả JSON mảng prompt ảnh TIẾNG ANH, MỖI prompt minh hoạ TRỰC TIẾP nội dung đoạn lời thoại đó bằng 1 cảnh/chủ thể CỤ THỂ (người/vật/bối cảnh thực tế), ĐÚNG cỡ cảnh cho trước (đa dạng góc giữa các cảnh), bối cảnh Việt Nam thật, ánh sáng điện ảnh, cảm xúc khớp nội dung. TUYỆT ĐỐI cụ thể — tránh khái niệm trừu tượng, tránh chữ/biểu tượng/đồ hoạ trong ảnh. Mỗi prompt BẮT ĐẦU bằng cỡ cảnh. CHỈ trả JSON mảng string đúng thứ tự, KHÔNG giải thích.",
       messages: [
-        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nLỜI THOẠI:\n${vo}${hintBlock}\n\nTrả JSON mảng ĐÚNG ${count} prompt tiếng Anh, theo trình tự lời thoại, mỗi cảnh một cỡ/góc khác nhau.` },
+        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nCÁC CẢNH (cỡ cảnh + đoạn lời thoại):\n${segBlock}\n\nTrả JSON mảng ĐÚNG ${count} prompt tiếng Anh, mỗi prompt khớp đoạn lời thoại + cỡ cảnh tương ứng.` },
       ],
-      maxTokens: 900,
+      maxTokens: 1000,
       responseFormat: "json",
     });
     const txt = res.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
