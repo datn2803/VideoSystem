@@ -9,10 +9,11 @@ function estimateCost(model: string, size: string): number {
 export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string; size?: string; quality?: string }): ImageProvider {
   const model = opts.modelId || "gpt-image-1";
   const size = opts.size || "1024x1536";
-  // QUAN TRỌNG (latency): gpt-image "high"/"auto" có thể >60s/ảnh → vượt Vercel
-  // maxDuration 60s → render kẹt. "medium" (~15-25s/ảnh) nét hơn "low" rõ rệt mà
-  // sinh SONG SONG vẫn lọt 60s. "low" nếu cần nhanh tối đa.
-  const quality = opts.quality || "medium";
+  // QUAN TRỌNG (latency): "medium"/"high" gpt-image quá chậm → 5 ảnh vượt Vercel
+  // 60s → render timeout (đã test thực tế: medium FAIL). Giữ "low" (~5-15s/ảnh) để
+  // an toàn 60s; chất lượng đến từ PROMPT/art-direction tốt (planShotPrompts), không
+  // từ tham số quality. Chỉ tăng nếu chuyển sinh ảnh sang nền không-timeout (VPS).
+  const quality = opts.quality || "low";
   return {
     async generate({ prompt }): Promise<ImageResult> {
       const body: Record<string, unknown> = { model, prompt, n: 1, size };
