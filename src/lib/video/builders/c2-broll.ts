@@ -125,38 +125,53 @@ async function generateBrollImages(
 
   const prompts = await shotsToImagePrompts(topic, shots.map((s) => s.note));
   const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
-  let cacheDirty = false;
-  const out: { url: string; durationSec: number }[] = [];
   const even = totalDur / shots.length;
 
-  for (let i = 0; i < shots.length; i++) {
-    const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
-    const h = hashImage(scriptId, i, prompt, model);
-    let url = cache[h];
-    if (!url) {
-      try {
-        const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
-        const stored = await blobUpload({
-          bucket: "broll-images",
-          filename: `${scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
-          buffer: Buffer.from(img.imageBase64, "base64"),
-          contentType: img.mimeType,
-        });
-        url = stored;
-        cache[h] = url;
-        cacheDirty = true;
-      } catch {
-        continue; // 1 ảnh lỗi → bỏ shot đó, không fail cả video
+  // QUAN TRỌNG: sinh ảnh SONG SONG (Promise.all) thay vì tuần tự.
+  // 5 ảnh GPT Image tuần tự (~20s/ảnh) > 60s → Vercel function timeout
+  // ("An unexpected response..."). Song song → ~tổng ≈ thời gian 1 ảnh.
+  type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number };
+  const results = await Promise.all(
+    shots.map(async (shot, i): Promise<Shot | null> => {
+      const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
+      const h = hashImage(scriptId, i, prompt, model);
+      let url = cache[h];
+      let fresh: string | undefined;
+      if (!url) {
+        try {
+          const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
+          url = await blobUpload({
+            bucket: "broll-images",
+            filename: `${scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
+            buffer: Buffer.from(img.imageBase64, "base64"),
+            contentType: img.mimeType,
+          });
+          fresh = url; // ghi cache sau khi xong hết (tránh race trên object dùng chung)
+        } catch {
+          return null; // 1 ảnh lỗi → bỏ shot đó, không fail cả video
+        }
       }
-    }
-    const abs = toAbsoluteUrl(url);
-    if (abs) {
-      const d = shots[i].durationSec && shots[i].durationSec > 0 ? shots[i].durationSec : even;
-      out.push({ url: abs, durationSec: Math.round(d * 100) / 100 });
+      const abs = toAbsoluteUrl(url);
+      if (!abs) return null;
+      const d = shot.durationSec && shot.durationSec > 0 ? shot.durationSec : even;
+      return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(d * 100) / 100 };
+    })
+  );
+
+  // Ghi cache 1 lần sau khi tất cả ảnh xong (an toàn, không race).
+  let cacheDirty = false;
+  for (const r of results) {
+    if (r?.fresh) {
+      cache[r.hash] = r.fresh;
+      cacheDirty = true;
     }
   }
   if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
-  return out;
+
+  return results
+    .filter((r): r is Shot => r != null)
+    .sort((a, b) => a.idx - b.idx)
+    .map((r) => ({ url: r.url, durationSec: r.durationSec }));
 }
 
 // ── Caption karaoke đồng bộ audio (OpenAI Whisper word-level) ─────────────────
@@ -316,19 +331,21 @@ export async function buildBroll(input: {
       // 9:16, KHÔNG chữ. Cost-guard RENDER_LIVE + cache + retry trong helper.
       // Không bật / thiếu provider → bgUrls rỗng → template dùng gradient (KHÔNG throw).
       const topic = script.topic || script.script.hook || "";
-      const imgs = await generateBrollImages(input.scriptId, topic, shotList, duration);
+      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      const openaiKey = await getOpenAIKey();
+
+      // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
+      // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
+      const [imgs, words] = await Promise.all([
+        generateBrollImages(input.scriptId, topic, shotList, duration),
+        voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
+      ]);
       const bgUrls = imgs.map((c) => c.url);
       const shotDurations = imgs.map((c) => c.durationSec);
 
-      // Caption karaoke ĐỒNG BỘ audio: Whisper word-level (OpenAI) → nhóm 3-5 từ.
-      // Tái dùng key OpenAI của image provider. Lỗi/thiếu → fallback caption chia đều.
-      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
-      let captionGroups: CaptionGroup[] = [];
-      const openaiKey = await getOpenAIKey();
-      if (voiceUrl && openaiKey) {
-        const words = await transcribeWords(voiceUrl, openaiKey);
-        if (words) captionGroups = groupWords(words);
-      }
+      // Caption karaoke ĐỒNG BỘ audio: Whisper word-level → nhóm 3-5 từ.
+      // Lỗi/thiếu key → fallback caption_lines chia đều (bên dưới).
+      const captionGroups: CaptionGroup[] = words ? groupWords(words) : [];
 
       const variables: Record<string, unknown> = {
         duration,
