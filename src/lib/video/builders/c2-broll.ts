@@ -395,6 +395,27 @@ export async function buildBroll(input: {
       // Lỗi/thiếu key → fallback caption_lines chia đều (bên dưới).
       const captionGroups: CaptionGroup[] = words ? groupWords(words) : [];
 
+      // PHASE 3b — title-card (hook) + stat insert.
+      // hook: luôn có → broll.html dựng title-card reveal đầu clip.
+      // stat: CHỈ khi parse được SỐ THẬT từ dataPoints (anti-fabrication) → không thì null (không hiện insert).
+      const hook = script.script.hook || "";
+      const dataPoints = (script.script.variantPrompts.animation?.dataPoints || []) as string[];
+      let stat: { label: string; value: string; unit: string } | null = null;
+      for (const raw of dataPoints) {
+        const str = String(raw || "").trim();
+        const m = str.match(/(\d[\d.,]*)/);
+        if (!m) continue;
+        const value = m[1];
+        const numIdx = m.index ?? 0;
+        const colon = str.indexOf(":");
+        const label = (colon >= 0 && colon < numIdx ? str.slice(0, colon) : str.slice(0, numIdx))
+          .replace(/[:\-–—]\s*$/, "")
+          .trim();
+        const unit = str.slice(numIdx + value.length).replace(/^[\s:.\-–—]+/, "").trim();
+        stat = { label: label.slice(0, 36), value, unit: unit.slice(0, 20) };
+        break;
+      }
+
       const variables: Record<string, unknown> = {
         duration,
         bg_type: "image", // ảnh AI + Ken Burns
@@ -405,6 +426,8 @@ export async function buildBroll(input: {
         caption_groups: JSON.stringify(captionGroups),
         caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
         accent_color: "#e11d2a",
+        hook, // title-card reveal đầu clip
+        stat: JSON.stringify(stat), // stat insert (null nếu không có số thật)
       };
 
       const job = await renderer.render({ templateId: "broll", modifications: variables });
