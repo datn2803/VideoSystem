@@ -20,9 +20,8 @@ async function pickImageProvider() {
 }
 
 // Ảnh AI là PAID → chỉ sinh tối đa MAX_IMAGES shot + hậu tố style cố định cho đồng nhất.
+// (Style suffix dùng chung là BROLL_STYLE_SUFFIX bên dưới — cả hyperframes lẫn creatomate.)
 const MAX_IMAGES = 5;
-const STYLE_SUFFIX =
-  ". Vertical 9:16 cinematic photo, high detail, realistic, Vietnamese context, natural lighting, no text, no watermark.";
 const IMG_CACHE_KEY = "broll-image-cache"; // hash -> public URL (tránh re-render đốt tiền)
 
 function hashImage(scriptId: string, idx: number, prompt: string, model: string): string {
@@ -491,40 +490,20 @@ export async function buildBroll(input: {
       };
 
       // Cost-guard: chỉ sinh ảnh AI (PAID) khi RENDER_LIVE="1" VÀ có image provider.
+      // Dùng CHUNG generateBrollImages (đạo diễn cảnh + cache + retry + upload) thay
+      // vì lặp lại vòng sinh ảnh inline — 1 nguồn sự thật, hết trùng lặp.
       const imageProvider = await pickImageProvider();
-      const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
-      let imageCost = 0;
+      const topic = script.topic || script.script.hook || "";
+      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      const seconds = script.script.estimatedDurationSec || 30;
+      const imgResult = await generateBrollImages(input.scriptId, topic, captionSource, shotList, seconds);
+      const useAI = imgResult.intended;
 
       if (useAI) {
-        const imgAdapter = await hub.image();
-        if (!imgAdapter) throw new Error("Không khởi tạo được image provider");
-        const model = (imageProvider!.config?.modelId as string) || "";
-        const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
-        let cacheDirty = false;
-
-        const shots = shotList.slice(0, MAX_IMAGES);
-        for (let i = 0; i < shots.length; i++) {
-          const note = shots[i].note?.trim();
-          if (!note) continue;
-          const prompt = `${note}${STYLE_SUFFIX}`;
-          const h = hashImage(input.scriptId, i, prompt, model);
-          let url = cache[h];
-          if (!url) {
-            // sinh thật + retry 1 lần; chỉ chạy khi chưa có trong cache
-            const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
-            url = await blobUpload({
-              bucket: "broll-images",
-              filename: `${input.scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
-              buffer: Buffer.from(img.imageBase64, "base64"),
-              contentType: img.mimeType,
-            });
-            cache[h] = url;
-            cacheDirty = true;
-            imageCost += img.costUsd;
-          }
-          modifications[`image_${i + 1}`] = toAbsoluteUrl(url);
-        }
-        if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
+        // Map ảnh đã sinh → các slot image_N của template Creatomate.
+        imgResult.images.forEach((img, i) => {
+          modifications[`image_${i + 1}`] = img.url;
+        });
       } else {
         // Fallback: footage upload theo footageTag (giữ nguyên hành vi cũ).
         usedFootage.forEach((f, i) => {
@@ -538,7 +517,7 @@ export async function buildBroll(input: {
         progress: 10,
         providerJobId: job.jobId,
         providerName: useAI ? `creatomate+${imageProvider!.name}` : "creatomate",
-        costUsd: imageCost,
+        costUsd: 0,
       }))!;
     } catch (e) {
       return (await videoStore.update(draft.id, {
