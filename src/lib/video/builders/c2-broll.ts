@@ -68,34 +68,52 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
 const BROLL_STYLE_SUFFIX =
   ". Cinematic vertical 9:16 editorial photo, consistent cool color grade, modern, Vietnamese context, soft natural light, shallow depth of field, NO text, NO watermark, no logo.";
 
+// Quy tắc 3 góc (toàn–trung–cận) — luân phiên để cảnh cắt sinh động, không trùng khung.
+const SHOT_SIZES = [
+  "wide establishing shot",
+  "medium shot",
+  "close-up detail shot",
+  "medium shot, different angle",
+  "wide cinematic shot, low angle",
+];
+
 /**
- * 1 call LLM (Gemini free): topic + mô tả cảnh tiếng Việt → mỗi shot 1 prompt ảnh
- * TIẾNG ANH cụ thể, hợp chủ đề (cảnh/vật/bối cảnh minh hoạ), KHÔNG chữ trong ảnh.
- * Fallback: dùng "topic, note" nếu LLM lỗi/parse fail.
+ * "Đạo diễn" B-roll (1 call Gemini free): topic + lời thoại + số cảnh N → N prompt
+ * ảnh TIẾNG ANH minh hoạ mạch lời nói, ÁP DỤNG QUY TẮC 3 GÓC (toàn–trung–cận) +
+ * đổi góc/chủ thể cho cảnh cắt sinh động, KHÔNG chữ trong ảnh.
+ * Fallback (LLM lỗi/parse fail): ghép cỡ-cảnh luân phiên + topic + gợi ý.
  */
-async function shotsToImagePrompts(topic: string, notes: string[]): Promise<string[]> {
-  const clean = notes.map((n) => (n || "").trim()).filter(Boolean);
-  if (clean.length === 0) return [];
+async function planShotPrompts(topic: string, voiceOver: string, hints: string[], count: number): Promise<string[]> {
+  const cleanHints = hints.map((h) => (h || "").trim()).filter(Boolean);
+  const fallback = () =>
+    Array.from({ length: count }, (_, i) => {
+      const hint = cleanHints[i % (cleanHints.length || 1)] || topic;
+      return `${SHOT_SIZES[i % SHOT_SIZES.length]} of ${topic}: ${hint}`;
+    });
   try {
     const llm = await hub.llm();
-    const list = clean.map((n, i) => `${i + 1}. ${n}`).join("\n");
+    const vo = (voiceOver || "").replace(/\s+/g, " ").slice(0, 1200);
+    const hintBlock = cleanHints.length
+      ? `\n\nGỢI Ý CẢNH (tham khảo):\n${cleanHints.map((h, i) => `${i + 1}. ${h}`).join("\n")}`
+      : "";
     const res = await llm.complete({
       system:
-        "Bạn viết prompt ảnh cho stock/AI image. Cho CHỦ ĐỀ và danh sách mô tả cảnh (tiếng Việt), trả JSON mảng prompt TIẾNG ANH — mỗi prompt mô tả 1 cảnh/vật/bối cảnh CỤ THỂ minh hoạ ý đó, hợp chủ đề, KHÔNG có chữ/text trong ảnh. CHỈ trả JSON mảng string, KHÔNG giải thích.",
+        "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video ngắn dọc 9:16. Cho CHỦ ĐỀ + lời thoại (tiếng Việt) + số cảnh N, trả JSON mảng N prompt ảnh TIẾNG ANH minh hoạ mạch lời thoại theo trình tự. BẮT BUỘC ÁP DỤNG QUY TẮC 3 GÓC: luân phiên cỡ cảnh (wide establishing / medium / close-up detail) và ĐỔI góc + chủ thể giữa các cảnh để khi cắt thật SINH ĐỘNG, KHÔNG trùng khung. Mỗi prompt: BẮT ĐẦU bằng cỡ cảnh, rồi mô tả cảnh/chủ thể CỤ THỂ hợp chủ đề, bối cảnh Việt Nam, ánh sáng điện ảnh, KHÔNG có chữ/text trong ảnh. CHỈ trả JSON mảng string, KHÔNG giải thích.",
       messages: [
-        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nCÁC CẢNH:\n${list}\n\nTrả JSON mảng ${clean.length} prompt tiếng Anh, đúng thứ tự.` },
+        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nLỜI THOẠI:\n${vo}${hintBlock}\n\nTrả JSON mảng ĐÚNG ${count} prompt tiếng Anh, theo trình tự lời thoại, mỗi cảnh một cỡ/góc khác nhau.` },
       ],
-      maxTokens: 600,
+      maxTokens: 900,
       responseFormat: "json",
     });
     const txt = res.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
     const arr = JSON.parse(txt.match(/\[[\s\S]*\]/)?.[0] ?? txt) as unknown[];
-    return clean.map((note, i) => {
+    const fb = fallback();
+    return Array.from({ length: count }, (_, i) => {
       const p = arr[i];
-      return typeof p === "string" && p.trim() ? p.trim() : `${topic}, ${note}`;
+      return typeof p === "string" && p.trim() ? p.trim() : fb[i];
     });
   } catch {
-    return clean.map((note) => `${topic}, ${note}`); // fallback
+    return fallback();
   }
 }
 
@@ -119,6 +137,7 @@ type BrollImagesResult = {
 async function generateBrollImages(
   scriptId: string,
   topic: string,
+  voiceOver: string,
   shotList: { note: string; durationSec: number }[],
   totalDur: number
 ): Promise<BrollImagesResult> {
@@ -130,19 +149,21 @@ async function generateBrollImages(
   const imgAdapter = await hub.image();
   if (!imgAdapter) return { images: [], intended: false, failed: 0 };
   const model = (imageProvider!.config?.modelId as string) || "";
-  const shots = shotList.slice(0, MAX_IMAGES).filter((s) => (s.note || "").trim());
-  if (shots.length === 0) return { images: [], intended: true, failed: 0 };
 
-  const prompts = await shotsToImagePrompts(topic, shots.map((s) => s.note));
+  // Số cảnh theo nhịp ~4s/cảnh (chuẩn 2–5s/cảnh), tối thiểu 4, cap MAX_IMAGES
+  // (giữ sinh song song < Vercel 60s). Đạo diễn cảnh đa góc theo voiceOver.
+  const count = Math.max(4, Math.min(MAX_IMAGES, Math.round((totalDur || 20) / 4.2)));
+  const hints = shotList.map((s) => (s.note || "").trim()).filter(Boolean);
+  const prompts = await planShotPrompts(topic, voiceOver, hints, count);
   const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
-  const even = totalDur / shots.length;
+  const even = totalDur / count;
 
   // QUAN TRỌNG: sinh ảnh SONG SONG (Promise.all) thay vì tuần tự.
   // 5 ảnh GPT Image tuần tự (~20s/ảnh) > 60s → Vercel function timeout
   // ("An unexpected response..."). Song song → ~tổng ≈ thời gian 1 ảnh.
   type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number; error?: string };
   const results = await Promise.all(
-    shots.map(async (shot, i): Promise<Shot | null> => {
+    Array.from({ length: count }, (_, i) => i).map(async (i): Promise<Shot | null> => {
       const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
       const h = hashImage(scriptId, i, prompt, model);
       let url = cache[h];
@@ -166,8 +187,7 @@ async function generateBrollImages(
       }
       const abs = toAbsoluteUrl(url);
       if (!abs) return { idx: i, hash: h, url: "", durationSec: 0, error: "URL ảnh rỗng sau upload" };
-      const d = shot.durationSec && shot.durationSec > 0 ? shot.durationSec : even;
-      return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(d * 100) / 100 };
+      return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(even * 100) / 100 };
     })
   );
 
@@ -354,7 +374,7 @@ export async function buildBroll(input: {
       // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
       // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
       const [imgResult, words] = await Promise.all([
-        generateBrollImages(input.scriptId, topic, shotList, duration),
+        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration),
         voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
       ]);
 
