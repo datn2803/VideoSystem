@@ -63,12 +63,22 @@ function parseDataPoint(raw: string): ParsedDataPoint | null {
  * để default đẹp-sẵn của template lọt thành nội dung bịa. Data viz / levels chỉ
  * điền khi có dữ liệu thật parse được; thiếu → rỗng → template tự ẩn scene đó.
  */
+/** Rút 1 cụm từ khoá NGẮN (≤4 từ) cho chữ lớn S1 — tránh đổ cả câu dài vào .key 150px.
+ * Ưu tiên cụm trong dấu ngoặc/"…", nếu không thì lấy tối đa 4 từ đầu của keyMessage. */
+function shortKeyword(raw: string): string {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  const quoted = s.match(/[""“”'](.+?)[""“”']/);
+  const base = (quoted?.[1] || s).trim();
+  const words = base.split(/\s+/).filter(Boolean);
+  return words.slice(0, 4).join(" ");
+}
+
 function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
   const anim = s.variantPrompts.animation;
   const [hookLine1, hookLine2] = splitTwoLines(s.hook || "");
-  const keyword = (anim.keyMessages?.[0] || "").trim();
 
-  // Data viz: chỉ điền nếu có ≥2 dataPoint parse được số THẬT.
+  // Data viz: chỉ điền nếu có ≥2 dataPoint parse được số THẬT (anti-fabrication).
   const parsed = (anim.dataPoints || [])
     .map(parseDataPoint)
     .filter((d: ParsedDataPoint | null): d is ParsedDataPoint => d != null);
@@ -76,12 +86,21 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
   const a = hasData ? parsed[0] : null;
   const b = hasData ? parsed[1] : null;
 
+  // S3 (hồi sinh): keyMessages = NỘI DUNG THẬT → point cards (badge số + câu chốt).
+  // Card đầu đánh dấu "active" để nổi bật (chỉ là style, không phải tuyên bố dữ liệu).
+  const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 3);
+  const levels = points.map((m, i) => ({ n: String(i + 1), label: m, active: i === 0 }));
+
+  // S1 từ khoá lớn: cụm NGẮN từ keyMessage đầu (không đổ cả câu vào chữ 150px).
+  const keyword = shortKeyword(anim.keyMessages?.[0] || s.hook || "");
+
   return {
     hook_line1: hookLine1,
     hook_line2: hookLine2,
     hook_keyword: keyword,
     hook_sub: "",
-    data_title: "",
+    // Eyebrow cho scene data — nhãn trung tính (KHÔNG phải số bịa), chỉ hiện khi có data thật.
+    data_title: hasData ? "Con số biết nói" : "",
     data_a_label: a?.label ?? "",
     data_a_value: a?.value ?? "",
     data_a_unit: a?.unit ?? "",
@@ -89,9 +108,9 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     data_b_value: b?.value ?? "",
     data_b_unit: b?.unit ?? "",
     data_ghost: "",
-    // Levels: schema hiện chưa có dữ liệu cấu trúc → rỗng (ẩn scene). KHÔNG bịa.
-    levels_title: "",
-    levels: "[]",
+    // S3 hồi sinh: tiêu đề nhãn trung tính + point cards từ keyMessages (nội dung thật).
+    levels_title: points.length ? "Những điểm cốt lõi" : "",
+    levels: JSON.stringify(levels),
     cta_top: "",
     cta_keyword: (s.cta || "").trim(),
     cta_sub: "",

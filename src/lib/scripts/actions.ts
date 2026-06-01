@@ -65,6 +65,31 @@ export async function reAuditScriptAction(id: string) {
   return { audit };
 }
 
+/**
+ * Lưu DATA POINTS đã được Tommy DUYỆT/SỬA (human gatekeeper) → C3 chỉ hiển thị số
+ * người dùng đã xác nhận, KHÔNG dùng số AI tự đẻ chưa kiểm chứng (chống tin sai).
+ * buildAnimation đọc thẳng từ script.variantPrompts.animation.dataPoints nên chỉ
+ * cần ghi đè field này; render C3 sau đó sẽ dùng số đã duyệt.
+ */
+export async function updateAnimationDataPointsAction(id: string, dataPoints: string[]) {
+  const rec = await scriptStore.get(id);
+  if (!rec) throw new Error("Script not found");
+  const clean = (Array.isArray(dataPoints) ? dataPoints : [])
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const next = {
+    ...rec.script,
+    variantPrompts: {
+      ...rec.script.variantPrompts,
+      animation: { ...rec.script.variantPrompts.animation, dataPoints: clean },
+    },
+  };
+  await scriptStore.update(id, { script: next });
+  revalidatePath(`/scripts/${id}`);
+  return { ok: true, dataPoints: clean };
+}
+
 export async function deleteScriptAction(id: string) {
   await scriptStore.delete(id);
   revalidatePath("/scripts");

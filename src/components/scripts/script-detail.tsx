@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ShieldCheck, ShieldAlert, ShieldX, RefreshCw, Mic, Film, Sparkles, Copy } from "lucide-react";
 import type { ScriptRecord } from "@/lib/scripts/storage";
-import { reAuditScriptAction } from "@/lib/scripts/actions";
+import { reAuditScriptAction, updateAnimationDataPointsAction } from "@/lib/scripts/actions";
 
 const severityColor: Record<string, "destructive" | "warning" | "secondary" | "outline"> = {
   critical: "destructive",
@@ -192,18 +192,10 @@ export function ScriptDetail({ record }: { record: ScriptRecord }) {
                   ))}
                 </ul>
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">
-                  Data points
-                </p>
-                <ul className="space-y-1 text-xs">
-                  {record.script.variantPrompts.animation.dataPoints.map((d, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-amber-500">📊</span> {d}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <DataPointsEditor
+                scriptId={record.id}
+                initial={record.script.variantPrompts.animation.dataPoints}
+              />
               <div>
                 <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">
                   Visual cues
@@ -221,6 +213,79 @@ export function ScriptDetail({ record }: { record: ScriptRecord }) {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+/**
+ * Duyệt/sửa SỐ LIỆU C3 (human gatekeeper). Số trong C3 do AI viết kịch bản sinh ra
+ * → CHƯA kiểm chứng. Tommy sửa/giữ số chính xác ở đây + Lưu TRƯỚC khi render C3.
+ * Chỉ dòng có SỐ mới thành biểu đồ; xoá hết → C3 ẩn scene số (không hiện số sai).
+ */
+function DataPointsEditor({ scriptId, initial }: { scriptId: string; initial: string[] }) {
+  const [items, setItems] = useState<string[]>(initial && initial.length ? initial : [""]);
+  const [saved, setSaved] = useState(false);
+  const [pending, startSave] = useTransition();
+
+  const setAt = (i: number, val: string) => {
+    setSaved(false);
+    setItems((prev) => prev.map((x, j) => (j === i ? val : x)));
+  };
+  const removeAt = (i: number) => {
+    setSaved(false);
+    setItems((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [""]));
+  };
+  const add = () => {
+    setSaved(false);
+    setItems((prev) => [...prev, ""]);
+  };
+  const save = () => {
+    const clean = items.map((s) => s.trim()).filter(Boolean);
+    startSave(async () => {
+      await updateAnimationDataPointsAction(scriptId, clean);
+      setItems(clean.length ? clean : [""]);
+      setSaved(true);
+    });
+  };
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">
+        Data points — DUYỆT trước khi render C3
+      </p>
+      <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-[10px] text-amber-800 mb-2 leading-relaxed">
+        ⚠️ Số do AI sinh, <b>chưa kiểm chứng</b>. Số liệu này sẽ <b>hiện trong video C3</b> — hãy sửa cho{" "}
+        <b>CHÍNH XÁC</b> rồi bấm Lưu. Chỉ dòng có <b>số</b> mới thành biểu đồ; xoá hết → C3 ẩn phần số.
+        Định dạng nên là <i>“Nhãn: số đơn-vị”</i> (vd “Lãi cố định: 8 % / năm”).
+      </div>
+      <div className="space-y-1.5">
+        {items.map((it, i) => (
+          <div key={i} className="flex gap-1 items-center">
+            <input
+              value={it}
+              onChange={(e) => setAt(i, e.target.value)}
+              placeholder="vd: Lãi thả nổi: 10 % / năm"
+              className="flex-1 bg-background border border-border rounded px-2 py-1 text-xs"
+            />
+            <button
+              onClick={() => removeAt(i)}
+              className="text-muted-foreground hover:text-rose-500 text-xs px-1"
+              title="Xoá dòng"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-2">
+        <button onClick={add} className="text-[10px] text-muted-foreground hover:text-foreground">
+          + Thêm dòng
+        </button>
+        <Button variant="accent" size="sm" className="h-7 text-[10px]" onClick={save} disabled={pending}>
+          {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null} Lưu số liệu đã duyệt
+        </Button>
+        {saved && <span className="text-[10px] text-emerald-600">Đã lưu ✓ — giờ render C3</span>}
+      </div>
     </div>
   );
 }
