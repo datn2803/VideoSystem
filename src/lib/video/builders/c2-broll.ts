@@ -62,6 +62,90 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
   return `${process.env.PUBLIC_APP_URL || ""}${path}`;
 }
 
+// ── Pexels stock footage (free, hotlinkable) ──────────────────────────────────
+const MAX_SHOTS = 5; // cap số shot → số clip Pexels (giới hạn thời gian render)
+
+/**
+ * 1 call LLM: danh sách mô tả cảnh tiếng Việt → mảng từ khoá TIẾNG ANH để search
+ * stock footage. Fallback: dùng chính note nếu LLM lỗi/parse fail.
+ */
+async function shotNotesToQueries(notes: string[]): Promise<string[]> {
+  const clean = notes.map((n) => (n || "").trim()).filter(Boolean);
+  if (clean.length === 0) return [];
+  try {
+    const llm = await hub.llm();
+    const list = clean.map((n, i) => `${i + 1}. ${n}`).join("\n");
+    const res = await llm.complete({
+      system:
+        "Bạn giúp tìm stock footage. Cho danh sách mô tả cảnh (tiếng Việt), trả JSON mảng từ khoá TIẾNG ANH để tìm video minh hoạ, mỗi phần tử 1-3 từ, cụ thể, hợp video. CHỈ trả JSON mảng string, KHÔNG giải thích.",
+      messages: [{ role: "user", content: `${list}\n\nTrả về JSON mảng ${clean.length} từ khoá tiếng Anh, đúng thứ tự.` }],
+      maxTokens: 400,
+      responseFormat: "json",
+    });
+    const txt = res.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+    const arr = JSON.parse(txt.match(/\[[\s\S]*\]/)?.[0] ?? txt) as unknown[];
+    const queries = clean.map((note, i) => {
+      const kw = arr[i];
+      return typeof kw === "string" && kw.trim() ? kw.trim() : note;
+    });
+    return queries;
+  } catch {
+    return clean; // fallback: note làm query
+  }
+}
+
+/**
+ * Tìm 1 video Pexels DỌC (portrait) cho 1 từ khoá. Trả link hotlink ~1080p hoặc
+ * gần nhất. null nếu không có key / không ra clip dọc (→ bỏ shot, không bịa).
+ */
+async function pexelsPortraitVideo(query: string, apiKey: string): Promise<string | null> {
+  try {
+    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=3&size=medium`;
+    const res = await fetch(url, { headers: { authorization: apiKey } });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      videos?: { video_files?: { link: string; width: number; height: number; quality?: string }[] }[];
+    };
+    for (const video of data.videos || []) {
+      const portrait = (video.video_files || []).filter((f) => f.width && f.height && f.width < f.height);
+      if (portrait.length === 0) continue;
+      // chọn file có height gần 1920 nhất (≈1080p dọc)
+      portrait.sort((a, b) => Math.abs(a.height - 1920) - Math.abs(b.height - 1920));
+      return portrait[0].link;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * shotList → clips Pexels [{ url, durationSec }]. Phân bổ durationSec theo shot
+ * (hoặc chia đều totalDur). Bỏ shot không tìm được clip (không chèn clip lạc đề).
+ * Thiếu PEXELS_API_KEY → trả [] (template tự dùng gradient).
+ */
+async function fetchPexelsClips(
+  shotList: { note: string; durationSec: number }[],
+  totalDur: number
+): Promise<{ url: string; durationSec: number }[]> {
+  const apiKey = process.env.PEXELS_API_KEY;
+  if (!apiKey) return []; // không có key → fallback gradient (KHÔNG throw)
+  const shots = shotList.slice(0, MAX_SHOTS);
+  if (shots.length === 0) return [];
+
+  const queries = await shotNotesToQueries(shots.map((s) => s.note));
+  const found = await Promise.all(queries.map((q) => pexelsPortraitVideo(q, apiKey)));
+
+  // Giữ shot tìm được clip; phân bổ lại thời lượng đều trên các clip hợp lệ.
+  const valid = shots.map((s, i) => ({ shot: s, url: found[i] })).filter((x) => x.url);
+  if (valid.length === 0) return [];
+  const even = totalDur / valid.length;
+  return valid.map((x) => ({
+    url: x.url as string,
+    durationSec: Math.round((x.shot.durationSec && x.shot.durationSec > 0 ? x.shot.durationSec : even) * 100) / 100,
+  }));
+}
+
 type CaptionLine = { text: string; start: number; dur: number; keyword?: string };
 
 /**
@@ -128,64 +212,28 @@ export async function buildBroll(input: {
   if (mode === "hyperframes") {
     try {
       const renderer = await hub.render();
-      const duration = script.script.estimatedDurationSec || 30;
+      // Độ dài: ưu tiên độ dài voice-over thật để footage phủ hết lời nói.
+      const duration =
+        audio?.durationMs && audio.durationMs > 0
+          ? Math.round(audio.durationMs / 1000)
+          : script.script.estimatedDurationSec || 30;
       // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
       const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
 
-      const bgUrls: string[] = [];
-      let bgType: "image" | "video" = "image";
-      let imageCost = 0;
-
-      // Cost-guard: chỉ sinh ảnh AI (PAID) khi RENDER_LIVE="1" VÀ có image provider.
-      const imageProvider = await pickImageProvider();
-      const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
-
-      if (useAI) {
-        const imgAdapter = await hub.image();
-        if (!imgAdapter) throw new Error("Không khởi tạo được image provider");
-        const model = (imageProvider!.config?.modelId as string) || "";
-        const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
-        let cacheDirty = false;
-        const shots = shotList.slice(0, MAX_IMAGES);
-        for (let i = 0; i < shots.length; i++) {
-          const note = shots[i].note?.trim();
-          if (!note) continue;
-          const prompt = `${note}${STYLE_SUFFIX}`;
-          const h = hashImage(input.scriptId, i, prompt, model);
-          let url = cache[h];
-          if (!url) {
-            const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
-            url = await blobUpload({
-              bucket: "broll-images",
-              filename: `${input.scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
-              buffer: Buffer.from(img.imageBase64, "base64"),
-              contentType: img.mimeType,
-            });
-            cache[h] = url;
-            cacheDirty = true;
-            imageCost += img.costUsd;
-          }
-          const abs = toAbsoluteUrl(url);
-          if (abs) bgUrls.push(abs);
-        }
-        if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
-      } else {
-        // Footage có sẵn (URL công khai) làm nền video; không có → để rỗng (template dùng gradient).
-        bgType = "video";
-        usedFootage.forEach((f) => {
-          if (f) {
-            const abs = toAbsoluteUrl(f.storagePath);
-            if (abs) bgUrls.push(abs);
-          }
-        });
-        if (bgUrls.length === 0) bgType = "image";
-      }
+      // B-roll THẬT: footage stock Pexels khớp từng shot (free, hotlink được).
+      // shotList note (VN) → từ khoá EN (1 call LLM) → Pexels video dọc → clips.
+      // Thiếu PEXELS_API_KEY hoặc không ra clip → bgUrls rỗng → template dùng gradient.
+      const clips = await fetchPexelsClips(shotList, duration);
+      const bgUrls = clips.map((c) => c.url);
+      const shotDurations = clips.map((c) => c.durationSec);
+      const bgType: "image" | "video" = bgUrls.length ? "video" : "image";
 
       const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
       const variables: Record<string, unknown> = {
         duration,
         bg_type: bgType,
         bg_urls: JSON.stringify(bgUrls),
+        shot_durations: JSON.stringify(shotDurations),
         voice_url: voiceUrl,
         caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
         accent_color: "#e11d2a",
@@ -196,8 +244,8 @@ export async function buildBroll(input: {
         status: "rendering",
         progress: 10,
         providerJobId: job.jobId,
-        providerName: useAI ? `hyperframes+${imageProvider!.name}` : "hyperframes",
-        costUsd: imageCost,
+        providerName: bgUrls.length ? "hyperframes+pexels" : "hyperframes",
+        costUsd: 0,
       }))!;
     } catch (e) {
       return (await videoStore.update(draft.id, {
