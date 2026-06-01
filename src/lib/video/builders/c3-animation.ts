@@ -129,7 +129,18 @@ export async function buildAnimation(input: {
   if (mode === "hyperframes") {
     try {
       const renderer = await hub.render();
-      const variables = buildAnimationVariables(script.script);
+      // Voice-over: URL công khai (Supabase) — service ở VPS tải audio qua mạng.
+      const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      // Độ dài: ưu tiên độ dài audio thật để animation co giãn khớp giọng đọc.
+      const durationSec =
+        audio?.durationMs && audio.durationMs > 0
+          ? Math.round(audio.durationMs / 1000)
+          : script.script.estimatedDurationSec || 18.5;
+      const variables = {
+        ...buildAnimationVariables(script.script),
+        voice_url: voiceUrl,
+        duration: String(durationSec),
+      };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {
         status: "rendering",
