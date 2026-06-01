@@ -102,6 +102,25 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
   // S1 từ khoá lớn: cụm NGẮN từ keyMessage đầu (không đổ cả câu vào chữ 150px).
   const keyword = shortKeyword(anim.keyMessages?.[0] || s.hook || "");
 
+  // CTA: tách CÂU HỎI (cta_top) + ACTION (cta_keyword) + TỪ KHOÁ NHẤN (cta_hl, vd 'LAI').
+  const ctaRaw = (s.cta || "").trim();
+  let ctaTop = "";
+  let ctaKeyword = ctaRaw;
+  const qIdx = ctaRaw.indexOf("?");
+  if (qIdx >= 0 && qIdx < ctaRaw.length - 2) {
+    ctaTop = ctaRaw.slice(0, qIdx + 1).trim();
+    ctaKeyword = ctaRaw.slice(qIdx + 1).trim();
+  }
+  const hlMatch = ctaRaw.match(/['"“”']([^'"“”']{1,20})['"“”']/);
+  const ctaHl = hlMatch ? hlMatch[1].trim() : "";
+
+  // Bars GỌN: nhãn ngắn + số + đơn vị 1 token → biểu đồ cột không bị chữ lộn xộn.
+  const dataBars = parsed.slice(0, 4).map((p) => ({
+    label: p.label.slice(0, 24),
+    value: p.value,
+    unit: ((p.unit || "").split(/[\s,;.]/).filter(Boolean)[0] || "").slice(0, 8),
+  }));
+
   return {
     hook_line1: hookLine1,
     hook_line2: hookLine2,
@@ -119,16 +138,17 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     // S3 hồi sinh: tiêu đề nhãn trung tính + point cards từ keyMessages (nội dung thật).
     levels_title: points.length ? "Những điểm cốt lõi" : "",
     levels: JSON.stringify(levels),
-    cta_top: "",
-    cta_keyword: (s.cta || "").trim(),
+    cta_top: ctaTop,
+    cta_keyword: ctaKeyword,
     cta_sub: "",
+    cta_hl: ctaHl,
     accent_color: accentColor || "#e11d2a",
     // Đa dạng theo content + minh hoạ data ở hook (chip số THẬT, rỗng nếu không có số).
     theme: String(themeFromSeed((s.hook || s.cta || "x").trim())),
-    hook_stat: parsed[0] ? `${parsed[0].value}|${(parsed[0].unit || "").slice(0, 16)}` : "",
+    hook_stat: parsed[0] ? `${parsed[0].value}|${(parsed[0].unit || "").split(/[\s,;.]/).filter(Boolean)[0]?.slice(0, 10) || ""}` : "",
     // Biến thể data viz theo content: 0=2 cột so sánh, 1=biểu đồ cột (chỉ khi có ≥2 số thật).
     data_style: hasData ? String(themeFromSeed((s.cta || s.hook || "y").trim()) % 2) : "0",
-    data_bars: JSON.stringify(parsed.slice(0, 4)),
+    data_bars: JSON.stringify(dataBars),
   };
 }
 
