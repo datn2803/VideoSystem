@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
+import { decryptSecret } from "@/lib/integration-hub/vault";
 import { hub } from "@/lib/integration-hub/hub";
 import { footageStore } from "@/lib/footage/storage";
 import { audioStore } from "@/lib/audio/storage";
@@ -62,14 +63,17 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
   return `${process.env.PUBLIC_APP_URL || ""}${path}`;
 }
 
-// ── Pexels stock footage (free, hotlinkable) ──────────────────────────────────
-const MAX_SHOTS = 5; // cap số shot → số clip Pexels (giới hạn thời gian render)
+// ── B-roll ảnh AI theo topic (GPT Image) ──────────────────────────────────────
+// Hậu tố style cố định cho MỌI shot → bộ ảnh đồng nhất, không lộn xộn, KHÔNG chữ.
+const BROLL_STYLE_SUFFIX =
+  ". Cinematic vertical 9:16 editorial photo, consistent cool color grade, modern, Vietnamese context, soft natural light, shallow depth of field, NO text, NO watermark, no logo.";
 
 /**
- * 1 call LLM: danh sách mô tả cảnh tiếng Việt → mảng từ khoá TIẾNG ANH để search
- * stock footage. Fallback: dùng chính note nếu LLM lỗi/parse fail.
+ * 1 call LLM (Gemini free): topic + mô tả cảnh tiếng Việt → mỗi shot 1 prompt ảnh
+ * TIẾNG ANH cụ thể, hợp chủ đề (cảnh/vật/bối cảnh minh hoạ), KHÔNG chữ trong ảnh.
+ * Fallback: dùng "topic, note" nếu LLM lỗi/parse fail.
  */
-async function shotNotesToQueries(notes: string[]): Promise<string[]> {
+async function shotsToImagePrompts(topic: string, notes: string[]): Promise<string[]> {
   const clean = notes.map((n) => (n || "").trim()).filter(Boolean);
   if (clean.length === 0) return [];
   try {
@@ -77,74 +81,161 @@ async function shotNotesToQueries(notes: string[]): Promise<string[]> {
     const list = clean.map((n, i) => `${i + 1}. ${n}`).join("\n");
     const res = await llm.complete({
       system:
-        "Bạn giúp tìm stock footage. Cho danh sách mô tả cảnh (tiếng Việt), trả JSON mảng từ khoá TIẾNG ANH để tìm video minh hoạ, mỗi phần tử 1-3 từ, cụ thể, hợp video. CHỈ trả JSON mảng string, KHÔNG giải thích.",
-      messages: [{ role: "user", content: `${list}\n\nTrả về JSON mảng ${clean.length} từ khoá tiếng Anh, đúng thứ tự.` }],
-      maxTokens: 400,
+        "Bạn viết prompt ảnh cho stock/AI image. Cho CHỦ ĐỀ và danh sách mô tả cảnh (tiếng Việt), trả JSON mảng prompt TIẾNG ANH — mỗi prompt mô tả 1 cảnh/vật/bối cảnh CỤ THỂ minh hoạ ý đó, hợp chủ đề, KHÔNG có chữ/text trong ảnh. CHỈ trả JSON mảng string, KHÔNG giải thích.",
+      messages: [
+        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nCÁC CẢNH:\n${list}\n\nTrả JSON mảng ${clean.length} prompt tiếng Anh, đúng thứ tự.` },
+      ],
+      maxTokens: 600,
       responseFormat: "json",
     });
     const txt = res.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
     const arr = JSON.parse(txt.match(/\[[\s\S]*\]/)?.[0] ?? txt) as unknown[];
-    const queries = clean.map((note, i) => {
-      const kw = arr[i];
-      return typeof kw === "string" && kw.trim() ? kw.trim() : note;
+    return clean.map((note, i) => {
+      const p = arr[i];
+      return typeof p === "string" && p.trim() ? p.trim() : `${topic}, ${note}`;
     });
-    return queries;
   } catch {
-    return clean; // fallback: note làm query
+    return clean.map((note) => `${topic}, ${note}`); // fallback
   }
 }
 
 /**
- * Tìm 1 ẢNH Pexels DỌC (portrait) cho 1 từ khoá. Trả URL ảnh (large2x/large).
- * null nếu không có key / không ra ảnh (→ bỏ shot, không bịa).
+ * Sinh ảnh AI cho từng shot qua hub.image() (GPT Image). Trả [{ url, durationSec }].
  *
- * Dùng ẢNH thay VIDEO: video Pexels là file lớn ở CDN ngoài → headless Chrome
- * buffer/seek từng frame → timeout/OOM trên VPS nhỏ. Ảnh tải tức thì, render ổn
- * định; Ken Burns ở template cho chuyển động.
+ * Cost-guard: chỉ sinh khi RENDER_LIVE="1" VÀ có image provider → nếu không, trả []
+ * (template dùng gradient, KHÔNG throw). Cache theo hash(scriptId+idx+prompt+model)
+ * để re-render không đốt tiền. withRetry(1). Cap MAX_IMAGES. Upload bucket
+ * broll-images (public) → URL công khai cho service tải từ xa.
  */
-async function pexelsPortraitPhoto(query: string, apiKey: string): Promise<string | null> {
-  try {
-    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=3&size=large`;
-    const res = await fetch(url, { headers: { authorization: apiKey } });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      photos?: { src?: { large2x?: string; large?: string; original?: string } }[];
-    };
-    for (const photo of data.photos || []) {
-      const src = photo.src?.large2x || photo.src?.large || photo.src?.original;
-      if (src) return src;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * shotList → ảnh Pexels [{ url, durationSec }]. Phân bổ durationSec theo shot
- * (hoặc chia đều totalDur). Bỏ shot không tìm được ảnh (không chèn ảnh lạc đề).
- * Thiếu PEXELS_API_KEY → trả [] (template tự dùng gradient).
- */
-async function fetchPexelsClips(
+async function generateBrollImages(
+  scriptId: string,
+  topic: string,
   shotList: { note: string; durationSec: number }[],
   totalDur: number
 ): Promise<{ url: string; durationSec: number }[]> {
-  const apiKey = process.env.PEXELS_API_KEY;
-  if (!apiKey) return []; // không có key → fallback gradient (KHÔNG throw)
-  const shots = shotList.slice(0, MAX_SHOTS);
+  const imageProvider = await pickImageProvider();
+  const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
+  if (!useAI) return []; // không bật RENDER_LIVE / thiếu provider → gradient fallback
+
+  const imgAdapter = await hub.image();
+  if (!imgAdapter) return [];
+  const model = (imageProvider!.config?.modelId as string) || "";
+  const shots = shotList.slice(0, MAX_IMAGES).filter((s) => (s.note || "").trim());
   if (shots.length === 0) return [];
 
-  const queries = await shotNotesToQueries(shots.map((s) => s.note));
-  const found = await Promise.all(queries.map((q) => pexelsPortraitPhoto(q, apiKey)));
+  const prompts = await shotsToImagePrompts(topic, shots.map((s) => s.note));
+  const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
+  let cacheDirty = false;
+  const out: { url: string; durationSec: number }[] = [];
+  const even = totalDur / shots.length;
 
-  // Giữ shot tìm được ảnh; phân bổ lại thời lượng đều trên các ảnh hợp lệ.
-  const valid = shots.map((s, i) => ({ shot: s, url: found[i] })).filter((x) => x.url);
-  if (valid.length === 0) return [];
-  const even = totalDur / valid.length;
-  return valid.map((x) => ({
-    url: x.url as string,
-    durationSec: Math.round((x.shot.durationSec && x.shot.durationSec > 0 ? x.shot.durationSec : even) * 100) / 100,
-  }));
+  for (let i = 0; i < shots.length; i++) {
+    const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
+    const h = hashImage(scriptId, i, prompt, model);
+    let url = cache[h];
+    if (!url) {
+      try {
+        const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
+        const stored = await blobUpload({
+          bucket: "broll-images",
+          filename: `${scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
+          buffer: Buffer.from(img.imageBase64, "base64"),
+          contentType: img.mimeType,
+        });
+        url = stored;
+        cache[h] = url;
+        cacheDirty = true;
+      } catch {
+        continue; // 1 ảnh lỗi → bỏ shot đó, không fail cả video
+      }
+    }
+    const abs = toAbsoluteUrl(url);
+    if (abs) {
+      const d = shots[i].durationSec && shots[i].durationSec > 0 ? shots[i].durationSec : even;
+      out.push({ url: abs, durationSec: Math.round(d * 100) / 100 });
+    }
+  }
+  if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
+  return out;
+}
+
+// ── Caption karaoke đồng bộ audio (OpenAI Whisper word-level) ─────────────────
+type Word = { text: string; start: number; end: number };
+type CaptionGroup = { start: number; end: number; words: Word[] };
+
+/**
+ * Lấy OpenAI API key từ image provider (openai-image) — tái dùng key đã cấu hình
+ * cho GPT Image để gọi Whisper, không cần env riêng. null nếu provider khác/thiếu.
+ */
+async function getOpenAIKey(): Promise<string | null> {
+  const p = await pickImageProvider();
+  if (!p || p.name !== "openai-image") return null;
+  const enc = await store.getCredential(p.id);
+  if (!enc) return null;
+  try {
+    return decryptSecret(enc);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Transcribe voice-over qua OpenAI Whisper API (word-level timestamps). Trả mảng
+ * Word sạch (bỏ token nhạc/rỗng). null nếu lỗi/thiếu key → caller fallback chia đều.
+ * Chạy trong app (có sẵn audio bytes + key) → VPS không cần Whisper/Python nặng.
+ */
+async function transcribeWords(audioUrl: string, openaiKey: string): Promise<Word[] | null> {
+  try {
+    const audioRes = await fetch(audioUrl);
+    if (!audioRes.ok) return null;
+    const buf = Buffer.from(await audioRes.arrayBuffer());
+    const form = new FormData();
+    form.append("file", new Blob([buf], { type: "audio/mpeg" }), "voice.mp3");
+    form.append("model", "whisper-1");
+    form.append("response_format", "verbose_json");
+    form.append("timestamp_granularities[]", "word");
+    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${openaiKey}` },
+      body: form,
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { words?: { word: string; start: number; end: number }[] };
+    if (!Array.isArray(data.words) || data.words.length === 0) return null;
+    // Clean: bỏ token nhạc/rỗng (theo transcript-guide.md).
+    const words: Word[] = data.words
+      .map((w) => ({ text: String(w.word || "").trim(), start: Number(w.start) || 0, end: Number(w.end) || 0 }))
+      .filter((w) => w.text && !/^[♪�♪-♯]+$/.test(w.text));
+    return words.length ? words : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Gom word → nhóm caption karaoke 3-5 từ/nhóm (conversational, theo captions.md).
+ * Ngắt khi: hết câu (dấu .!?…), khoảng lặng >0.4s, hoặc đủ 5 từ. Mỗi nhóm có
+ * start/end và word timing để template highlight từ đang đọc.
+ */
+function groupWords(words: Word[]): CaptionGroup[] {
+  const groups: CaptionGroup[] = [];
+  let cur: Word[] = [];
+  const flush = () => {
+    if (cur.length) {
+      groups.push({ start: cur[0].start, end: cur[cur.length - 1].end, words: cur });
+      cur = [];
+    }
+  };
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    cur.push(w);
+    const endsSentence = /[.!?…]$/.test(w.text);
+    const next = words[i + 1];
+    const gap = next ? next.start - w.end : 0;
+    if (cur.length >= 5 || endsSentence || gap > 0.4) flush();
+  }
+  flush();
+  return groups;
 }
 
 type CaptionLine = { text: string; start: number; dur: number; keyword?: string };
@@ -213,7 +304,7 @@ export async function buildBroll(input: {
   if (mode === "hyperframes") {
     try {
       const renderer = await hub.render();
-      // Độ dài: ưu tiên độ dài voice-over thật để footage phủ hết lời nói.
+      // Độ dài: ưu tiên độ dài voice-over thật để ảnh phủ hết lời nói.
       const duration =
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
@@ -221,23 +312,32 @@ export async function buildBroll(input: {
       // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
       const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
 
-      // B-roll THẬT: ẢNH stock Pexels khớp từng shot (free, hotlink được).
-      // shotList note (VN) → từ khoá EN (1 call LLM) → Pexels ảnh dọc → Ken Burns.
-      // Dùng ẢNH thay VIDEO: video Pexels file lớn ở CDN ngoài → Chrome buffer/seek
-      // từng frame → timeout/OOM trên VPS nhỏ. Ảnh tải tức thì, render ổn định.
-      // Thiếu PEXELS_API_KEY hoặc không ra ảnh → bgUrls rỗng → template dùng gradient.
-      const clips = await fetchPexelsClips(shotList, duration);
-      const bgUrls = clips.map((c) => c.url);
-      const shotDurations = clips.map((c) => c.durationSec);
-      const bgType: "image" | "video" = "image"; // ảnh + Ken Burns
+      // B-roll CHUYÊN NGHIỆP: ẢNH AI sinh theo topic (GPT Image), style đồng nhất,
+      // 9:16, KHÔNG chữ. Cost-guard RENDER_LIVE + cache + retry trong helper.
+      // Không bật / thiếu provider → bgUrls rỗng → template dùng gradient (KHÔNG throw).
+      const topic = script.topic || script.script.hook || "";
+      const imgs = await generateBrollImages(input.scriptId, topic, shotList, duration);
+      const bgUrls = imgs.map((c) => c.url);
+      const shotDurations = imgs.map((c) => c.durationSec);
 
+      // Caption karaoke ĐỒNG BỘ audio: Whisper word-level (OpenAI) → nhóm 3-5 từ.
+      // Tái dùng key OpenAI của image provider. Lỗi/thiếu → fallback caption chia đều.
       const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      let captionGroups: CaptionGroup[] = [];
+      const openaiKey = await getOpenAIKey();
+      if (voiceUrl && openaiKey) {
+        const words = await transcribeWords(voiceUrl, openaiKey);
+        if (words) captionGroups = groupWords(words);
+      }
+
       const variables: Record<string, unknown> = {
         duration,
-        bg_type: bgType,
+        bg_type: "image", // ảnh AI + Ken Burns
         bg_urls: JSON.stringify(bgUrls),
         shot_durations: JSON.stringify(shotDurations),
         voice_url: voiceUrl,
+        // caption_groups: karaoke sync (ưu tiên); caption_lines: fallback chia đều.
+        caption_groups: JSON.stringify(captionGroups),
         caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
         accent_color: "#e11d2a",
       };
@@ -247,7 +347,7 @@ export async function buildBroll(input: {
         status: "rendering",
         progress: 10,
         providerJobId: job.jobId,
-        providerName: bgUrls.length ? "hyperframes+pexels" : "hyperframes",
+        providerName: bgUrls.length ? "hyperframes+gpt-image" : "hyperframes",
         costUsd: 0,
       }))!;
     } catch (e) {
