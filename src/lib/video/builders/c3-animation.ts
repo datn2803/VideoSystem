@@ -74,6 +74,14 @@ function shortKeyword(raw: string): string {
   return words.slice(0, 4).join(" ");
 }
 
+/** Chọn THEME (0-4) ổn định theo nội dung → mỗi content 1 bộ màu/nền khác nhau
+ * (hết tình trạng "đổi content vẫn y 1 concept"). Cùng script → cùng theme (re-render ổn định). */
+function themeFromSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return h % 5; // 5 theme trong animation.html
+}
+
 function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
   const anim = s.variantPrompts.animation;
   const [hookLine1, hookLine2] = splitTwoLines(s.hook || "");
@@ -115,6 +123,9 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     cta_keyword: (s.cta || "").trim(),
     cta_sub: "",
     accent_color: accentColor || "#e11d2a",
+    // Đa dạng theo content + minh hoạ data ở hook (chip số THẬT, rỗng nếu không có số).
+    theme: String(themeFromSeed((s.hook || s.cta || "x").trim())),
+    hook_stat: parsed[0] ? `${parsed[0].value}|${(parsed[0].unit || "").slice(0, 16)}` : "",
   };
 }
 
