@@ -461,6 +461,19 @@ export async function buildBroll(input: {
 export async function pollBrollJob(draftId: string): Promise<VideoDraftRecord | undefined> {
   const draft = await videoStore.get(draftId);
   if (!draft || draft.status === "done" || draft.status === "failed") return draft;
+  // Cứu draft KẸT: "queued" mà chưa có providerJobId nghĩa là request dựng render
+  // (sinh ảnh/dispatch) đã bị kill (Vercel 60s). Quá 90s → đánh "failed" để UI cho
+  // bấm "Thử lại", thay vì quay vô hạn. (Draft mới <90s vẫn để action chạy nốt.)
+  if (draft.status === "queued" && !draft.providerJobId) {
+    const ageMs = Date.now() - new Date(draft.updatedAt).getTime();
+    if (ageMs > 90_000) {
+      return await videoStore.update(draftId, {
+        status: "failed",
+        error: "Khởi tạo render quá lâu rồi bị ngắt (timeout). Bấm Thử lại.",
+      });
+    }
+    return draft;
+  }
   if ((draft.mode !== "creatomate" && draft.mode !== "hyperframes") || !draft.providerJobId) return draft;
 
   try {

@@ -118,7 +118,12 @@ async function buildImage(p: ProviderConfig): Promise<ImageProvider> {
   if (!apiKey) return makeStubImage();
   if (p.name === "gemini-image") return makeGeminiImageAdapter({ apiKey, modelId: p.config?.modelId as string });
   if (p.name === "openai-image")
-    return makeOpenAIImageAdapter({ apiKey, modelId: p.config?.modelId as string, size: p.config?.size as string });
+    return makeOpenAIImageAdapter({
+      apiKey,
+      modelId: p.config?.modelId as string,
+      size: p.config?.size as string,
+      quality: p.config?.quality as string, // mặc định "low" trong adapter (nhanh, hợp ảnh nền)
+    });
   return makeStubImage();
 }
 

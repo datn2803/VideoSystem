@@ -6,15 +6,22 @@ function estimateCost(model: string, size: string): number {
   return size === "1024x1024" ? 0.04 : 0.08; // dọc 1024x1536 đắt hơn chút
 }
 
-export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string; size?: string }): ImageProvider {
+export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string; size?: string; quality?: string }): ImageProvider {
   const model = opts.modelId || "gpt-image-1";
   const size = opts.size || "1024x1536";
+  // QUAN TRỌNG (latency): gpt-image quality "high"/"auto" có thể >60s/ảnh → vượt
+  // Vercel maxDuration 60s → render kẹt "queued". "low" ~5-15s/ảnh, đủ đẹp cho
+  // ảnh NỀN B-roll (có Ken Burns + caption đè lên). Đổi "medium" nếu cần nét hơn.
+  const quality = opts.quality || "low";
   return {
     async generate({ prompt }): Promise<ImageResult> {
+      const body: Record<string, unknown> = { model, prompt, n: 1, size };
+      // chỉ gpt-image hỗ trợ low/medium/high; dall-e dùng standard/hd → bỏ qua.
+      if (model.includes("gpt-image")) body.quality = quality;
       const res = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { authorization: `Bearer ${opts.apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ model, prompt, n: 1, size }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`OpenAI Image error ${res.status}: ${await res.text()}`);
       const data = (await res.json()) as { data?: { b64_json?: string }[] };
