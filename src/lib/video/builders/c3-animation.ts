@@ -126,6 +126,9 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     // Đa dạng theo content + minh hoạ data ở hook (chip số THẬT, rỗng nếu không có số).
     theme: String(themeFromSeed((s.hook || s.cta || "x").trim())),
     hook_stat: parsed[0] ? `${parsed[0].value}|${(parsed[0].unit || "").slice(0, 16)}` : "",
+    // Biến thể data viz theo content: 0=2 cột so sánh, 1=biểu đồ cột (chỉ khi có ≥2 số thật).
+    data_style: hasData ? String(themeFromSeed((s.cta || s.hook || "y").trim()) % 2) : "0",
+    data_bars: JSON.stringify(parsed.slice(0, 4)),
   };
 }
 

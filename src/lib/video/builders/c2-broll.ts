@@ -72,12 +72,22 @@ const BROLL_STYLE_SUFFIX =
 // cảnh nào cũng "người ngồi laptop") + minh hoạ ĐÚNG ý đoạn lời thoại (vật/màn hình/
 // bàn tay/khái niệm), theo quy tắc 3 góc (toàn–trung–cận).
 const SCENE_DIRECTIVES = [
-  "EXTREME CLOSE-UP of hands clicking / tapping / typing on a glowing laptop or smartphone screen (action of the line)",
   "the KEY OBJECT or RESULT as hero subject — a device screen showing an app interface / social feed / rising view-count graph / dashboard, or the relevant object — little or no person, glowing abstract UI with NO readable text",
+  "WIDE cinematic establishing shot of a symbolic location/environment for this line (no people necessary)",
+  "EXTREME CLOSE-UP of hands clicking / tapping / typing on a glowing laptop or smartphone screen (the action of the line)",
   "MEDIUM shot of a person whose facial expression conveys this line's emotion",
-  "WIDE establishing shot of the setting/context that frames this line",
-  "MACRO close-up of a single relevant detail or screen element symbolising the idea",
+  "OVER-THE-SHOULDER shot of someone looking at a glowing phone/laptop screen showing relevant content",
+  "MACRO close-up of a single relevant detail or object symbolising the idea",
+  "DYNAMIC angle (top-down or low-angle) of the relevant objects/setting arranged cinematically",
 ];
+
+// Hash chuỗi → số → xoay điểm bắt đầu directive THEO content: mỗi content mở đầu
+// bằng LOẠI cảnh khác nhau (hết tình trạng video nào cũng mở bằng "bàn tay click").
+function seedNum(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
 
 /** Chia voiceOver thành `n` đoạn ~đều (ưu tiên theo câu, không đủ thì theo từ).
  * Mỗi đoạn dùng làm NGỮ CẢNH cho 1 ảnh → ảnh minh hoạ đúng câu đang nói. */
@@ -103,15 +113,18 @@ function splitIntoSegments(text: string, n: number): string[] {
 async function planShotPrompts(topic: string, voiceOver: string, hints: string[], count: number): Promise<string[]> {
   const cleanHints = hints.map((h) => (h || "").trim()).filter(Boolean);
   const segments = splitIntoSegments(voiceOver, count);
+  // Xoay điểm bắt đầu directive theo content → mỗi content mở đầu bằng loại cảnh khác.
+  const off = seedNum(topic || voiceOver || "x") % SCENE_DIRECTIVES.length;
+  const dirAt = (i: number) => SCENE_DIRECTIVES[(i + off) % SCENE_DIRECTIVES.length];
   const fallback = () =>
     Array.from({ length: count }, (_, i) => {
       const ctx = (segments[i] || cleanHints[i] || topic).trim();
-      return `${SCENE_DIRECTIVES[i % SCENE_DIRECTIVES.length]}, depicting: ${ctx} (topic: ${topic})`;
+      return `${dirAt(i)}, depicting: ${ctx} (topic: ${topic})`;
     });
   try {
     const llm = await hub.llm();
     const segBlock = segments
-      .map((s, i) => `${i + 1}. [CHỈ DẪN: ${SCENE_DIRECTIVES[i % SCENE_DIRECTIVES.length]}] Lời: ${s || topic}`)
+      .map((s, i) => `${i + 1}. [CHỈ DẪN: ${dirAt(i)}] Lời: ${s || topic}`)
       .join("\n");
     const res = await llm.complete({
       system:
