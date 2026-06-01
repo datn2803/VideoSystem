@@ -4,6 +4,7 @@ import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore, type VideoDraftRecord } from "../storage";
+import { withRetry, generatePlaceholderMp4 } from "./_shared";
 
 /** Chế độ render avatar thật. "mock" = không gọi API trả phí. */
 type TalkingMode = "heygen" | "d-id" | "mock";
@@ -36,28 +37,6 @@ function hashRender(scriptId: string, voiceId: string | undefined, avatarImageUr
   return crypto.createHash("sha256").update(`${scriptId}::${voiceId || ""}::${avatarImageUrl}`).digest("hex");
 }
 
-/** Gọi fn, retry tối đa `retries` lần (mặc định 1) cho provider trả phí. */
-async function withRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
-}
-
-const MOCK_MP4_HEADER = Buffer.from([
-  0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0,
-  0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32, 0x61, 0x76, 0x63, 0x31, 0x6d, 0x70, 0x34, 0x31,
-]);
-
-function generatePlaceholderMp4(seconds: number): Buffer {
-  const payload = Buffer.alloc(Math.round(50 * 1024 * Math.max(1, seconds)), 0xab);
-  return Buffer.concat([MOCK_MP4_HEADER, payload]);
-}
 
 export async function buildTalkingHead(input: {
   scriptId: string;
@@ -156,7 +135,7 @@ export async function buildTalkingHead(input: {
     progress: 0,
   });
   const seconds = script.script.estimatedDurationSec || 30;
-  const buf = generatePlaceholderMp4(seconds);
+  const buf = generatePlaceholderMp4(seconds, 50, 0xab);
   const storagePath = await videoStore.saveOutputFile(draft.id, buf);
   return (await videoStore.update(draft.id, {
     status: "done",

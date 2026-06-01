@@ -8,11 +8,7 @@ import { scriptStore } from "@/lib/scripts/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { videoStore, type VideoDraftRecord } from "../storage";
-
-async function pickRenderProvider() {
-  const providers = (await store.listProviders()).filter((p) => p.kind === "render" && p.enabled);
-  return providers.find((p) => p.isDefault) || providers[0];
-}
+import { withRetry, pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 
 async function pickImageProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
@@ -28,38 +24,10 @@ function hashImage(scriptId: string, idx: number, prompt: string, model: string)
   return crypto.createHash("sha256").update(`${scriptId}::${idx}::${prompt}::${model}`).digest("hex");
 }
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
-}
-
 function extFromMime(mime: string): string {
   if (mime.includes("png")) return ".png";
   if (mime.includes("webp")) return ".webp";
   return ".jpg";
-}
-
-const MOCK_MP4_HEADER = Buffer.from([
-  0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0,
-  0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32, 0x61, 0x76, 0x63, 0x31, 0x6d, 0x70, 0x34, 0x31,
-]);
-
-function generatePlaceholderMp4(seconds: number, kindByte = 0xcd): Buffer {
-  const payload = Buffer.alloc(Math.round(60 * 1024 * Math.max(1, seconds)), kindByte);
-  return Buffer.concat([MOCK_MP4_HEADER, payload]);
-}
-
-function toAbsoluteUrl(path: string | undefined): string | undefined {
-  if (!path) return undefined;
-  if (path.startsWith("http")) return path;
-  return `${process.env.PUBLIC_APP_URL || ""}${path}`;
 }
 
 // ── B-roll ảnh AI theo topic (GPT Image) ──────────────────────────────────────
@@ -528,7 +496,7 @@ export async function buildBroll(input: {
   }
 
   const seconds = script.script.estimatedDurationSec || 30;
-  const buf = generatePlaceholderMp4(seconds, 0xcd);
+  const buf = generatePlaceholderMp4(seconds, 60, 0xcd);
   const storagePath = await videoStore.saveOutputFile(draft.id, buf);
   return (await videoStore.update(draft.id, {
     status: "done",
