@@ -1,0 +1,389 @@
+<!doctype html>
+<html
+  lang="vi"
+  data-composition-variables='[
+    {"id":"duration","type":"number","label":"Tổng thời lượng (giây) — khớp voice-over","default":12},
+    {"id":"bg_type","type":"enum","label":"Loại nền","default":"image","options":[{"value":"image","label":"Ảnh"},{"value":"video","label":"Video"}]},
+    {"id":"bg_urls","type":"string","label":"Danh sách URL nền (JSON mảng string)","default":"[]"},
+    {"id":"shot_durations","type":"string","label":"Thời lượng từng clip (JSON mảng số)","default":"[]"},
+    {"id":"voice_url","type":"string","label":"URL voice-over (mp3/wav)","default":""},
+    {"id":"caption_groups","type":"string","label":"Caption karaoke (JSON [{start,end,words:[{text,start,end}]}])","default":"[]"},
+    {"id":"caption_lines","type":"string","label":"Caption fallback (JSON mảng [{text,keyword,start,dur}])","default":"[{\"text\":\"Đây là caption mẫu tiếng Việt\",\"keyword\":\"caption mẫu\",\"start\":0.3,\"dur\":3}]"},
+    {"id":"accent_color","type":"color","label":"Màu nhấn (highlight từ khoá)","default":"#e11d2a"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link rel="stylesheet" href="../assets/fonts/be-vietnam-pro.css" />
+    <script src="../vendor/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #000;
+        font-family: "Be Vietnam Pro", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+      :root { --red: #e11d2a; }
+
+      #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
+
+      /* Background gradient fallback (always present, behind footage) so an empty
+         or still-loading footage layer never reads as pure black. */
+      #bgbase {
+        position: absolute; inset: 0;
+        background: radial-gradient(120% 90% at 80% 110%, rgba(160,20,35,0.42), rgba(0,0,0,0) 45%),
+                    linear-gradient(160deg, #16161a, #050506);
+      }
+
+      #bglayer { position: absolute; inset: 0; z-index: 1; }
+      .bg {
+        position: absolute; inset: 0;
+        width: 1080px; height: 1920px;
+        object-fit: cover;
+        /* Cinematic color grade — ảnh GPT phẳng → punchy, có chiều sâu. */
+        filter: contrast(1.08) saturate(1.12) brightness(0.98);
+        will-change: transform, opacity;
+      }
+      /* Footage stills start hidden; GSAP crossfades each in on its data-start. */
+      #bglayer img.bg { opacity: 0; }
+
+      /* ── Cinematic overlay stack (decorative, always-on, no data-* = CSS-owned) ── */
+      /* Color-grade tint: tối góc + ám accent rượu-vang nhẹ → tông MagentX. */
+      #grade {
+        position: absolute; inset: 0; pointer-events: none; z-index: 2;
+        background:
+          radial-gradient(130% 100% at 78% 112%, rgba(160,20,35,0.30), rgba(0,0,0,0) 48%),
+          linear-gradient(180deg, rgba(8,8,12,0.34) 0%, rgba(8,8,12,0.0) 30%, rgba(5,5,8,0.48) 100%);
+        /* (bỏ mix-blend-mode: rất nặng khi render software trên VPS → dùng overlay thường) */
+      }
+      /* Vignette: hút mắt vào trung tâm, rìa tối điện ảnh. */
+      #vignette {
+        position: absolute; inset: 0; pointer-events: none; z-index: 3;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);
+      }
+      /* (Đã BỎ #grain feTurbulence — SVG turbulence filter ngốn CPU cực mạnh khi
+         render software trên VPS → gây render chậm/timeout. Grade + vignette đủ chất phim.) */
+
+      .scrim {
+        position: absolute; inset: 0; pointer-events: none; z-index: 5;
+        background:
+          linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 22%),
+          linear-gradient(0deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0) 38%);
+      }
+
+      /* Lower-middle, ~78% height (portrait caption zone per captions.md). */
+      #captions {
+        position: absolute;
+        left: 70px; right: 70px; bottom: 360px;
+        z-index: 10; /* caption đè LÊN footage + scrim */
+        pointer-events: none;
+      }
+      .caption {
+        /* FIX layout: mỗi caption position:absolute (stack chồng, KHÔNG đẩy nhau)
+           + canh giữa bằng margin auto (KHÔNG transform — để GSAP tự animate y/scale).
+           width:max-content → chữ chạy NGANG 1 dòng, chỉ wrap khi vượt max-width
+           (trước đây flex co cụm về 1 từ/dòng + lệch trái → đã sửa). */
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        margin-left: auto; margin-right: auto;
+        width: max-content;
+        max-width: 100%;
+        text-align: center;
+        color: #fff;
+        font-weight: 800;
+        font-size: 60px;
+        line-height: 1.18;
+        letter-spacing: -0.3px;
+        /* Pill scrim: nền ĐẶC (không phụ thuộc backdrop-filter blur — Chromium
+           headless của HyperFrames có thể không render blur). Chữ luôn đọc rõ. */
+        background: rgba(0, 0, 0, 0.5);
+        padding: 20px 38px;
+        border-radius: 28px;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+        text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
+        will-change: transform, opacity;
+      }
+      /* Karaoke: each word a span; the active word pops to accent + slight scale. */
+      .caption .w {
+        display: inline-block;
+        color: rgba(255, 255, 255, 0.94);
+        margin: 0 0.1em;
+        transform-origin: center bottom;
+        will-change: transform, color;
+      }
+      .caption .w.on {
+        color: var(--red);
+        transform: scale(1.06);
+        text-shadow: 0 0 28px rgba(225, 29, 42, 0.5), 0 2px 14px rgba(0, 0, 0, 0.7);
+      }
+      /* Legacy keyword highlight (caption_lines fallback path). */
+      .caption .hl {
+        color: var(--red);
+        text-shadow: 0 0 50px rgba(225,29,42,0.5), 0 6px 30px rgba(0,0,0,0.7);
+      }
+
+      /* ── PHASE 3b — title-card (hook) + stat insert ── */
+      #titlecard, #statcard {
+        position: absolute; left: 60px; right: 60px;
+        z-index: 11; pointer-events: none; text-align: center;
+        will-change: transform, opacity;
+      }
+      #titlecard { top: 30%; }
+      .titleword {
+        display: inline-block; margin: 0 0.12em 0.1em;
+        font-weight: 900; font-size: 88px; line-height: 1.06;
+        letter-spacing: -1px; color: #fff;
+        text-shadow: 0 6px 34px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.7);
+      }
+      .titleword.accent { color: var(--red); }
+      #statcard { top: 24%; }
+      .statval { font-weight: 900; font-size: 138px; line-height: 1; color: var(--red); text-shadow: 0 6px 34px rgba(0,0,0,0.85); }
+      .statunit { font-weight: 800; font-size: 52px; color: #fff; }
+      .statlabel { margin-top: 16px; font-weight: 700; font-size: 44px; color: rgba(255,255,255,0.94); text-shadow: 0 2px 14px rgba(0,0,0,0.85); }
+    </style>
+  </head>
+
+  <body>
+    <div
+      id="root"
+      class="composition"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="12"
+      data-width="1080"
+      data-height="1920"
+    >
+      <!-- Branded gradient fallback (track 0, full duration) — never pure black. -->
+      <div id="bgbase" class="clip" data-start="0" data-duration="12" data-track-index="0"></div>
+
+      <!-- Footage stills injected here by the render service as STATIC <img>
+           elements with baked src= (the renderer's media pass scans compile-time
+           HTML; a script-set .src loads too late). Images (not remote video) load
+           instantly → stable render on a small VPS. Each gets data-bg-index + its
+           own data-start / data-duration / data-track-index. -->
+      <div id="bglayer"></div>
+
+      <!-- Cinematic overlays (decorative, CSS/GSAP-owned — no data-* timing). -->
+      <div id="grade"></div>
+      <div id="vignette"></div>
+
+      <div class="scrim"></div>
+      <div id="captions"></div>
+
+      <!-- Voice-over: STATIC element with STATIC src — the service bakes voice_url
+           into src= (and data-duration) at compile time so audio actually muxes. -->
+      <audio id="vo" class="clip" data-start="0" data-duration="12" data-track-index="9" data-volume="1" src=""></audio>
+    </div>
+
+    <script>
+      // ── Variables (sync, before DOM build + timeline) ──
+      const v = (window.__hyperframes && window.__hyperframes.getVariables)
+        ? window.__hyperframes.getVariables()
+        : {};
+
+      const total = Math.max(1, Number(v.duration) || 12);
+      if (v.accent_color) document.documentElement.style.setProperty("--red", v.accent_color);
+
+      const parseJSON = (s, fallback) => { try { return JSON.parse(s); } catch (e) { return fallback; } };
+
+      // PHASE 3b: hook → title-card đầu clip; stat → insert giữa clip (nếu có số thật).
+      const hookText = String(v.hook || "").trim();
+      const TITLE_END = hookText ? Math.min(3.0, Math.max(2.2, total * 0.18)) : 0;
+      let statObj = parseJSON(v.stat, null);
+      if (!statObj || !statObj.value) statObj = null;
+
+      // Footage <img> elements are injected STATICALLY by the service (with baked
+      // src + timing). Here we only read them to build the crossfade/Ken-Burns
+      // timeline. shot_durations drives the per-image windows the service stamped.
+      const bgHost = document.getElementById("bglayer");
+      const clipEls = Array.from(bgHost.querySelectorAll("img.bg"));
+      const clipInfo = clipEls.map((el) => ({
+        sel: "#" + el.id,
+        start: parseFloat(el.getAttribute("data-start")) || 0,
+        dur: parseFloat(el.getAttribute("data-duration")) || 0,
+      }));
+
+      // ── Captions ──
+      // Prefer caption_groups (karaoke, word-synced from Whisper); else fall back
+      // to caption_lines (evenly-split phrases). One group visible at a time.
+      const capHost = document.getElementById("captions");
+      const capInfo = []; // { sel, start } for entrance pops
+      const wordTweens = []; // { sel, on, off } for per-word karaoke highlight
+
+      let groups = parseJSON(v.caption_groups, []);
+      if (!Array.isArray(groups)) groups = [];
+      // drop malformed groups
+      groups = groups.filter((g) => g && Array.isArray(g.words) && g.words.length);
+      // PHASE 3b: ẩn caption rơi trong khoảng title-card (hook đã hiện dạng title) → không chồng.
+      if (TITLE_END > 0) groups = groups.filter((g) => (Number(g.start) || 0) >= TITLE_END - 0.2);
+
+      if (groups.length) {
+        groups.forEach((g, gi) => {
+          const start = Number(g.start) || 0;
+          const end = Math.max(start + 0.4, Number(g.end) || start + 1.5);
+          const el = document.createElement("div");
+          el.className = "caption clip";
+          el.id = "cap" + gi;
+          el.setAttribute("data-start", String(start));
+          el.setAttribute("data-duration", String(Math.round((end - start) * 1000) / 1000));
+          el.setAttribute("data-track-index", String(5 + (gi % 2)));
+          // each word a span (textContent — Vietnamese + injection safe)
+          g.words.forEach((w, wi) => {
+            const span = document.createElement("span");
+            span.className = "w";
+            span.id = "cap" + gi + "w" + wi;
+            span.textContent = String(w.text || "");
+            el.appendChild(span);
+            const ws = Number(w.start) || start;
+            const we = Number(w.end) || ws + 0.2;
+            wordTweens.push({ sel: "#cap" + gi + "w" + wi, on: ws, off: we });
+          });
+          capHost.appendChild(el);
+          capInfo.push({ sel: "#cap" + gi, start });
+        });
+      } else {
+        // Fallback: caption_lines (evenly-split phrases + optional keyword).
+        let lines = parseJSON(v.caption_lines, []);
+        if (!Array.isArray(lines)) lines = [];
+        lines.forEach((ln, i) => {
+          if (!ln || !ln.text) return;
+          const start = Number(ln.start) || 0;
+          const dur = Math.max(0.4, Number(ln.dur) || 2);
+          const el = document.createElement("div");
+          el.className = "caption clip";
+          el.id = "cap" + i;
+          el.setAttribute("data-start", String(start));
+          el.setAttribute("data-duration", String(dur));
+          el.setAttribute("data-track-index", String(5 + (i % 2)));
+          const text = String(ln.text);
+          const kw = ln.keyword ? String(ln.keyword) : "";
+          const idx = kw ? text.toLowerCase().indexOf(kw.toLowerCase()) : -1;
+          if (kw && idx >= 0) {
+            const before = text.slice(0, idx);
+            const match = text.slice(idx, idx + kw.length);
+            const after = text.slice(idx + kw.length);
+            if (before) el.appendChild(document.createTextNode(before));
+            const hl = document.createElement("span");
+            hl.className = "hl";
+            hl.textContent = match;
+            el.appendChild(hl);
+            if (after) el.appendChild(document.createTextNode(after));
+          } else {
+            el.textContent = text;
+          }
+          capHost.appendChild(el);
+          capInfo.push({ sel: "#cap" + i, start });
+        });
+      }
+
+      // ── GSAP timeline (after DOM build) ──
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      gsap.defaults({ ease: "power3.out" });
+
+      // ── PHASE 3b: TITLE-CARD (hook) reveal đầu clip + STAT insert giữa clip ──
+      const rootEl = document.getElementById("root");
+      if (hookText) {
+        const tc = document.createElement("div");
+        tc.id = "titlecard"; tc.className = "clip";
+        tc.setAttribute("data-start", "0");
+        tc.setAttribute("data-duration", String(Math.round(TITLE_END * 1000) / 1000));
+        tc.setAttribute("data-track-index", "7");
+        const words = hookText.split(/\s+/).filter(Boolean).slice(0, 9);
+        // nhấn từ DÀI nhất làm accent (heuristic gọn).
+        let accentIdx = 0, maxLen = 0;
+        words.forEach((w, i) => { const L = w.replace(/[^\p{L}\p{N}]/gu, "").length; if (L > maxLen) { maxLen = L; accentIdx = i; } });
+        words.forEach((w, wi) => {
+          const s = document.createElement("span");
+          s.className = "titleword" + (wi === accentIdx ? " accent" : "");
+          s.id = "tw" + wi;
+          s.textContent = w; // textContent → an toàn tiếng Việt + injection
+          tc.appendChild(s);
+        });
+        rootEl.appendChild(tc);
+        words.forEach((_, wi) => {
+          tl.fromTo("#tw" + wi, { y: 44, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "back.out(1.5)" }, 0.1 + wi * 0.11);
+        });
+        tl.to("#titlecard", { opacity: 0, duration: 0.4, ease: "power2.in" }, Math.max(0.6, TITLE_END - 0.4));
+      }
+      if (statObj) {
+        const STAT_START = Math.min(Math.max(TITLE_END + 1, total * 0.42), Math.max(1, total - 3.4));
+        const STAT_DUR = Math.min(3, total * 0.2);
+        const sc = document.createElement("div");
+        sc.id = "statcard"; sc.className = "clip";
+        sc.setAttribute("data-start", String(Math.round(STAT_START * 1000) / 1000));
+        sc.setAttribute("data-duration", String(Math.round(STAT_DUR * 1000) / 1000));
+        sc.setAttribute("data-track-index", "8");
+        const row = document.createElement("div");
+        const val = document.createElement("span"); val.className = "statval"; val.textContent = String(statObj.value || "");
+        row.appendChild(val);
+        if (statObj.unit) { const u = document.createElement("span"); u.className = "statunit"; u.textContent = " " + String(statObj.unit); row.appendChild(u); }
+        sc.appendChild(row);
+        if (statObj.label) { const lb = document.createElement("div"); lb.className = "statlabel"; lb.textContent = String(statObj.label); sc.appendChild(lb); }
+        rootEl.appendChild(sc);
+        tl.fromTo("#statcard", { opacity: 0, scale: 0.82, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: "back.out(1.6)" }, STAT_START);
+        tl.to("#statcard", { opacity: 0, duration: 0.4, ease: "power2.in" }, STAT_START + STAT_DUR - 0.4);
+      }
+
+      // Footage: mỗi cảnh 1 KIỂU CHUYỂN CẢNH + camera move khác nhau → nhịp cắt
+      // sinh động như dựng phim (cut nhanh / zoom-punch / slide / crossfade).
+      // AN TOÀN: opacity LUÔN crossfade (cut = fade rất nhanh) nên không bao giờ hở
+      // khung đen; transform dùng tween TUẦN TỰ trên cùng prop (không chồng → không xung đột).
+      clipInfo.forEach((c, i) => {
+        const sel = c.sel;
+        const type = i % 4;
+        // fade vào: cut-feel (0.08s) cho cảm giác cắt, crossfade (0.45s) cho mượt.
+        const fadeIn = type === 0 ? 0.08 : type === 3 ? 0.45 : 0.16;
+        tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: fadeIn, ease: "power2.out" }, c.start);
+
+        if (type === 1) {
+          // ZOOM-PUNCH: phóng to giật vào rồi trôi chậm
+          tl.fromTo(sel, { scale: 1.32, xPercent: 0, yPercent: 0 }, { scale: 1.14, duration: 0.45, ease: "power3.out" }, c.start);
+          tl.to(sel, { scale: 1.2, duration: Math.max(0.1, c.dur - 0.45), ease: "none" }, c.start + 0.45);
+        } else if (type === 2) {
+          // SLIDE/WHIP: trượt ngang vào rồi pan nhẹ ngược lại
+          const dir = i % 2 === 0 ? 1 : -1;
+          tl.fromTo(sel, { scale: 1.14, xPercent: dir * 15, yPercent: 0 }, { xPercent: dir * 3, duration: 0.5, ease: "power3.out" }, c.start);
+          tl.to(sel, { xPercent: -dir * 3, duration: Math.max(0.1, c.dur - 0.5), ease: "none" }, c.start + 0.5);
+        } else if (type === 3) {
+          // CROSSFADE + zoom-out chậm
+          tl.fromTo(sel, { scale: 1.18, xPercent: 0, yPercent: 0 }, { scale: 1.06, duration: c.dur, ease: "none" }, c.start);
+        } else {
+          // CUT + zoom-in chậm
+          tl.fromTo(sel, { scale: 1.05, xPercent: 0, yPercent: 0 }, { scale: 1.16, duration: c.dur, ease: "none" }, c.start);
+        }
+
+        // ra: fade ngắn chồng nhẹ với cảnh sau (giữ luôn có hình → không hở đen).
+        if (i < clipInfo.length - 1) {
+          tl.to(sel, { opacity: 0, duration: 0.18, ease: "power2.in" }, c.start + c.dur - 0.06);
+        }
+      });
+
+
+      // Caption entrance pops.
+      capInfo.forEach((c) => {
+        tl.fromTo(c.sel,
+          { y: 40, opacity: 0, scale: 0.92 },
+          { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)" }, c.start);
+      });
+
+      // Karaoke: toggle each word's `.on` class at its word timestamp. Uses tl.set
+      // (deterministic + seekable — no callbacks/Date.now) so the active word
+      // highlights exactly when spoken, then clears at its end.
+      wordTweens.forEach((w) => {
+        tl.set(w.sel, { className: "w on" }, w.on);
+        tl.set(w.sel, { className: "w" }, w.off);
+      });
+
+      // Pad the timeline to the full duration so playback doesn't end early.
+      tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

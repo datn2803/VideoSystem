@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link rel="stylesheet" href="assets/fonts/be-vietnam-pro.css" />
+    <script src="vendor/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0a0a0c;
+        font-family: "Be Vietnam Pro", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      :root {
+        --red: #e11d2a;
+        --red-soft: #ff3b46;
+        --ink: #14110f;
+        --paper: #e9e3d6;
+      }
+
+      #root { position: relative; width: 1080px; height: 1920px; }
+
+      /* ---- Scene base ---- */
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      /* Cinematic dark background w/ wine-red corner glow + dot grid */
+      .bg-dark {
+        background:
+          radial-gradient(120% 90% at 80% 110%, rgba(160, 20, 35, 0.42) 0%, rgba(120,15,30,0.0) 45%),
+          radial-gradient(120% 80% at 12% -10%, rgba(70,70,80,0.20) 0%, rgba(0,0,0,0) 50%),
+          linear-gradient(160deg, #16161a 0%, #0c0c0f 55%, #050506 100%);
+      }
+      .dotgrid {
+        position: absolute; inset: 0; pointer-events: none;
+        background-image: radial-gradient(rgba(255,255,255,0.05) 1.4px, transparent 1.4px);
+        background-size: 46px 46px;
+        mask-image: radial-gradient(80% 70% at 50% 45%, #000 30%, transparent 80%);
+        -webkit-mask-image: radial-gradient(80% 70% at 50% 45%, #000 30%, transparent 80%);
+      }
+      .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        box-shadow: inset 0 0 320px 80px rgba(0,0,0,0.85);
+      }
+
+      /* ===================== SCENE 1 — kinetic caption ===================== */
+      #s1 { padding: 0 90px; }
+      #s1 .cap { text-align: center; line-height: 1.02; }
+      #s1 .l {
+        display: block;
+        color: #fff;
+        font-weight: 900;
+        letter-spacing: -0.5px;
+        text-transform: uppercase;
+      }
+      #s1 .l1 { font-size: 96px; }
+      #s1 .l2 { font-size: 96px; }
+      #s1 .key {
+        display: block;
+        color: var(--red);
+        font-weight: 900;
+        font-size: 150px;
+        text-transform: uppercase;
+        letter-spacing: -1px;
+        margin: 18px 0 26px;
+        text-shadow: 0 0 60px rgba(225,29,42,0.55);
+      }
+      #s1 .sub {
+        display: block;
+        color: rgba(255,255,255,0.78);
+        font-weight: 600;
+        font-size: 46px;
+        letter-spacing: 0.3px;
+      }
+      .word { display: inline-block; will-change: transform, opacity; }
+
+      /* ===================== SCENE 2 — data viz (paper) ===================== */
+      #s2 { background: var(--paper); }
+      #s2 .paper-tex {
+        position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+        background-image: radial-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);
+        background-size: 7px 7px;
+      }
+      #s2 .ghost {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: 760px; color: rgba(20,17,15,0.05);
+        letter-spacing: -20px; user-select: none; pointer-events: none;
+      }
+      #s2 .eyebrow {
+        position: relative; color: rgba(20,17,15,0.55);
+        font-weight: 600; font-size: 40px; margin-bottom: 90px; text-align: center;
+        padding: 0 80px;
+      }
+      #s2 .cols { position: relative; display: flex; gap: 60px; width: 100%; justify-content: center; }
+      #s2 .col { width: 420px; text-align: center; }
+      #s2 .col.lose { opacity: 0.42; }
+      #s2 .icon { height: 230px; margin-bottom: 28px; }
+      #s2 .icon svg { height: 100%; width: auto; }
+      #s2 .clabel {
+        color: var(--ink); font-weight: 900; font-size: 64px; text-transform: lowercase;
+        letter-spacing: -0.5px;
+      }
+      #s2 .num {
+        color: var(--ink); font-weight: 900; font-size: 132px; line-height: 1; margin-top: 10px;
+      }
+      #s2 .col.win .num { color: var(--red); }
+      #s2 .unit { color: rgba(20,17,15,0.6); font-weight: 600; font-size: 38px; margin-top: 6px; }
+
+      /* ===================== SCENE 3 — level cards ===================== */
+      #s3 { padding: 0 80px; justify-content: flex-start; }
+      #s3 .title {
+        color: #fff; font-weight: 900; font-size: 64px; text-transform: uppercase;
+        text-align: center; letter-spacing: -0.5px; margin-top: 230px; margin-bottom: 70px;
+        line-height: 1.05;
+      }
+      #s3 .title b { color: var(--red); }
+      #s3 .cards { width: 100%; display: flex; flex-direction: column; gap: 30px; }
+      .card {
+        display: flex; align-items: center; gap: 34px;
+        background: linear-gradient(180deg, rgba(40,40,46,0.92), rgba(22,22,26,0.92));
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 30px; padding: 34px 40px;
+        will-change: transform, opacity;
+      }
+      .card .badge {
+        flex: 0 0 96px; width: 96px; height: 96px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: 52px; color: #fff;
+        background: radial-gradient(circle at 35% 30%, #3a3a42, #1b1b20);
+        border: 1px solid rgba(255,255,255,0.12);
+      }
+      .card .meta { text-align: left; }
+      .card .lv { color: rgba(255,255,255,0.55); font-weight: 800; font-size: 30px; letter-spacing: 4px; text-transform: uppercase; }
+      .card .name { color: #fff; font-weight: 900; font-size: 56px; text-transform: uppercase; letter-spacing: -0.5px; line-height: 1; margin-top: 2px; }
+      .card .desc { color: rgba(255,255,255,0.62); font-weight: 500; font-size: 34px; margin-top: 8px; }
+      .card .lock { margin-left: auto; display: flex; align-items: center; opacity: 0.55; }
+      .card .lock svg { width: 46px; height: 46px; }
+      .card.locked { opacity: 0.5; }
+      .card.active {
+        background: linear-gradient(180deg, rgba(60,22,26,0.96), rgba(34,14,16,0.96));
+        border: 1.5px solid var(--red);
+        box-shadow: 0 0 70px rgba(225,29,42,0.35);
+      }
+      .card.active .badge { background: radial-gradient(circle at 35% 30%, #ff4350, #c2101c); border-color: rgba(255,255,255,0.3); }
+      .card.active .lv { color: var(--red-soft); }
+
+      /* ===================== SCENE 4 — closing caption ===================== */
+      #s4 .end { text-align: center; }
+      #s4 .e1 { color: #fff; font-weight: 800; font-size: 92px; text-transform: uppercase; letter-spacing: -0.5px; }
+      #s4 .e2 {
+        color: var(--red); font-weight: 900; font-size: 168px; text-transform: uppercase;
+        letter-spacing: -2px; margin-top: 10px; text-shadow: 0 0 70px rgba(225,29,42,0.55);
+        will-change: transform;
+      }
+      #s4 .e3 { color: rgba(255,255,255,0.7); font-weight: 600; font-size: 44px; margin-top: 40px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+      #s4 .e3 svg { width: 40px; height: 40px; }
+    </style>
+  </head>
+
+  <body>
+    <div
+      id="root"
+      class="composition"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="18.5"
+      data-width="1080"
+      data-height="1920"
+    >
+      <!-- ===================== SCENE 1 ===================== -->
+      <div id="s1" class="scene bg-dark clip" data-start="0" data-duration="5" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="vignette"></div>
+        <div class="cap">
+          <span class="l l1"><span class="word">Hầu</span> <span class="word">hết</span> <span class="word">người</span></span>
+          <span class="l l2"><span class="word">làm</span> <span class="word">content</span></span>
+          <span class="key" id="s1key">Đang vô hình</span>
+          <span class="sub" id="s1sub">— và đây là lý do</span>
+        </div>
+      </div>
+
+      <!-- ===================== SCENE 2 ===================== -->
+      <div id="s2" class="scene clip" data-start="5" data-duration="5.5" data-track-index="1">
+        <div class="paper-tex"></div>
+        <div class="ghost" data-layout-allow-overflow>vô hình</div>
+        <div class="eyebrow" id="s2eb">Sự khác biệt nằm ở số giờ rèn luyện mỗi tháng</div>
+        <div class="cols">
+          <div class="col win">
+            <div class="icon">
+              <svg viewBox="0 0 120 120" fill="none" stroke="#14110f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="46" cy="30" r="16"/>
+                <path d="M22 70c0-13 11-22 24-22s24 9 24 22"/>
+                <rect x="40" y="74" width="64" height="36" rx="4"/>
+                <line x1="34" y1="110" x2="110" y2="110"/>
+                <circle cx="72" cy="92" r="6"/>
+                <path d="M86 34l16-16m0 0h-12m12 0v12"/>
+              </svg>
+            </div>
+            <div class="clabel">bứt phá</div>
+            <div class="num"><span id="numWin">0</span></div>
+            <div class="unit">giờ học / tháng</div>
+          </div>
+          <div class="col lose">
+            <div class="icon">
+              <svg viewBox="0 0 120 120" fill="none" stroke="#14110f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="60" cy="34" r="16"/>
+                <path d="M36 78c0-13 11-24 24-24s24 11 24 24"/>
+                <rect x="30" y="80" width="60" height="30" rx="4"/>
+                <line x1="24" y1="110" x2="96" y2="110"/>
+                <circle cx="60" cy="95" r="5"/>
+              </svg>
+            </div>
+            <div class="clabel">dậm chân</div>
+            <div class="num"><span id="numLose">0</span></div>
+            <div class="unit">giờ học / tháng</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== SCENE 3 ===================== -->
+      <div id="s3" class="scene bg-dark clip" data-start="10.5" data-duration="4.5" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="vignette"></div>
+        <div class="title">4 cấp độ của <b>một creator</b></div>
+        <div class="cards">
+          <div class="card active" data-card>
+            <div class="badge">1</div>
+            <div class="meta">
+              <div class="lv">Level 1</div>
+              <div class="name">Vô hình</div>
+              <div class="desc">Chưa ai biết bạn là ai</div>
+            </div>
+          </div>
+          <div class="card" data-card>
+            <div class="badge">2</div>
+            <div class="meta">
+              <div class="lv">Level 2</div>
+              <div class="name">Có người xem</div>
+              <div class="desc">Bắt đầu có khán giả</div>
+            </div>
+          </div>
+          <div class="card locked" data-card>
+            <div class="badge">3</div>
+            <div class="meta">
+              <div class="lv">Level 3</div>
+              <div class="name">Có thu nhập</div>
+              <div class="desc">Kiếm tiền từ nội dung</div>
+            </div>
+            <div class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          </div>
+          <div class="card locked" data-card>
+            <div class="badge">4</div>
+            <div class="meta">
+              <div class="lv">Level 4</div>
+              <div class="name">Tự động hoá</div>
+              <div class="desc">Hệ thống tự vận hành</div>
+            </div>
+            <div class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== SCENE 4 ===================== -->
+      <div id="s4" class="scene bg-dark clip" data-start="15" data-duration="3.5" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="vignette"></div>
+        <div class="end">
+          <div class="e1" id="s4e1">Bạn đang ở</div>
+          <div class="e2" id="s4e2">Level mấy?</div>
+          <div class="e3" id="s4e3"><span>Trả lời ngay bên dưới nhé</span><svg viewBox="0 0 24 24" fill="none" stroke="#e11d2a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      gsap.defaults({ ease: "power3.out" });
+
+      /* ---------- SCENE 1 (0 - 5s) ---------- */
+      tl.from("#s1 .l1 .word", { yPercent: 120, opacity: 0, duration: 0.5, stagger: 0.08 }, 0.15);
+      tl.from("#s1 .l2 .word", { yPercent: 120, opacity: 0, duration: 0.5, stagger: 0.08 }, 0.55);
+      tl.fromTo("#s1key",
+        { scale: 0.4, opacity: 0, filter: "blur(8px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.8)" }, 1.5);
+      tl.fromTo("#s1sub", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5 }, 2.4);
+      tl.to("#s1key", { scale: 1.04, duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 3.0);
+
+      /* ---------- SCENE 2 (5 - 10.5s) ---------- */
+      tl.from("#s2eb", { y: 24, opacity: 0, duration: 0.5 }, 5.2);
+      tl.from("#s2 .col.win", { y: 50, opacity: 0, duration: 0.6 }, 5.5);
+      tl.from("#s2 .col.lose", { y: 50, opacity: 0, duration: 0.6 }, 5.8);
+      const winC = { v: 0 }, loseC = { v: 0 };
+      tl.to(winC, { v: 65, duration: 1.6, ease: "power1.out",
+        onUpdate: () => { const e = document.getElementById("numWin"); if (e) e.textContent = Math.round(winC.v); } }, 6.1);
+      tl.to(loseC, { v: 20, duration: 1.6, ease: "power1.out",
+        onUpdate: () => { const e = document.getElementById("numLose"); if (e) e.textContent = Math.round(loseC.v); } }, 6.1);
+      tl.fromTo("#s2 .col.win .num", { scale: 1 }, { scale: 1.12, duration: 0.4, yoyo: true, repeat: 1, ease: "sine.inOut" }, 7.9);
+
+      /* ---------- SCENE 3 (10.5 - 15s) ---------- */
+      tl.from("#s3 .title", { y: 30, opacity: 0, duration: 0.5 }, 10.7);
+      tl.from("#s3 .card", { x: -60, opacity: 0, duration: 0.5, stagger: 0.18 }, 11.0);
+      tl.fromTo("#s3 .card.active",
+        { boxShadow: "0 0 0px rgba(225,29,42,0.0)" },
+        { boxShadow: "0 0 90px rgba(225,29,42,0.55)", duration: 0.6, yoyo: true, repeat: 1, ease: "sine.inOut" }, 12.4);
+
+      /* ---------- SCENE 4 (15 - 18.5s) ---------- */
+      tl.from("#s4e1", { y: 30, opacity: 0, duration: 0.5 }, 15.2);
+      tl.fromTo("#s4e2",
+        { scale: 0.5, opacity: 0, filter: "blur(8px)" },
+        { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "back.out(1.8)" }, 15.5);
+      tl.to("#s4e2", { scale: 1.05, duration: 0.6, yoyo: true, repeat: 1, ease: "sine.inOut" }, 16.3);
+      tl.from("#s4e3", { y: 24, opacity: 0, duration: 0.5 }, 16.2);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+# HyperFrames render service — Phase 1 deploy (IP + token, no Traefik/TLS).
+# Port 8080 mapped straight out; does NOT touch the existing traefik-traefik-1 container.
+services:
+  hf-render:
+    build: .
+    image: hf-render:latest
+    container_name: hf-render
+    env_file: .env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    # 2 vCPU box: the service already serializes renders (single-render mutex),
+    # but cap container resources so a render never starves the host / Traefik.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.8"
+          memory: 3g
+    # Chromium headless needs more shared memory than Docker's 64MB default.
+    shm_size: "1gb"
