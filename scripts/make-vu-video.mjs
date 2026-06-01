@@ -11,9 +11,15 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(__dirname, "../out");
 
-const DEEPSEEK = "***REMOVED***";
-const ELEVENLABS = "***REMOVED***";
-const HEYGEN = "***REMOVED***"; // for avatar preview image
+// API keys đọc từ env (KHÔNG hardcode — tránh lộ key khi commit).
+// Chạy: DEEPSEEK_API_KEY=... ELEVENLABS_API_KEY=... HEYGEN_API_KEY=... node scripts/make-vu-video.mjs
+const DEEPSEEK = process.env.DEEPSEEK_API_KEY || "";
+const ELEVENLABS = process.env.ELEVENLABS_API_KEY || "";
+const HEYGEN = process.env.HEYGEN_API_KEY || ""; // for avatar preview image
+if (!DEEPSEEK || !ELEVENLABS) {
+  console.error("Thiếu env: cần DEEPSEEK_API_KEY + ELEVENLABS_API_KEY (HEYGEN_API_KEY tuỳ chọn).");
+  process.exit(1);
+}
 
 // ElevenLabs Vietnamese-friendly voices via multilingual v2 model
 // Eric — smooth, trustworthy male (banker tone)

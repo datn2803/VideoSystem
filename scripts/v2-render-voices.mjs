@@ -8,7 +8,12 @@ import { spawn } from "node:child_process";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUDIO_DIR = path.resolve(__dirname, "../assets/audio");
 
-const ELEVENLABS = "***REMOVED***";
+// API key đọc từ env (KHÔNG hardcode). Chạy: ELEVENLABS_API_KEY=... node scripts/v2-render-voices.mjs
+const ELEVENLABS = process.env.ELEVENLABS_API_KEY || "";
+if (!ELEVENLABS) {
+  console.error("Thiếu env ELEVENLABS_API_KEY.");
+  process.exit(1);
+}
 const VOICE_ID = "cjVigY5qzO86Huf0OWal"; // Eric — smooth, classy male
 const MODEL = "eleven_multilingual_v2";
 
