@@ -66,15 +66,17 @@ function toAbsoluteUrl(path: string | undefined): string | undefined {
 // ── B-roll ảnh AI theo topic (GPT Image) ──────────────────────────────────────
 // Hậu tố style cố định cho MỌI shot → bộ ảnh đồng nhất, không lộn xộn, KHÔNG chữ.
 const BROLL_STYLE_SUFFIX =
-  ". Professional cinematic photograph, vertical 9:16 composition, shot on a cinema camera, dramatic directional lighting, rich detail and texture, photorealistic, consistent moody cool-toned color grade, modern realistic Vietnamese context, shallow depth of field, natural authentic subjects, no text, no captions, no watermark, no logo.";
+  ". Professional cinematic photograph, vertical 9:16 composition, dramatic directional lighting, rich detail and texture, photorealistic, consistent moody cool-toned color grade, modern realistic Vietnamese setting, shallow depth of field, no readable text, no captions, no watermark, no logo, no UI labels.";
 
-// Quy tắc 3 góc (toàn–trung–cận) — luân phiên để cảnh cắt sinh động, không trùng khung.
-const SHOT_SIZES = [
-  "wide establishing shot",
-  "medium shot",
-  "close-up detail shot",
-  "medium shot, different angle",
-  "wide cinematic shot, low angle",
+// Mỗi cảnh 1 CHỈ DẪN máy quay + LOẠI CHỦ THỂ khác nhau → ép ĐA DẠNG (không phải
+// cảnh nào cũng "người ngồi laptop") + minh hoạ ĐÚNG ý đoạn lời thoại (vật/màn hình/
+// bàn tay/khái niệm), theo quy tắc 3 góc (toàn–trung–cận).
+const SCENE_DIRECTIVES = [
+  "EXTREME CLOSE-UP of hands clicking / tapping / typing on a glowing laptop or smartphone screen (action of the line)",
+  "the KEY OBJECT or RESULT as hero subject — a device screen showing an app interface / social feed / rising view-count graph / dashboard, or the relevant object — little or no person, glowing abstract UI with NO readable text",
+  "MEDIUM shot of a person whose facial expression conveys this line's emotion",
+  "WIDE establishing shot of the setting/context that frames this line",
+  "MACRO close-up of a single relevant detail or screen element symbolising the idea",
 ];
 
 /** Chia voiceOver thành `n` đoạn ~đều (ưu tiên theo câu, không đủ thì theo từ).
@@ -104,20 +106,23 @@ async function planShotPrompts(topic: string, voiceOver: string, hints: string[]
   const fallback = () =>
     Array.from({ length: count }, (_, i) => {
       const ctx = (segments[i] || cleanHints[i] || topic).trim();
-      return `${SHOT_SIZES[i % SHOT_SIZES.length]} of ${topic}: ${ctx}`;
+      return `${SCENE_DIRECTIVES[i % SCENE_DIRECTIVES.length]}, depicting: ${ctx} (topic: ${topic})`;
     });
   try {
     const llm = await hub.llm();
     const segBlock = segments
-      .map((s, i) => `${i + 1}. [${SHOT_SIZES[i % SHOT_SIZES.length]}] ${s || topic}`)
+      .map((s, i) => `${i + 1}. [CHỈ DẪN: ${SCENE_DIRECTIVES[i % SCENE_DIRECTIVES.length]}] Lời: ${s || topic}`)
       .join("\n");
     const res = await llm.complete({
       system:
-        "Bạn là ĐẠO DIỄN HÌNH ẢNH + nhiếp ảnh điện ảnh cho video ngắn dọc 9:16. Mỗi CẢNH gồm CỠ CẢNH gợi ý + ĐOẠN lời thoại tương ứng. Trả JSON mảng prompt ảnh TIẾNG ANH, MỖI prompt minh hoạ TRỰC TIẾP nội dung đoạn lời thoại đó bằng 1 cảnh/chủ thể CỤ THỂ (người/vật/bối cảnh thực tế), ĐÚNG cỡ cảnh cho trước (đa dạng góc giữa các cảnh), bối cảnh Việt Nam thật, ánh sáng điện ảnh, cảm xúc khớp nội dung. TUYỆT ĐỐI cụ thể — tránh khái niệm trừu tượng, tránh chữ/biểu tượng/đồ hoạ trong ảnh. Mỗi prompt BẮT ĐẦU bằng cỡ cảnh. CHỈ trả JSON mảng string đúng thứ tự, KHÔNG giải thích.",
+        "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video ngắn dọc 9:16. Mỗi CẢNH gồm 1 CHỈ DẪN máy quay/chủ thể + ĐOẠN lời thoại. Với MỖI cảnh: xác định Ý CHÍNH (đối tượng/hành động/khái niệm) của đoạn lời rồi MINH HOẠ TRỰC TIẾP & CỤ THỂ theo đúng chỉ dẫn đó. " +
+        "BẮT BUỘC ĐA DẠNG CHỦ THỂ — TUYỆT ĐỐI KHÔNG để mọi cảnh đều là 'người ngồi nhìn laptop'. " +
+        "Với khái niệm công nghệ/trừu tượng (AI, viral, một cú click, tự động hoá, dòng tiền, lãi suất...) → dùng hình CỤ THỂ HOÁ ý đó: cận màn hình laptop/điện thoại hiển thị giao diện app phát sáng, ngón tay đang bấm nút phát sáng, biểu đồ lượt xem/đường giá tăng vọt trên màn hình, dòng timeline dựng video, app AI đang tạo nội dung, giao diện hologram trừu tượng... (KHÔNG chữ/nhãn đọc được). " +
+        "CHỈ dùng cảnh CHÂN DUNG người khi câu nói về cảm xúc/con người. Mỗi prompt: TIẾNG ANH, cụ thể, ánh sáng điện ảnh, bối cảnh Việt Nam hiện đại, mỗi cảnh KHÁC chủ thể & góc. CHỈ trả JSON mảng string đúng thứ tự, KHÔNG giải thích.",
       messages: [
-        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nCÁC CẢNH (cỡ cảnh + đoạn lời thoại):\n${segBlock}\n\nTrả JSON mảng ĐÚNG ${count} prompt tiếng Anh, mỗi prompt khớp đoạn lời thoại + cỡ cảnh tương ứng.` },
+        { role: "user", content: `CHỦ ĐỀ: ${topic}\n\nCÁC CẢNH (chỉ dẫn + đoạn lời thoại):\n${segBlock}\n\nTrả JSON mảng ĐÚNG ${count} prompt tiếng Anh — mỗi prompt minh hoạ TRỰC TIẾP ý của đoạn lời theo CHỈ DẪN, đa dạng chủ thể (màn hình/giao diện/bàn tay/vật thể/người), KHÔNG chữ trong ảnh.` },
       ],
-      maxTokens: 1000,
+      maxTokens: 1100,
       responseFormat: "json",
     });
     const txt = res.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
