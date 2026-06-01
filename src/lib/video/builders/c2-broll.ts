@@ -107,21 +107,31 @@ async function shotsToImagePrompts(topic: string, notes: string[]): Promise<stri
  * để re-render không đốt tiền. withRetry(1). Cap MAX_IMAGES. Upload bucket
  * broll-images (public) → URL công khai cho service tải từ xa.
  */
+type BrollImagesResult = {
+  images: { url: string; durationSec: number }[];
+  /** Có ý định sinh ảnh không (RENDER_LIVE=1 + có provider). Phân biệt với chế độ gradient cố ý. */
+  intended: boolean;
+  /** Số ảnh lỗi + message lỗi đầu tiên — để buildBroll báo draft.error rõ ràng. */
+  failed: number;
+  firstError?: string;
+};
+
 async function generateBrollImages(
   scriptId: string,
   topic: string,
   shotList: { note: string; durationSec: number }[],
   totalDur: number
-): Promise<{ url: string; durationSec: number }[]> {
+): Promise<BrollImagesResult> {
   const imageProvider = await pickImageProvider();
   const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
-  if (!useAI) return []; // không bật RENDER_LIVE / thiếu provider → gradient fallback
+  // Không bật RENDER_LIVE / thiếu provider → chế độ gradient CỐ Ý (không phải lỗi).
+  if (!useAI) return { images: [], intended: false, failed: 0 };
 
   const imgAdapter = await hub.image();
-  if (!imgAdapter) return [];
+  if (!imgAdapter) return { images: [], intended: false, failed: 0 };
   const model = (imageProvider!.config?.modelId as string) || "";
   const shots = shotList.slice(0, MAX_IMAGES).filter((s) => (s.note || "").trim());
-  if (shots.length === 0) return [];
+  if (shots.length === 0) return { images: [], intended: true, failed: 0 };
 
   const prompts = await shotsToImagePrompts(topic, shots.map((s) => s.note));
   const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
@@ -130,7 +140,7 @@ async function generateBrollImages(
   // QUAN TRỌNG: sinh ảnh SONG SONG (Promise.all) thay vì tuần tự.
   // 5 ảnh GPT Image tuần tự (~20s/ảnh) > 60s → Vercel function timeout
   // ("An unexpected response..."). Song song → ~tổng ≈ thời gian 1 ảnh.
-  type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number };
+  type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number; error?: string };
   const results = await Promise.all(
     shots.map(async (shot, i): Promise<Shot | null> => {
       const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
@@ -147,12 +157,15 @@ async function generateBrollImages(
             contentType: img.mimeType,
           });
           fresh = url; // ghi cache sau khi xong hết (tránh race trên object dùng chung)
-        } catch {
-          return null; // 1 ảnh lỗi → bỏ shot đó, không fail cả video
+        } catch (e) {
+          // 1 ảnh lỗi → bỏ shot đó (không kéo sập cả video), NHƯNG lộ lý do:
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("[broll-image-fail]", i, msg);
+          return { idx: i, hash: h, url: "", durationSec: 0, error: msg };
         }
       }
       const abs = toAbsoluteUrl(url);
-      if (!abs) return null;
+      if (!abs) return { idx: i, hash: h, url: "", durationSec: 0, error: "URL ảnh rỗng sau upload" };
       const d = shot.durationSec && shot.durationSec > 0 ? shot.durationSec : even;
       return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(d * 100) / 100 };
     })
@@ -168,10 +181,14 @@ async function generateBrollImages(
   }
   if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
 
-  return results
-    .filter((r): r is Shot => r != null)
-    .sort((a, b) => a.idx - b.idx)
-    .map((r) => ({ url: r.url, durationSec: r.durationSec }));
+  const ok = results.filter((r): r is Shot => r != null && !!r.url);
+  const errors = results.filter((r): r is Shot => r != null && !r.url && !!r.error);
+  return {
+    images: ok.sort((a, b) => a.idx - b.idx).map((r) => ({ url: r.url, durationSec: r.durationSec })),
+    intended: true,
+    failed: errors.length,
+    firstError: errors[0]?.error,
+  };
 }
 
 // ── Caption karaoke đồng bộ audio (OpenAI Whisper word-level) ─────────────────
@@ -336,12 +353,23 @@ export async function buildBroll(input: {
 
       // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
       // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
-      const [imgs, words] = await Promise.all([
+      const [imgResult, words] = await Promise.all([
         generateBrollImages(input.scriptId, topic, shotList, duration),
         voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
       ]);
-      const bgUrls = imgs.map((c) => c.url);
-      const shotDurations = imgs.map((c) => c.durationSec);
+
+      // FAIL-FAST: nếu CÓ ý định sinh ảnh (RENDER_LIVE + provider) nhưng ra 0 ảnh →
+      // đây là LỖI người dùng cần biết, KHÔNG render câm ra video đen im lặng.
+      if (imgResult.intended && imgResult.images.length === 0) {
+        const why = imgResult.firstError || "không sinh được ảnh nào";
+        return (await videoStore.update(draft.id, {
+          status: "failed",
+          error: `Sinh ảnh B-roll thất bại: ${why} (kiểm tra bucket broll-images + quyền gpt-image)`,
+        }))!;
+      }
+
+      const bgUrls = imgResult.images.map((c) => c.url);
+      const shotDurations = imgResult.images.map((c) => c.durationSec);
 
       // Caption karaoke ĐỒNG BỘ audio: Whisper word-level → nhóm 3-5 từ.
       // Lỗi/thiếu key → fallback caption_lines chia đều (bên dưới).

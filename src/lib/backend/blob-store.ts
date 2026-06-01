@@ -15,6 +15,32 @@ import { getSupabaseClient, isSupabaseConfigured } from "./supabase-client";
 
 export type BlobBucket = "uploads" | "audio" | "videos" | "broll-images";
 
+// Buckets đã xác nhận tồn tại trong phiên này → khỏi gọi getBucket lặp lại.
+const ensuredBuckets = new Set<BlobBucket>();
+
+/**
+ * Đảm bảo bucket Supabase tồn tại + public (idempotent, có cache in-memory).
+ * App dùng SERVICE_ROLE_KEY nên đủ quyền createBucket. Lỗi quyền (anon key) →
+ * throw message rõ để người dùng tạo bucket thủ công. No-op khi chạy local.
+ */
+export async function ensureBucket(bucket: BlobBucket): Promise<void> {
+  if (!isSupabaseConfigured() || ensuredBuckets.has(bucket)) return;
+  const client = getSupabaseClient()!;
+  const { data, error: getErr } = await client.storage.getBucket(bucket);
+  if (data && !getErr) {
+    ensuredBuckets.add(bucket);
+    return;
+  }
+  const { error: createErr } = await client.storage.createBucket(bucket, { public: true });
+  if (createErr && !/already exists/i.test(createErr.message)) {
+    throw new Error(
+      `Không tạo được bucket "${bucket}": ${createErr.message}. ` +
+        `Hãy tạo bucket "${bucket}" (public) thủ công trên Supabase, hoặc đảm bảo dùng SERVICE_ROLE_KEY.`
+    );
+  }
+  ensuredBuckets.add(bucket);
+}
+
 export async function blobUpload(input: {
   bucket: BlobBucket;
   filename: string;
@@ -25,6 +51,7 @@ export async function blobUpload(input: {
 
   if (isSupabaseConfigured()) {
     const client = getSupabaseClient()!;
+    await ensureBucket(bucket); // phòng khi bucket chưa được tạo thủ công
     const { error } = await client.storage.from(bucket).upload(filename, buffer, {
       contentType: contentType || "application/octet-stream",
       upsert: true,
