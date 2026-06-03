@@ -6,8 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Mic,
   Loader2,
-  Play,
-  Pause,
   RefreshCw,
   Trash2,
   Download,

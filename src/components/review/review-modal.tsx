@@ -7,17 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   ShieldCheck,
-  ShieldAlert,
-  ShieldX,
   Mic,
   Film,
   Sparkles,
   Check,
   X,
-  RotateCcw,
   Loader2,
   ArrowRight,
-  FileText,
 } from "lucide-react";
 import {
   approveScriptAction,

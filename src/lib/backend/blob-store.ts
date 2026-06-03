@@ -90,9 +90,3 @@ export async function blobDelete(input: {
     if (fs.existsSync(full)) fs.unlinkSync(full);
   } catch {}
 }
-
-export function blobReadLocal(bucket: BlobBucket, filename: string): Buffer | null {
-  const full = path.join(dataPath(bucket), path.basename(filename));
-  if (!fs.existsSync(full)) return null;
-  return fs.readFileSync(full);
-}

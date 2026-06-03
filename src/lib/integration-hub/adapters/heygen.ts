@@ -1,8 +1,5 @@
 import type { AvatarProvider, JobResult, JobStatus } from "../types";
 
-// HeyGen: ~$0.30 per minute video on Creator Plus
-const COST_PER_VIDEO_USD = 0.5; // rough estimate per render
-
 export function makeHeyGenAdapter(opts: { apiKey: string; avatarId?: string }): AvatarProvider {
   return {
     async renderTalking({ audioUrl, text, avatarId, aspectRatio }): Promise<JobResult> {
@@ -78,5 +75,3 @@ export function makeHeyGenAdapter(opts: { apiKey: string; avatarId?: string }): 
     },
   };
 }
-
-export const HEYGEN_COST_PER_VIDEO = COST_PER_VIDEO_USD;

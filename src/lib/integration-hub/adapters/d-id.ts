@@ -12,7 +12,7 @@ export function makeDIDAdapter(opts: { apiKey: string }): AvatarProvider {
     return `Basic ${token}`;
   })();
   return {
-    async renderTalking({ audioUrl, text, avatarId, aspectRatio }): Promise<JobResult> {
+    async renderTalking({ audioUrl, text, avatarId, aspectRatio: _aspectRatio }): Promise<JobResult> {
       const body = {
         source_url: avatarId, // D-ID expects image URL for presenter
         script: audioUrl

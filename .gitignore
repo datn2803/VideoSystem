@@ -27,3 +27,8 @@ assets/
 
 # Intermediate build artifacts
 tsconfig.tsbuildinfo
+
+# Dev prompt files & demo (giữ MASTER_PLAN.md/PRD.md/README.md)
+CLAUDE_CODE_*.md
+MANUS_SUPER_PROMPT.md
+hyperframes-demo/

@@ -3,8 +3,8 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Download, Copy, Check, Loader2, Mic, Film, Sparkles, ExternalLink, CheckCircle2 } from "lucide-react";
-import { recordExportAction, markAllExportedAction } from "@/lib/export/actions";
+import { Download, Copy, Check, Loader2, Mic, Film, Sparkles, CheckCircle2 } from "lucide-react";
+import { markAllExportedAction } from "@/lib/export/actions";
 import { PLATFORM_META } from "@/lib/export/caption-localizer";
 import type { Platform } from "@/lib/export/storage";
 
@@ -50,12 +50,6 @@ export function ExportCard({
     navigator.clipboard.writeText(text);
     setCopied(key);
     setTimeout(() => setCopied(null), 2000);
-  };
-
-  const handleDownloadOne = (platform: Platform, concept: Concept) => {
-    startTransition(async () => {
-      await recordExportAction({ scriptId, platform });
-    });
   };
 
   const handleMarkAllExported = () => {

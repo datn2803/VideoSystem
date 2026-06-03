@@ -122,8 +122,6 @@ export interface ImageProvider {
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }
 
-export type AnyProvider = LLMProvider | TTSProvider | AvatarProvider | RenderProvider | ImageProvider;
-
 export interface ProviderMeta {
   name: ProviderName;
   kind: ProviderKind;

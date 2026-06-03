@@ -70,19 +70,3 @@ export async function kvWrite<T>(name: string, value: T): Promise<void> {
   ensureLocal(name, value);
   fs.writeFileSync(localFile(name), JSON.stringify(value, null, 2));
 }
-
-// ─── Sync API (local-only — used by legacy modules) ───
-
-export function kvReadSync<T>(name: string, defaultValue: T): T {
-  ensureLocal(name, defaultValue);
-  try {
-    return JSON.parse(fs.readFileSync(localFile(name), "utf8")) as T;
-  } catch {
-    return defaultValue;
-  }
-}
-
-export function kvWriteSync<T>(name: string, value: T): void {
-  ensureLocal(name, value);
-  fs.writeFileSync(localFile(name), JSON.stringify(value, null, 2));
-}

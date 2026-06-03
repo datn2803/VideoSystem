@@ -216,7 +216,3 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
 export function getProviderMeta(name: string): ProviderMeta | undefined {
   return PROVIDER_CATALOG.find((p) => p.name === name);
 }
-
-export function catalogByKind(kind: string): ProviderMeta[] {
-  return PROVIDER_CATALOG.filter((p) => p.kind === kind);
-}

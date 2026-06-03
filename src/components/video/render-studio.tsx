@@ -22,7 +22,7 @@ import {
   pollDraftAction,
   deleteDraftAction,
 } from "@/lib/video/actions";
-import type { VideoDraftRecord, ConceptKind } from "@/lib/video/storage";
+import type { ConceptKind } from "@/lib/video/storage";
 
 type Draft = {
   id: string;

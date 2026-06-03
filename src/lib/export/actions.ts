@@ -34,14 +34,3 @@ export async function markAllExportedAction(scriptId: string) {
   revalidatePath("/review");
   return { ok: true };
 }
-
-export async function getLocalizedCaption(scriptId: string, platform: Platform) {
-  const script = await scriptStore.get(scriptId);
-  if (!script) throw new Error("Script not found");
-  return localizeCaption({
-    baseCaption: script.script.caption,
-    baseHashtags: script.script.hashtags,
-    platform,
-    topic: script.topic,
-  });
-}

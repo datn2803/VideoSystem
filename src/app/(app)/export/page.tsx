@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { Topbar } from "@/components/topbar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, CheckCircle2, ClipboardCheck } from "lucide-react";
+import { Download, ClipboardCheck } from "lucide-react";
 import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore } from "@/lib/video/storage";
 import { exportStore } from "@/lib/export/storage";

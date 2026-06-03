@@ -32,10 +32,6 @@ export async function deleteDraftAction(id: string, scriptId: string) {
   return { ok: true };
 }
 
-export async function listDraftsByScriptAction(scriptId: string) {
-  return (await videoStore.byScript(scriptId)).map(serializeDraft);
-}
-
 function serializeDraft(draft: VideoDraftRecord) {
   return {
     id: draft.id,
