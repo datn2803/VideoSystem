@@ -72,21 +72,34 @@ function magnitude(value: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Donut: trích các dataPoint có "%" thật (anti-fabrication — rỗng nếu không có %). */
-function parsePercentSegments(points: string[]): { label: string; pct: number }[] {
-  const segs: { label: string; pct: number }[] = [];
+/** Đơn vị NGẮN cho số lớn S2: cắt mệnh đề phía sau (dấu phẩy/;/"tăng"…), lấy token đầu. */
+function shortUnit(unit: string): string {
+  let u = (unit || "").trim();
+  u = u.split(/[,;]|\s(?:tăng|giảm|và|hoặc|so với)\b/i)[0].trim(); // bỏ mệnh đề sau
+  u = (u.split(/\s+/)[0] || "").trim(); // token đầu (đơn vị thường 1 token)
+  return u.slice(0, 8);
+}
+
+/**
+ * Donut = 1 TỈ LỆ THẬT (phần của tổng): chọn 1 phần trăm headline P (0<P<100).
+ * Ưu tiên dataPoint có label gợi tỉ lệ (tiết kiệm/chiếm/đạt/tỉ lệ…); nếu không, lấy % đầu hợp lệ.
+ * KHÔNG gom nhiều % độc lập thành bánh (đó là sai ngữ nghĩa donut). Null nếu không có %.
+ */
+function pickHeadlinePercent(points: string[]): { label: string; pct: number } | null {
+  const cands: { label: string; pct: number }[] = [];
   for (const raw of points || []) {
     const s = String(raw || "");
     const m = s.match(/(\d[\d.,]*)\s*%/);
     if (!m) continue;
     const pct = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) continue;
+    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) continue;
     let label = s.slice(0, m.index ?? 0).replace(/[:\-–—]\s*$/, "").trim();
     if (!label) label = s.slice((m.index ?? 0) + m[0].length).replace(/^[\s:.\-–—]+/, "").trim();
-    segs.push({ label: label.slice(0, 28), pct: Math.round(pct * 10) / 10 });
-    if (segs.length >= 5) break;
+    cands.push({ label: label.slice(0, 24), pct: Math.round(pct * 10) / 10 });
   }
-  return segs;
+  if (cands.length === 0) return null;
+  const ratioRe = /(tiết kiệm|chiếm|đạt|tỉ lệ|tỷ lệ|tỉ trọng|tỷ trọng|tới|lên|chỉ)/i;
+  return cands.find((c) => ratioRe.test(c.label)) || cands[0];
 }
 
 function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
@@ -105,16 +118,33 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     ? parsed.reduce((m, p) => (magnitude(p.value) > magnitude(m.value) ? p : m))
     : null;
 
-  // S3 donut: chỉ khi dataPoints có "%" thật.
-  const donutSegs = parsePercentSegments(anim.dataPoints || []);
+  // S3 donut: CHỈ 1 tỉ lệ thật P → [P, 100−P]. Không có % hợp lệ → ẩn.
+  const headline = pickHeadlinePercent(anim.dataPoints || []);
+  const donutSegs = headline
+    ? [
+        { label: headline.label || "Đạt được", pct: headline.pct }, // color bỏ trống → theme accent
+        { label: "Còn lại", pct: Math.round((100 - headline.pct) * 10) / 10, color: "#3a3a40" },
+      ]
+    : [];
 
-  // S4 bars: ≥2 số thật mới hiện (so sánh nhiều mục).
-  const dataBars = parsed.slice(0, 4).map((p) => ({
+  // S4 bars: chỉ cột CÙNG ĐƠN VỊ (mode đơn vị), ≥2 mới hiện (tránh trộn % với "tuần").
+  const unitOf = (p: ParsedDataPoint) => oneToken(p.unit);
+  const counts = new Map<string, number>();
+  for (const p of parsed) counts.set(unitOf(p), (counts.get(unitOf(p)) || 0) + 1);
+  let modeUnit = "";
+  let bestCount = -1;
+  for (const p of parsed) {
+    const u = unitOf(p);
+    const c = counts.get(u) || 0;
+    if (c > bestCount) { bestCount = c; modeUnit = u; } // tie-break: thứ tự xuất hiện đầu
+  }
+  const sameUnit = parsed.filter((p) => unitOf(p) === modeUnit);
+  const barsOK = sameUnit.length >= 2;
+  const dataBars = sameUnit.slice(0, 4).map((p) => ({
     label: p.label.slice(0, 24),
     value: p.value,
     unit: oneToken(p.unit).slice(0, 8),
   }));
-  const barsOK = parsed.length >= 2;
 
   // S6 point cards: keyMessages = nội dung thật (badge số + câu). Card đầu "active" (style).
   const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 3);
@@ -141,7 +171,7 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     hook_stat: hookStat,
     // S2 big number (rỗng nếu không có số → scene tự ẩn)
     bignum_value: big ? big.value : "",
-    bignum_unit: big ? big.unit : "",
+    bignum_unit: big ? shortUnit(big.unit) : "",
     bignum_label: big ? (big.label || "").toUpperCase() : "",
     // S3 donut (rỗng nếu không có % → tự ẩn)
     donut_segments: JSON.stringify(donutSegs),
