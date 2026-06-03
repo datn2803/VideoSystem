@@ -235,10 +235,22 @@ export async function buildAnimation(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 18.5;
+      // 2B: brief sinh ảnh cutout (VPS dùng OpenAI gpt-image) + bật vision-QC.
+      // Subject GENERIC từ keyMessage/hook (genimage tự ép "not a real identifiable person").
+      // KHÔNG sinh ảnh ở Vercel — chỉ gửi prompt; VPS gate theo key + tự fallback nếu thiếu.
+      const heroSubject = (script.script.variantPrompts.animation.keyMessages?.[0] || script.script.hook || "modern finance concept")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+      const imagePrompts = [
+        { id: "hero", prompt: `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video` },
+      ];
       const variables = {
         ...buildAnimationVariables(script.script),
         voice_url: voiceUrl,
         duration: String(durationSec),
+        imagePrompts: JSON.stringify(imagePrompts),
+        visionQC: true,
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {

@@ -27,7 +27,8 @@
     {"id":"accent_color","type":"color","label":"Màu nhấn","default":"#e11d2a"},
     {"id":"voice_url","type":"string","label":"Voice-over URL (mp3/wav, public)","default":""},
     {"id":"duration","type":"string","label":"Tổng thời lượng (giây) — khớp voice-over","default":"18.5"},
-    {"id":"theme","type":"string","label":"Theme index (0-4) — đổi màu/nền theo content","default":"0"}
+    {"id":"theme","type":"string","label":"Theme index (0-4) — đổi màu/nền theo content","default":"0"},
+    {"id":"compact","type":"string","label":"QC: compact=1 → co chữ mạnh hơn (chống tràn)","default":""}
   ]'
 >
   <head>
@@ -495,8 +496,11 @@
         }
         el.style.fontSize = Math.floor(best) + "px";
       }
-      fitText("s1l1", 96, 44, 230); fitText("s1l2", 96, 44, 230); fitText("s1key", 150, 48, 380); fitText("s1sub", 46, 26, 130);
-      fitText("s2bnum", 300, 80, 360); fitText("s7e1", 84, 38, 210); fitText("s7e2", 150, 44, 560); fitText("s7e3text", 44, 24, 120);
+      // QC compact=1 → giảm trần cỡ chữ (vision-QC báo tràn ở vòng trước → render lại gọn hơn).
+      const CF = String(v.compact || "") === "1" ? 0.82 : 1;
+      const FT = (id, mx, mn, mh) => fitText(id, Math.round(mx * CF), mn, Math.round(mh * CF));
+      FT("s1l1", 96, 44, 230); FT("s1l2", 96, 44, 230); FT("s1key", 150, 48, 380); FT("s1sub", 46, 26, 130);
+      FT("s2bnum", 300, 80, 360); FT("s7e1", 84, 38, 210); FT("s7e2", 150, 44, 560); FT("s7e3text", 44, 24, 120);
 
       // ── Duration scaling: tile [0,BASE] → [0,dur] (khớp voice-over) ──
       const BASE = 20.5;

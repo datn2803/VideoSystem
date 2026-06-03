@@ -4,3 +4,6 @@ renders/
 tmp/
 *.log
 .DS_Store
+.imgcache/
+compositions/.imgs/
+compositions/.render-*.html

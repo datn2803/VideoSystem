@@ -22,6 +22,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { generateImages } from "./lib/genimage.mjs";
+import { assessFrame } from "./lib/vision.mjs";
 
 const execFileP = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +34,7 @@ const HF_VERSION = "0.6.63"; // pinned to match demo + templates
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || "videos";
-const RENDER_TIMEOUT_MS = 600_000; // VPS 2-vCPU không GPU render software ~0.5–0.65s/frame → 1080×1920×20s cần ~6–7 phút. Nới 10 phút cho kịp.
+const RENDER_TIMEOUT_MS = Number(process.env.RENDER_TIMEOUT_MS) || 900_000; // 2B+2C: 3 vòng QC + ảnh gpt-image high có thể lâu → nới 15 phút (override qua env).
 const JOB_TTL_MS = 60 * 60 * 1000; // keep finished jobs for 1h, then prune
 // Base URL the file fallback advertises (only used when Supabase is not configured).
 const SELF_PUBLIC_URL = (process.env.SELF_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
@@ -212,6 +214,13 @@ async function renderTemplate({ template, variables, quality }) {
         const shotDurations = safeJsonArray(variables?.shot_durations);
         patched = injectBrollImages(patched, bgUrls, shotDurations, durSec);
       }
+      // animation: bake ảnh cutout hero vào static src (media pass scan compile-time →
+      // runtime setAttribute là quá muộn). Rỗng → giữ src="" → runtime JS tự remove imgHero.
+      if (template === "animation") {
+        const hero = variables?.img_hero;
+        if (hero && String(hero).trim())
+          patched = patched.replace(/(id="imgHero"[^>]*?\ssrc=")[^"]*(")/, `$1${escAttr(hero)}$2`);
+      }
       tempEntryAbs = path.join(COMP_DIR, `.render-${id}.html`);
       await fs.writeFile(tempEntryAbs, patched, "utf8");
       compRel = `compositions/.render-${id}.html`;
@@ -251,6 +260,102 @@ async function renderTemplate({ template, variables, quality }) {
   }
 
   return { tmpDir, outFile };
+}
+
+// ── Vision-QC pipeline (2B): sinh ảnh cutout + render + chấm 6 frame + tự sửa, ≤3 vòng ──
+const QC_FRAME_MARKS = [0.08, 0.18, 0.3, 0.45, 0.62, 0.85];
+const QC_HEAVY = new Set(["text_overflow", "overlap", "unbalanced", "image_ugly", "empty", "low_contrast"]);
+const COMP_IMGS_DIR = path.join(COMP_DIR, ".imgs"); // ảnh tạm cho composition đọc (relative .imgs/..)
+
+async function extractFrame(outFile, t) {
+  const f = path.join(os.tmpdir(), `frm-${crypto.randomBytes(5).toString("hex")}.png`);
+  try {
+    await execFileP("ffmpeg", ["-y", "-ss", String(t), "-i", outFile, "-frames:v", "1", "-q:v", "3", f], {
+      timeout: 30_000,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const buf = await fs.readFile(f);
+    return buf.toString("base64");
+  } finally {
+    await fs.rm(f, { force: true }).catch(() => {});
+  }
+}
+
+// Copy ảnh đã sinh vào compositions/.imgs/ và set biến img_<id> = đường dẫn tương đối.
+async function placeImages(vars, prompts, createdImgs) {
+  const map = await generateImages(prompts); // id → file tuyệt đối (hoặc {} nếu lỗi/thiếu key)
+  if (Object.keys(map).length) await fs.mkdir(COMP_IMGS_DIR, { recursive: true });
+  for (const [id, src] of Object.entries(map)) {
+    const name = `${crypto.randomBytes(6).toString("hex")}.png`;
+    const dest = path.join(COMP_IMGS_DIR, name);
+    try {
+      await fs.copyFile(src, dest);
+      createdImgs.push(dest);
+      vars[`img_${id}`] = `.imgs/${name}`;
+    } catch (e) {
+      console.error("[qc] copy img", id, e && e.message ? e.message : e);
+    }
+  }
+}
+
+async function renderAnimationWithQC({ variables }) {
+  const haveOpenAI = !!process.env.OPENAI_API_KEY;
+  const haveGemini = !!process.env.GEMINI_API_KEY;
+  const vars = { ...variables };
+  const createdImgs = [];
+  const basePrompts = safeJsonArray(variables.imagePrompts);
+
+  // 1) Ảnh cutout (nếu có key + prompts). Lỗi → bỏ ảnh, render như 2A.
+  if (haveOpenAI && basePrompts.length) await placeImages(vars, basePrompts, createdImgs);
+
+  // 2) Vòng QC. Không có Gemini → render 1 lần (vẫn có ảnh nếu sinh được).
+  const rounds = haveGemini ? 3 : 1;
+  let best = null; // { tmpDir, outFile, avg, report }
+  try {
+    for (let round = 0; round < rounds; round++) {
+      const r = await renderTemplate({ template: "animation", variables: vars, quality: "standard" });
+      if (!haveGemini) { best = { ...r, avg: 10, report: [] }; break; }
+
+      const dur = (await probeDuration(r.outFile)) || Number(vars.duration) || 18.5;
+      const report = [];
+      let sum = 0, n = 0, heavy = false, wantCompact = false, wantRegen = false;
+      for (const m of QC_FRAME_MARKS) {
+        let b64;
+        try { b64 = await extractFrame(r.outFile, +(m * dur).toFixed(2)); } catch { continue; }
+        const a = await assessFrame(b64);
+        report.push({ round, t: +(m * dur).toFixed(2), score: a.score, issues: a.issues });
+        sum += a.score; n++;
+        const issues = a.issues || [];
+        if (a.score < 8 || issues.some((i) => QC_HEAVY.has(i))) heavy = true;
+        if (issues.includes("image_ugly")) wantRegen = true;
+        if (issues.some((i) => i === "text_overflow" || i === "overlap" || i === "unbalanced")) wantCompact = true;
+      }
+      const avg = n ? sum / n : 10;
+      console.log(`[qc] round ${round} avg=${avg.toFixed(2)} frames=${n} heavy=${heavy}`);
+
+      // giữ bản điểm trung bình cao nhất
+      if (!best || avg > best.avg) {
+        if (best) await fs.rm(best.tmpDir, { recursive: true, force: true }).catch(() => {});
+        best = { ...r, avg, report };
+      } else {
+        await fs.rm(r.tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+
+      if (n > 0 && !heavy) break; // đạt
+      if (round >= rounds - 1) break;
+
+      // áp fix cho vòng sau
+      if (wantCompact) vars.compact = "1";
+      if (wantRegen && haveOpenAI && basePrompts.length) {
+        const rePrompts = basePrompts.map((p) => ({ id: p.id, prompt: `${p.prompt}, alternative composition v${round + 2}` }));
+        await placeImages(vars, rePrompts, createdImgs);
+      }
+    }
+  } finally {
+    // dọn ảnh tạm (đã được bake/đọc trong render xong)
+    for (const f of createdImgs) await fs.rm(f, { force: true }).catch(() => {});
+  }
+  return best;
 }
 
 // Store a finished MP4 and return a public URL: Supabase if configured, else a
@@ -313,10 +418,19 @@ app.post("/render", (req, res) => {
   // Run in the background — DO NOT await. Mutex serializes renders (2 vCPU box).
   withRenderLock(async () => {
     setJob(jobId, { status: "rendering" });
-    const { tmpDir, outFile } = await renderTemplate({ template, variables, quality });
+    // 2B: animation + visionQC=true + có ít nhất 1 key (OpenAI/Gemini) → pipeline ảnh+QC.
+    // Thiếu cả 2 key hoặc không bật cờ → render 1 lần như 2A (fallback).
+    const useQC =
+      template === "animation" &&
+      variables && variables.visionQC === true &&
+      (!!process.env.OPENAI_API_KEY || !!process.env.GEMINI_API_KEY);
+    const result = useQC
+      ? await renderAnimationWithQC({ variables })
+      : await renderTemplate({ template, variables, quality });
+    const { tmpDir, outFile } = result;
     try {
       const { url, durationSec, sizeBytes } = await storeOutput(outFile, template);
-      setJob(jobId, { status: "done", url, durationSec, sizeBytes });
+      setJob(jobId, { status: "done", url, durationSec, sizeBytes, qcReport: result.report || undefined });
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
@@ -370,8 +484,8 @@ app.get("/jobs/:jobId", (req, res) => {
   if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });
   const job = jobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ ok: false, error: "Job không tồn tại (hoặc đã hết hạn)" });
-  const { status, url, error, durationSec, sizeBytes } = job;
-  return res.json({ status, url, error, durationSec, sizeBytes });
+  const { status, url, error, durationSec, sizeBytes, qcReport } = job;
+  return res.json({ status, url, error, durationSec, sizeBytes, qcReport });
 });
 
 // Local fallback file server (only meaningful when Supabase is not configured).
