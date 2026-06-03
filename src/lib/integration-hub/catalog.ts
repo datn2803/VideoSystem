@@ -96,6 +96,7 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { key: "stability", label: "Stability (0–1, cao = ổn định thanh điệu)", type: "number", required: false, placeholder: "0.5" },
       { key: "similarityBoost", label: "Similarity boost (0–1)", type: "number", required: false, placeholder: "0.85" },
       { key: "style", label: "Style (0–1, cao dễ méo dấu thanh tiếng Việt)", type: "number", required: false, placeholder: "0.0" },
+      { key: "speed", label: "Tốc độ đọc (0.7–1.2 · 1.0=chuẩn · 1.1=nhanh & cuốn hơn)", type: "number", required: false, placeholder: "1.1" },
       { key: "useSpeakerBoost", label: "Speaker boost", type: "toggle", required: false, placeholder: "Tăng độ giống giọng gốc" },
     ],
     defaultConfig: {
@@ -104,32 +105,9 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       stability: 0.5,
       similarityBoost: 0.85,
       style: 0.0,
+      speed: 1.1,
       useSpeakerBoost: true,
     },
-  },
-  {
-    name: "fpt-tts",
-    kind: "tts",
-    label: "FPT.AI TTS (Vietnamese)",
-    homepage: "https://fpt.ai/vi/text-to-speech",
-    authType: "api_key",
-    fields: [
-      { key: "apiKey", label: "API Key", type: "password", required: true },
-      {
-        key: "voiceId",
-        label: "Giọng",
-        type: "select",
-        required: false,
-        options: [
-          { value: "banmai", label: "Ban Mai (nữ Bắc)" },
-          { value: "leminh", label: "Lê Minh (nam Bắc)" },
-          { value: "minhquang", label: "Minh Quang (nam trung)" },
-          { value: "thuminh", label: "Thu Minh (nữ Bắc)" },
-          { value: "linhsan", label: "Linh San (nữ Nam)" },
-        ],
-      },
-    ],
-    defaultConfig: { voiceId: "leminh" },
   },
 
   // ── Avatar ──

@@ -7,6 +7,11 @@ const COST_PER_CHAR = 0.00022;
 // multilingual_v2 / v3 nếu gửi language_code sẽ LỖI API → gửi có điều kiện.
 const LANG_ENFORCED_MODELS = new Set(["eleven_turbo_v2_5", "eleven_flash_v2_5"]);
 
+// Tốc độ đọc mặc định của dự án: 1.1 = nhanh hơn ~10% → cuốn hơn, không hụt hơi.
+// ElevenLabs chỉ nhận voice_settings.speed trong [0.7, 1.2]; ngoài dải dễ méo dấu thanh tiếng Việt.
+const DEFAULT_SPEED = 1.1;
+const clampSpeed = (v: number) => Math.min(1.2, Math.max(0.7, v));
+
 export function makeElevenLabsAdapter(opts: {
   apiKey: string;
   voiceId?: string;
@@ -16,6 +21,7 @@ export function makeElevenLabsAdapter(opts: {
   similarityBoost?: number;
   style?: number;
   useSpeakerBoost?: boolean;
+  speed?: number;
 }): TTSProvider {
   // Rachel là giọng ENGLISH — chỉ là fallback. Khuyến nghị set Voice ID người Việt
   // (Voice Library → Language=Vietnamese) qua provider config để đọc tự nhiên.
@@ -24,21 +30,22 @@ export function makeElevenLabsAdapter(opts: {
   const modelId = opts.modelId || "eleven_turbo_v2_5";
   const langCode = opts.languageCode || "vi";
 
-  // Default cho tiếng Việt (ngôn ngữ có thanh điệu): style cao dễ méo dấu thanh.
-  const voiceSettings = {
-    stability: opts.stability ?? 0.5,
-    similarity_boost: opts.similarityBoost ?? 0.85,
-    style: opts.style ?? 0.0,
-    use_speaker_boost: opts.useSpeakerBoost ?? true,
-  };
-
   return {
-    async synthesize({ text, voiceId }) {
+    async synthesize({ text, voiceId, speed }) {
       const vid = voiceId || defaultVoice;
+      // speed có thể override theo từng call; fallback config opts.speed → DEFAULT_SPEED.
+      const effectiveSpeed = clampSpeed(speed ?? opts.speed ?? DEFAULT_SPEED);
+      // Default cho tiếng Việt (ngôn ngữ có thanh điệu): style cao dễ méo dấu thanh.
       const body: Record<string, unknown> = {
         text,
         model_id: modelId,
-        voice_settings: voiceSettings,
+        voice_settings: {
+          stability: opts.stability ?? 0.5,
+          similarity_boost: opts.similarityBoost ?? 0.85,
+          style: opts.style ?? 0.0,
+          use_speaker_boost: opts.useSpeakerBoost ?? true,
+          speed: effectiveSpeed,
+        },
       };
       // Chỉ ép language_code với model hỗ trợ; tránh lỗi API trên multilingual_v2/v3.
       if (LANG_ENFORCED_MODELS.has(modelId) && langCode) {
@@ -61,7 +68,7 @@ export function makeElevenLabsAdapter(opts: {
       const result: TTSResult = {
         audioBase64: buf.toString("base64"),
         mimeType: "audio/mpeg",
-        durationMs: Math.round((text.length / 15) * 1000), // rough estimate ~15 chars/sec speech
+        durationMs: Math.round((text.length / 15) * 1000 / effectiveSpeed), // ~15 chars/sec, chia speed vì audio nhanh hơn → ngắn hơn
         costUsd: text.length * COST_PER_CHAR,
       };
       return result;

@@ -13,7 +13,6 @@ import { makeClaudeAdapter } from "./adapters/claude";
 import { makeGeminiAdapter } from "./adapters/gemini";
 import { makeDeepseekAdapter } from "./adapters/deepseek";
 import { makeElevenLabsAdapter } from "./adapters/elevenlabs";
-import { makeFptTtsAdapter } from "./adapters/fpt-tts";
 import { makeHeyGenAdapter } from "./adapters/heygen";
 import { makeDIDAdapter } from "./adapters/d-id";
 import { makeCreatomateAdapter } from "./adapters/creatomate";
@@ -84,8 +83,8 @@ async function buildTTS(p: ProviderConfig): Promise<TTSProvider> {
       similarityBoost: numOrUndef(p.config?.similarityBoost),
       style: numOrUndef(p.config?.style),
       useSpeakerBoost: boolOrUndef(p.config?.useSpeakerBoost),
+      speed: numOrUndef(p.config?.speed),
     });
-  if (p.name === "fpt-tts") return makeFptTtsAdapter({ apiKey, voiceId: p.config?.voiceId as string });
   return makeMockTTS();
 }
 

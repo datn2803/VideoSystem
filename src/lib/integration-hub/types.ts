@@ -6,7 +6,6 @@ export type ProviderName =
   | "openai"
   | "deepseek"
   | "elevenlabs"
-  | "fpt-tts"
   | "heygen"
   | "d-id"
   | "creatomate"
@@ -83,7 +82,8 @@ export interface LLMProvider {
 }
 
 export interface TTSProvider {
-  synthesize(input: { text: string; voiceId?: string; lang?: string }): Promise<TTSResult>;
+  // speed: hệ số chuẩn hoá tốc độ đọc (1.0 = chuẩn, 1.1 = nhanh hơn ~10%). Clamp [0.7, 1.2].
+  synthesize(input: { text: string; voiceId?: string; lang?: string; speed?: number }): Promise<TTSResult>;
   listVoices(): Promise<{ id: string; name: string; lang: string; gender?: string }[]>;
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }

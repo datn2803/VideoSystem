@@ -24,8 +24,8 @@ export async function generateAudioAction(input: {
 
 export async function generateAllAudioAction(scriptId: string, voiceId?: string, voiceName?: string) {
   const parts: AudioPart[] = ["full", "broll", "animation"];
-  // Chạy SONG SONG: mỗi part poll FPT ~30s, tuần tự sẽ ~90s (vượt timeout 60s).
-  // Song song → tổng ~30s. (audioStore.save có khóa ghi nên không mất bản ghi.)
+  // Chạy SONG SONG các part để giảm tổng thời gian (ElevenLabs đồng bộ, mỗi part ~1–3s).
+  // (audioStore.save có khóa ghi nên không mất bản ghi.)
   const results = await Promise.all(
     parts.map(async (part) => {
       try {

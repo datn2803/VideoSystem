@@ -108,7 +108,7 @@ export default async function IntegrationsPage() {
             <p className="font-semibold text-indigo-900">💡 Mẹo cho MVP free</p>
             <ul className="text-xs text-indigo-800 space-y-1 ml-4 list-disc">
               <li>Bắt đầu với <strong>Gemini 2.0 Flash</strong> (free 15 req/min) cho LLM trước khi mua Claude</li>
-              <li><strong>ElevenLabs free tier</strong> cho 10k chars/tháng đủ test, hoặc <strong>FPT.AI</strong> cho giọng Việt tự nhiên</li>
+              <li><strong>ElevenLabs free tier</strong> cho 10k chars/tháng đủ test (dùng Voice ID giọng Việt cho tự nhiên)</li>
               <li><strong>Creatomate free tier</strong> 50 credits đủ cho 50 video render</li>
               <li><strong>HeyGen</strong> bắt buộc trả phí cho API ($99/tháng) — có thể skip nếu dùng footage thật cho C1</li>
             </ul>

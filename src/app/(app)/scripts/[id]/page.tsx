@@ -16,7 +16,7 @@ import { ReviewStateBar } from "@/components/review/send-to-review-button";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// Poll FPT TTS có thể tới ~30s/part → cần nới timeout cho server action sinh audio.
+// ElevenLabs đồng bộ & nhanh, nhưng full script dài có thể tốn thời gian → nới timeout cho an toàn.
 // 60s là tối đa của Vercel Hobby (mặc định chỉ 10s).
 export const maxDuration = 60;
 export default async function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {

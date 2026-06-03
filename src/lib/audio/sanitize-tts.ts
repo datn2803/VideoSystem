@@ -1,5 +1,5 @@
 /**
- * Làm sạch text TRƯỚC khi đưa vào TTS (ElevenLabs/FPT...).
+ * Làm sạch text TRƯỚC khi đưa vào TTS (ElevenLabs).
  * Chỉ tác động tới chuỗi gửi cho engine đọc — KHÔNG đổi text hiển thị/đã lưu.
  *
  * - Bỏ markdown (**, *, _, `, #) nhưng giữ nội dung bên trong.

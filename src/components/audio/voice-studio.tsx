@@ -185,7 +185,7 @@ export function VoiceStudio({
             <div>
               <p className="font-medium text-amber-900">Chưa có TTS provider</p>
               <p className="text-xs text-amber-800 mt-1">
-                Đang dùng mock (audio MP3 im lặng). Vào <a href="/settings/integrations" className="underline">Integrations</a> thêm <strong>ElevenLabs</strong> (free 10k chars) hoặc <strong>FPT.AI TTS</strong> (giọng Việt) để có audio thật.
+                Đang dùng mock (audio MP3 im lặng). Vào <a href="/settings/integrations" className="underline">Integrations</a> thêm <strong>ElevenLabs</strong> (free 10k chars, dùng Voice ID giọng Việt) để có audio thật.
               </p>
             </div>
           </div>
