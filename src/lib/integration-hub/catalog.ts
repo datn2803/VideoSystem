@@ -96,7 +96,7 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { key: "stability", label: "Stability (0–1, cao = ổn định thanh điệu)", type: "number", required: false, placeholder: "0.5" },
       { key: "similarityBoost", label: "Similarity boost (0–1)", type: "number", required: false, placeholder: "0.85" },
       { key: "style", label: "Style (0–1, cao dễ méo dấu thanh tiếng Việt)", type: "number", required: false, placeholder: "0.0" },
-      { key: "speed", label: "Tốc độ đọc (0.7–1.2 · 1.0=chuẩn · 1.1=nhanh & cuốn hơn)", type: "number", required: false, placeholder: "1.1" },
+      { key: "speed", label: "Tốc độ đọc mặc định (0.7–2.0 · ≤1.2 native ElevenLabs · >1.2 tăng tốc qua VPS)", type: "number", required: false, placeholder: "1.5" },
       { key: "useSpeakerBoost", label: "Speaker boost", type: "toggle", required: false, placeholder: "Tăng độ giống giọng gốc" },
     ],
     defaultConfig: {
@@ -105,7 +105,7 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       stability: 0.5,
       similarityBoost: 0.85,
       style: 0.0,
-      speed: 1.1,
+      speed: 1.5,
       useSpeakerBoost: true,
     },
   },

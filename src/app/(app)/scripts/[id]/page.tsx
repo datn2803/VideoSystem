@@ -44,6 +44,10 @@ export default async function ScriptDetailPage({ params }: { params: Promise<{ i
   }));
   const ttsProviders = allProviders.filter((p) => p.kind === "tts" && p.enabled);
   const hasTTSProvider = ttsProviders.length > 0;
+  // Default tốc độ đọc lấy từ provider TTS default (ElevenLabs config.speed); fallback để component tự xử lý.
+  const defaultTTS = ttsProviders.find((p) => p.isDefault) || ttsProviders[0];
+  const cfgSpeed = Number(defaultTTS?.config?.speed);
+  const defaultSpeed = Number.isFinite(cfgSpeed) ? cfgSpeed : undefined;
   const hasAvatarProvider = allProviders.some((p) => p.kind === "avatar" && p.enabled);
   const hasRenderProvider = allProviders.some((p) => p.kind === "render" && p.enabled);
   const doneCount = drafts.filter((d) => d.status === "done").length;
@@ -94,7 +98,7 @@ export default async function ScriptDetailPage({ params }: { params: Promise<{ i
           doneCount={doneCount}
         />
 
-        <VoiceStudio scriptId={id} initialAudios={audios} hasTTSProvider={hasTTSProvider} />
+        <VoiceStudio scriptId={id} initialAudios={audios} hasTTSProvider={hasTTSProvider} defaultSpeed={defaultSpeed} />
 
         <RenderStudio
           scriptId={id}

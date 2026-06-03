@@ -3,6 +3,7 @@ import { store } from "@/lib/integration-hub/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { audioStore, type AudioPart } from "./storage";
 import { sanitizeForTTS } from "./sanitize-tts";
+import { speedUpAudioViaService } from "./speed-service";
 
 async function recordTTSUsage(costUsd: number, chars: number, providerId?: string) {
   const providers = (await store.listProviders()).filter((p) => p.kind === "tts" && p.enabled);
@@ -28,6 +29,7 @@ export async function generateAudioForScript(input: {
   voiceId?: string;
   voiceName?: string;
   lang?: string;
+  speed?: number;
 }) {
   const record = await scriptStore.get(input.scriptId);
   if (!record) throw new Error("Script not found");
@@ -48,16 +50,41 @@ export async function generateAudioForScript(input: {
   const provider = await getDefaultTTSProvider();
   const providerName = provider?.name || "mock";
   const tts = await hub.tts();
-  const result = await tts.synthesize({ text, voiceId: input.voiceId, lang: input.lang || "vi" });
+
+  // Chiến lược tốc độ: ElevenLabs đọc native tới 1.2 (API chặn cứng), phần vượt
+  // → ffmpeg atempo trên VPS (giữ cao độ). target ≤1.2 → KHÔNG gọi VPS.
+  const cfgSpeed = Number(provider?.config?.speed);
+  const target = Math.min(2.0, Math.max(0.7, input.speed ?? (Number.isFinite(cfgSpeed) ? cfgSpeed : 1.5)));
+  const nativeSpeed = Math.min(target, 1.2);
+
+  const result = await tts.synthesize({ text, voiceId: input.voiceId, lang: input.lang || "vi", speed: nativeSpeed });
 
   await recordTTSUsage(result.costUsd, text.length, provider?.id);
+
+  let audioBase64 = result.audioBase64;
+  let durationMs = result.durationMs;
+  const mimeType = result.mimeType;
+
+  if (target > 1.2) {
+    const factor = target / 1.2;
+    try {
+      const sped = await speedUpAudioViaService(audioBase64, factor);
+      if (sped) {
+        audioBase64 = sped.audioBase64;
+        durationMs = sped.durationMs ?? Math.round(durationMs / factor);
+      }
+    } catch (e) {
+      // VPS lỗi/tắt → KHÔNG fail cả lần tạo; giữ audio native 1.2 + log cảnh báo.
+      console.warn("[voice-agent] atempo VPS lỗi, dùng audio native 1.2:", e instanceof Error ? e.message : e);
+    }
+  }
 
   const saved = await audioStore.save({
     scriptId: input.scriptId,
     part: input.part,
-    audioBase64: result.audioBase64,
-    mimeType: result.mimeType,
-    durationMs: result.durationMs,
+    audioBase64,
+    mimeType,
+    durationMs,
     voiceId: input.voiceId || provider?.config?.voiceId as string || "default",
     voiceName: input.voiceName,
     providerName,

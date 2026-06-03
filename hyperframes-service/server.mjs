@@ -81,6 +81,15 @@ async function probeDuration(file) {
   }
 }
 
+// ffmpeg atempo chỉ nhận [0.5, 2.0] mỗi lần → nối chuỗi cho factor ngoài dải.
+function buildAtempoChain(factor) {
+  let r = factor, parts = [];
+  while (r > 2.0) { parts.push("atempo=2.0"); r /= 2.0; }
+  while (r < 0.5) { parts.push("atempo=0.5"); r /= 0.5; }
+  parts.push(`atempo=${r.toFixed(4)}`);
+  return parts.join(",");
+}
+
 // Escape a string for safe insertion into a double-quoted HTML attribute.
 function escAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -278,7 +287,7 @@ function checkAuth(req) {
 }
 
 const app = express();
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "16mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, templates: [...ALLOWED_TEMPLATES], storage: supabase ? "supabase" : "file", mode: "async" });
@@ -316,6 +325,44 @@ app.post("/render", (req, res) => {
   });
 
   return res.status(202).json({ jobId });
+});
+
+// POST /audio/speed { audioBase64, factor }  → { audioBase64, durationMs }
+// Tăng tốc audio bằng atempo (giữ cao độ). KHÔNG cần render-lock (ffmpeg audio rất nhẹ ~1s).
+app.post("/audio/speed", async (req, res) => {
+  const auth = checkAuth(req);
+  if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });
+
+  const { audioBase64, factor } = req.body || {};
+  if (typeof audioBase64 !== "string" || audioBase64.length < 16)
+    return res.status(400).json({ ok: false, error: "audioBase64 không hợp lệ" });
+  const f = Number(factor);
+  if (!Number.isFinite(f) || f < 1.0 || f > 4.0)
+    return res.status(400).json({ ok: false, error: "factor phải trong [1.0, 4.0]" });
+
+  const id = crypto.randomUUID();
+  const inFile = path.join(os.tmpdir(), `spd-in-${id}.mp3`);
+  const outFile = path.join(os.tmpdir(), `spd-out-${id}.mp3`);
+  try {
+    await fs.writeFile(inFile, Buffer.from(audioBase64, "base64"));
+    // f≈1.0 → vẫn chạy nhanh; chain an toàn cho mọi factor.
+    await execFileP("ffmpeg", ["-y", "-i", inFile, "-filter:a", buildAtempoChain(f), "-vn", outFile], {
+      timeout: 60_000,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const buf = await fs.readFile(outFile);
+    const durSec = await probeDuration(outFile);
+    return res.json({
+      audioBase64: buf.toString("base64"),
+      durationMs: durSec ? Math.round(durSec * 1000) : null,
+    });
+  } catch (e) {
+    console.error("[audio-speed-fail]", e?.stderr || e?.message || e);
+    return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  } finally {
+    await fs.rm(inFile, { force: true }).catch(() => {});
+    await fs.rm(outFile, { force: true }).catch(() => {});
+  }
 });
 
 app.get("/jobs/:jobId", (req, res) => {

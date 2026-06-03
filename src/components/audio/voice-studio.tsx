@@ -47,14 +47,17 @@ export function VoiceStudio({
   scriptId,
   initialAudios,
   hasTTSProvider,
+  defaultSpeed,
 }: {
   scriptId: string;
   initialAudios: AudioRecord[];
   hasTTSProvider: boolean;
+  defaultSpeed?: number;
 }) {
   const [audios, setAudios] = useState(initialAudios);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
+  const [speed, setSpeed] = useState<number>(defaultSpeed ?? 1.5);
   const [busyPart, setBusyPart] = useState<AudioPart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -80,6 +83,7 @@ export function VoiceStudio({
           part,
           voiceId: selectedVoiceId,
           voiceName: voice?.name,
+          speed,
         });
         // Optimistically update
         setAudios((prev) => {
@@ -117,7 +121,7 @@ export function VoiceStudio({
     startTransition(async () => {
       try {
         const voice = voices.find((v) => v.id === selectedVoiceId);
-        await generateAllAudioAction(scriptId, selectedVoiceId, voice?.name);
+        await generateAllAudioAction(scriptId, selectedVoiceId, voice?.name, speed);
         // refresh — easier: navigate or fetch. We'll trigger a soft reload by re-running list.
         const v = await listVoicesAction();
         setVoices(v);
@@ -177,6 +181,32 @@ export function VoiceStudio({
               Sinh hết 3 concept
             </Button>
           </div>
+        </div>
+
+        <div className="rounded-md border border-border bg-zinc-50/50 p-3 space-y-1.5">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium flex items-center gap-1.5">
+              <Volume2 className="h-3.5 w-3.5 text-purple-600" />
+              Tốc độ đọc
+            </span>
+            <span className="font-mono text-purple-700">{speed.toFixed(2)}×</span>
+          </div>
+          <input
+            type="range"
+            min={0.7}
+            max={2.0}
+            step={0.05}
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            className="w-full accent-purple-600"
+          />
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>1.0 chuẩn</span>
+            <span>1.2 nhanh (native)</span>
+            <span>1.5 cuốn</span>
+            <span>2.0 rất nhanh</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground">&gt;1.2 tăng tốc qua VPS (giữ cao độ, không &quot;giọng vịt&quot;).</p>
         </div>
 
         {!hasTTSProvider && (

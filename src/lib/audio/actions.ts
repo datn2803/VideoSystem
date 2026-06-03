@@ -8,6 +8,7 @@ export async function generateAudioAction(input: {
   part: AudioPart;
   voiceId?: string;
   voiceName?: string;
+  speed?: number;
 }) {
   const record = await generateAudioForScript(input);
   revalidatePath(`/scripts/${input.scriptId}`);
@@ -22,14 +23,15 @@ export async function generateAudioAction(input: {
   };
 }
 
-export async function generateAllAudioAction(scriptId: string, voiceId?: string, voiceName?: string) {
+export async function generateAllAudioAction(scriptId: string, voiceId?: string, voiceName?: string, speed?: number) {
   const parts: AudioPart[] = ["full", "broll", "animation"];
-  // Chạy SONG SONG các part để giảm tổng thời gian (ElevenLabs đồng bộ, mỗi part ~1–3s).
+  // Chạy SONG SONG các part để giảm tổng thời gian (ElevenLabs đồng bộ, mỗi part ~1–3s;
+  // atempo VPS nhẹ ~1s nên 3 part song song vẫn trong timeout).
   // (audioStore.save có khóa ghi nên không mất bản ghi.)
   const results = await Promise.all(
     parts.map(async (part) => {
       try {
-        const r = await generateAudioForScript({ scriptId, part, voiceId, voiceName });
+        const r = await generateAudioForScript({ scriptId, part, voiceId, voiceName, speed });
         return { part, ok: true, id: r.id };
       } catch (e) {
         return { part, ok: false, error: e instanceof Error ? e.message : String(e) };
