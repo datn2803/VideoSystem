@@ -105,9 +105,13 @@
 
       /* ===================== S2 — big number ===================== */
       #s2 .big { text-align: center; position: relative; z-index: 2; padding: 0 60px; }
+      /* value + unit CÙNG HÀNG (nowrap) — fitText co cả cụm như 1 khối. */
       #s2 .bnum { color: #f5f5f7; font-weight: 900; font-size: 300px; line-height: 0.96; letter-spacing: -4px;
-        text-shadow: 0 0 80px var(--red-glow, rgba(225,29,42,0.4)); white-space: nowrap; }
-      #s2 .bunit { color: var(--red); font-weight: 800; font-size: 70px; margin-top: 6px; }
+        text-shadow: 0 0 80px var(--red-glow, rgba(225,29,42,0.4)); white-space: nowrap;
+        display: flex; align-items: flex-start; justify-content: center; flex-wrap: nowrap; gap: 0.04em; }
+      /* unit nhỏ hơn (superscript), trắng, dính sát số, KHÔNG xuống dòng. em → scale theo fitText. */
+      #s2 .bunit { font-size: 0.45em; font-weight: 800; color: #f5f5f7; letter-spacing: 0;
+        align-self: flex-start; margin-top: 0.1em; line-height: 1; }
       #s2 .blabel { color: rgba(255,255,255,0.62); font-weight: 600; font-size: 44px; margin-top: 24px; }
 
       /* ===================== S3 — donut ===================== */
@@ -212,8 +216,7 @@
         <div class="dotgrid"></div><div class="vignette"></div><div class="grain"></div>
         <div class="big">
           <div class="eyebrow-top" id="s2label"></div>
-          <div class="bnum"><span id="s2num">0</span></div>
-          <div class="bunit" id="s2unit"></div>
+          <div class="bnum" id="s2bnum"><span id="s2num">0</span><span class="bunit" id="s2unit"></span></div>
         </div>
       </div>
 
@@ -493,7 +496,7 @@
         el.style.fontSize = Math.floor(best) + "px";
       }
       fitText("s1l1", 96, 44, 230); fitText("s1l2", 96, 44, 230); fitText("s1key", 150, 48, 380); fitText("s1sub", 46, 26, 130);
-      fitText("s2num", 300, 80, 360); fitText("s7e1", 84, 38, 210); fitText("s7e2", 150, 44, 560); fitText("s7e3text", 44, 24, 120);
+      fitText("s2bnum", 300, 80, 360); fitText("s7e1", 84, 38, 210); fitText("s7e2", 150, 44, 560); fitText("s7e3text", 44, 24, 120);
 
       // ── Duration scaling: tile [0,BASE] → [0,dur] (khớp voice-over) ──
       const BASE = 20.5;
