@@ -3,8 +3,13 @@ import { buildBroll, pollBrollJob } from "./builders/c2-broll";
 import { buildAnimation, pollAnimationJob } from "./builders/c3-animation";
 import { videoStore, type ConceptKind, type VideoDraftRecord } from "./storage";
 
-export async function buildConcept(scriptId: string, concept: ConceptKind, audioId?: string): Promise<VideoDraftRecord> {
-  if (concept === "talking") return buildTalkingHead({ scriptId, audioId });
+export async function buildConcept(
+  scriptId: string,
+  concept: ConceptKind,
+  audioId?: string,
+  force?: boolean
+): Promise<VideoDraftRecord> {
+  if (concept === "talking") return buildTalkingHead({ scriptId, audioId, force });
   if (concept === "broll") return buildBroll({ scriptId, audioId });
   if (concept === "animation") return buildAnimation({ scriptId, audioId });
   throw new Error(`Unknown concept: ${concept}`);

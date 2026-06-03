@@ -33,14 +33,17 @@ function toPublicUrl(storagePath?: string): string | undefined {
 
 const isHttpUrl = (u?: string): u is string => !!u && /^https?:\/\//i.test(u);
 
-function hashRender(scriptId: string, voiceId: string | undefined, avatarImageUrl: string): string {
-  return crypto.createHash("sha256").update(`${scriptId}::${voiceId || ""}::${avatarImageUrl}`).digest("hex");
+// Gồm audioId: audio đổi (đổi tốc độ/giọng/nội dung → re-gen tạo id mới) → hash đổi → render lại đúng.
+// Vẫn giữ cost-guard khi input y hệt (cùng audio + cùng avatar).
+function hashRender(scriptId: string, audioId: string | undefined, avatarImageUrl: string): string {
+  return crypto.createHash("sha256").update(`${scriptId}::${audioId || ""}::${avatarImageUrl}`).digest("hex");
 }
 
 
 export async function buildTalkingHead(input: {
   scriptId: string;
   audioId?: string;
+  force?: boolean;
 }): Promise<VideoDraftRecord> {
   const script = await scriptStore.get(input.scriptId);
   if (!script) throw new Error("Script not found");
@@ -81,11 +84,14 @@ export async function buildTalkingHead(input: {
     }
 
     // ── Cost-guard cache: input giống hệt đã render xong → trả video cũ, KHÔNG gọi lại API ──
-    const renderHash = hashRender(input.scriptId, audio?.voiceId, avatarId);
-    const cached = (await videoStore.byScript(input.scriptId)).find(
-      (v) => v.concept === "talking" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
-    );
-    if (cached) return cached;
+    // force=true (nút Re-render thủ công) → bỏ qua cache, luôn render lại.
+    const renderHash = hashRender(input.scriptId, audio?.id, avatarId);
+    if (!input.force) {
+      const cached = (await videoStore.byScript(input.scriptId)).find(
+        (v) => v.concept === "talking" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
+      );
+      if (cached) return cached;
+    }
 
     const draft = await videoStore.create({
       scriptId: input.scriptId,

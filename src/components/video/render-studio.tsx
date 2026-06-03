@@ -106,12 +106,12 @@ export function RenderStudio({
     };
   }, [hasPending, drafts]);
 
-  const handleRender = (concept: ConceptKind) => {
+  const handleRender = (concept: ConceptKind, force = false) => {
     setError(null);
     setBusyConcept(concept);
     startTransition(async () => {
       try {
-        const result = await renderConceptAction({ scriptId, concept });
+        const result = await renderConceptAction({ scriptId, concept, force });
         setDrafts((prev) => {
           const filtered = prev.filter((d) => d.concept !== concept);
           return [...filtered, result];
@@ -198,7 +198,7 @@ export function RenderStudio({
               concept={concept}
               draft={draftByConcept(concept)}
               busy={isPending && busyConcept === concept}
-              onRender={() => handleRender(concept)}
+              onRender={(force) => handleRender(concept, force)}
               onDelete={(id) => handleDelete(id)}
             />
           ))}
@@ -218,7 +218,7 @@ function ConceptCard({
   concept: ConceptKind;
   draft?: Draft;
   busy: boolean;
-  onRender: () => void;
+  onRender: (force: boolean) => void;
   onDelete: (id: string) => void;
 }) {
   const meta = CONCEPT_META[concept];
@@ -248,7 +248,7 @@ function ConceptCard({
       <p className="text-[10px] text-muted-foreground line-clamp-2">{meta.description}</p>
 
       {!draft ? (
-        <Button variant="accent" size="sm" className="w-full" onClick={onRender} disabled={busy}>
+        <Button variant="accent" size="sm" className="w-full" onClick={() => onRender(false)} disabled={busy}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
           Render
         </Button>
@@ -270,7 +270,7 @@ function ConceptCard({
             <span>${draft.costUsd.toFixed(2)}</span>
           </div>
           <div className="flex gap-1">
-            <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px]" onClick={onRender} disabled={busy}>
+            <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px]" onClick={() => onRender(true)} disabled={busy}>
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
               Re-render
             </Button>
@@ -289,7 +289,7 @@ function ConceptCard({
           <div className="rounded-md bg-rose-50 border border-rose-200 p-2 text-[10px] text-rose-700">
             {draft.error || "Render thất bại"}
           </div>
-          <Button variant="accent" size="sm" className="w-full" onClick={onRender} disabled={busy}>
+          <Button variant="accent" size="sm" className="w-full" onClick={() => onRender(true)} disabled={busy}>
             <RefreshCw className="h-3 w-3" /> Thử lại
           </Button>
         </>

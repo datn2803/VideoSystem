@@ -7,8 +7,9 @@ export async function renderConceptAction(input: {
   scriptId: string;
   concept: ConceptKind;
   audioId?: string;
+  force?: boolean;
 }) {
-  const draft = await buildConcept(input.scriptId, input.concept, input.audioId);
+  const draft = await buildConcept(input.scriptId, input.concept, input.audioId, input.force);
   revalidatePath(`/scripts/${input.scriptId}`);
   return serializeDraft(draft);
 }
