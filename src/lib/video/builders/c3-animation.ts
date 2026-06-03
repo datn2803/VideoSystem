@@ -61,27 +61,66 @@ function themeFromSeed(seed: string): number {
   return h % 5; // 5 theme trong animation.html
 }
 
+/** Token đơn vị NGẮN (1 từ) cho chip/bar. */
+function oneToken(unit: string): string {
+  return ((unit || "").split(/[\s,;.]/).filter(Boolean)[0] || "").slice(0, 10);
+}
+
+/** Độ lớn số (bỏ dấu phân nhóm) để chọn "số khổng lồ" cho S2. */
+function magnitude(value: string): number {
+  const n = Number(String(value).replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Donut: trích các dataPoint có "%" thật (anti-fabrication — rỗng nếu không có %). */
+function parsePercentSegments(points: string[]): { label: string; pct: number }[] {
+  const segs: { label: string; pct: number }[] = [];
+  for (const raw of points || []) {
+    const s = String(raw || "");
+    const m = s.match(/(\d[\d.,]*)\s*%/);
+    if (!m) continue;
+    const pct = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) continue;
+    let label = s.slice(0, m.index ?? 0).replace(/[:\-–—]\s*$/, "").trim();
+    if (!label) label = s.slice((m.index ?? 0) + m[0].length).replace(/^[\s:.\-–—]+/, "").trim();
+    segs.push({ label: label.slice(0, 28), pct: Math.round(pct * 10) / 10 });
+    if (segs.length >= 5) break;
+  }
+  return segs;
+}
+
 function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
   const anim = s.variantPrompts.animation;
   const [hookLine1, hookLine2] = splitTwoLines(s.hook || "");
+  const keyword = shortKeyword(anim.keyMessages?.[0] || s.hook || "");
 
-  // Data viz: chỉ điền nếu có ≥2 dataPoint parse được số THẬT (anti-fabrication).
+  // Parse số THẬT từ dataPoints (anti-fabrication). Không số → không scene data.
   const parsed = (anim.dataPoints || [])
     .map(parseDataPoint)
     .filter((d: ParsedDataPoint | null): d is ParsedDataPoint => d != null);
-  const hasData = parsed.length >= 2;
-  const a = hasData ? parsed[0] : null;
-  const b = hasData ? parsed[1] : null;
 
-  // S3 (hồi sinh): keyMessages = NỘI DUNG THẬT → point cards (badge số + câu chốt).
-  // Card đầu đánh dấu "active" để nổi bật (chỉ là style, không phải tuyên bố dữ liệu).
+  // S1 chip + S2 big number: số lớn nhất parse được làm "số khổng lồ".
+  const hookStat = parsed[0] ? `${parsed[0].value}|${oneToken(parsed[0].unit)}` : "";
+  const big = parsed.length
+    ? parsed.reduce((m, p) => (magnitude(p.value) > magnitude(m.value) ? p : m))
+    : null;
+
+  // S3 donut: chỉ khi dataPoints có "%" thật.
+  const donutSegs = parsePercentSegments(anim.dataPoints || []);
+
+  // S4 bars: ≥2 số thật mới hiện (so sánh nhiều mục).
+  const dataBars = parsed.slice(0, 4).map((p) => ({
+    label: p.label.slice(0, 24),
+    value: p.value,
+    unit: oneToken(p.unit).slice(0, 8),
+  }));
+  const barsOK = parsed.length >= 2;
+
+  // S6 point cards: keyMessages = nội dung thật (badge số + câu). Card đầu "active" (style).
   const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 3);
   const levels = points.map((m, i) => ({ n: String(i + 1), label: m, active: i === 0 }));
 
-  // S1 từ khoá lớn: cụm NGẮN từ keyMessage đầu (không đổ cả câu vào chữ 150px).
-  const keyword = shortKeyword(anim.keyMessages?.[0] || s.hook || "");
-
-  // CTA: tách CÂU HỎI (cta_top) + ACTION (cta_keyword) + TỪ KHOÁ NHẤN (cta_hl, vd 'LAI').
+  // CTA: tách CÂU HỎI (cta_top) + ACTION (cta_keyword) + TỪ KHOÁ NHẤN (cta_hl).
   const ctaRaw = (s.cta || "").trim();
   let ctaTop = "";
   let ctaKeyword = ctaRaw;
@@ -93,41 +132,39 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
   const hlMatch = ctaRaw.match(/['"“”']([^'"“”']{1,20})['"“”']/);
   const ctaHl = hlMatch ? hlMatch[1].trim() : "";
 
-  // Bars GỌN: nhãn ngắn + số + đơn vị 1 token → biểu đồ cột không bị chữ lộn xộn.
-  const dataBars = parsed.slice(0, 4).map((p) => ({
-    label: p.label.slice(0, 24),
-    value: p.value,
-    unit: ((p.unit || "").split(/[\s,;.]/).filter(Boolean)[0] || "").slice(0, 8),
-  }));
-
   return {
+    // S1 hook
     hook_line1: hookLine1,
     hook_line2: hookLine2,
     hook_keyword: keyword,
     hook_sub: "",
-    // Eyebrow cho scene data — nhãn trung tính (KHÔNG phải số bịa), chỉ hiện khi có data thật.
-    data_title: hasData ? "Con số biết nói" : "",
-    data_a_label: a?.label ?? "",
-    data_a_value: a?.value ?? "",
-    data_a_unit: a?.unit ?? "",
-    data_b_label: b?.label ?? "",
-    data_b_value: b?.value ?? "",
-    data_b_unit: b?.unit ?? "",
-    data_ghost: "",
-    // S3 hồi sinh: tiêu đề nhãn trung tính + point cards từ keyMessages (nội dung thật).
+    hook_stat: hookStat,
+    // S2 big number (rỗng nếu không có số → scene tự ẩn)
+    bignum_value: big ? big.value : "",
+    bignum_unit: big ? big.unit : "",
+    bignum_label: big ? (big.label || "").toUpperCase() : "",
+    // S3 donut (rỗng nếu không có % → tự ẩn)
+    donut_segments: JSON.stringify(donutSegs),
+    donut_title: donutSegs.length ? "Cơ cấu" : "",
+    // S4 bars (chỉ khi ≥2 số)
+    data_bars: JSON.stringify(barsOK ? dataBars : []),
+    bars_title: barsOK ? "Những con số" : "",
+    // S5 pictogram/flow/news: để rỗng ở 2A (tự ẩn). Sẽ nối ở chặng sau khi có parser nội dung.
+    pictogram: "",
+    flow_nodes: "[]",
+    news_cards: "[]",
+    // S6 point cards
     levels_title: points.length ? "Những điểm cốt lõi" : "",
     levels: JSON.stringify(levels),
+    // S7 CTA
     cta_top: ctaTop,
     cta_keyword: ctaKeyword,
     cta_sub: "",
     cta_hl: ctaHl,
+    // Ảnh cutout: rỗng ở 2A (S1 tự bỏ ảnh) — VPS sẽ điền ở 2B.
+    img_hero: "",
     accent_color: accentColor || "#e11d2a",
-    // Đa dạng theo content + minh hoạ data ở hook (chip số THẬT, rỗng nếu không có số).
     theme: String(themeFromSeed((s.hook || s.cta || "x").trim())),
-    hook_stat: parsed[0] ? `${parsed[0].value}|${(parsed[0].unit || "").split(/[\s,;.]/).filter(Boolean)[0]?.slice(0, 10) || ""}` : "",
-    // Biến thể data viz theo content: 0=2 cột so sánh, 1=biểu đồ cột (chỉ khi có ≥2 số thật).
-    data_style: hasData ? String(themeFromSeed((s.cta || s.hook || "y").trim()) % 2) : "0",
-    data_bars: JSON.stringify(dataBars),
   };
 }
 
