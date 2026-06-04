@@ -144,9 +144,12 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     unit: oneToken(p.unit).slice(0, 8),
   }));
 
-  // S6 point cards: keyMessages = nội dung thật (badge số + câu). Card đầu "active" (style).
-  const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 3);
-  const levels = points.map((m, i) => ({ n: String(i + 1), label: m, active: i === 0 }));
+  // MỖI keyMessage = 1 CẢNH riêng (point scene) → tăng số cảnh, nhịp nhanh hơn,
+  // thay vì gộp hết vào 1 ô pills tĩnh 18s. Cắt ≤120 ký tự cho gọn.
+  const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 4);
+  const pointScenes = points.map((m, i) => ({ n: i + 1, total: points.length, text: m.slice(0, 120) }));
+  // Không dùng keyMessages làm fallback pills nữa (đã có pointScenes) → tránh trùng nội dung.
+  const levels: { n: string; label: string; active: boolean }[] = [];
 
   // CTA: tách CÂU HỎI (cta_top) + ACTION (cta_keyword) + TỪ KHOÁ NHẤN (cta_hl).
   const ctaRaw = (s.cta || "").trim();
@@ -176,12 +179,12 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     : [];
   const finalBars = llmBars.length >= 2 ? llmBars.slice(0, 4) : barsOK ? dataBars : [];
 
-  // Pills: ưu tiên anim.pills (4 distinct), fallback keyMessages.
+  // Pills: CHỈ dùng anim.pills (4 điểm NGẮN chuyên dụng). keyMessages giờ thành point scenes
+  // riêng → không gộp vào pills nữa (tránh trùng + tránh pill quá dài).
   const llmPills = Array.isArray(anim.pills)
     ? anim.pills.map((p) => String(p.text || "").trim()).filter(Boolean).slice(0, 4)
     : [];
-  const pillTexts = llmPills.length ? llmPills : points;
-  const pills = pillTexts.map((t, i) => ({ n: String(i + 1), label: t.slice(0, 60) }));
+  const pills = llmPills.map((t, i) => ({ n: String(i + 1), label: t.slice(0, 60) }));
 
   // Compare / principle / callout (định tính — content hợp lệ, không phải số bịa).
   const cmp =
@@ -211,11 +214,13 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     // S3 progress bars (≥2 mục cùng đơn vị)
     data_bars: JSON.stringify(finalBars),
     bars_title: finalBars.length >= 2 ? "Những con số" : "",
-    // S4 pills 2×2 (distinct) + levels (backward-compat)
+    // S4 pills 2×2 (CHỈ pills ngắn chuyên dụng) + levels (backward-compat, để rỗng)
     pills: JSON.stringify(pills),
     pills_title: pills.length ? "Điểm chính" : "",
-    levels_title: points.length ? "Những điểm cốt lõi" : "",
+    levels_title: "",
     levels: JSON.stringify(levels),
+    // Point scenes: mỗi keyMessage 1 cảnh riêng → nhiều cảnh hơn, nhịp nhanh hơn
+    points: JSON.stringify(pointScenes),
     // S_cmp compare 2 cột / S_emph principle + callout (định tính, rỗng → ẩn)
     compare: cmp ? JSON.stringify(cmp) : "",
     principle: principle,
