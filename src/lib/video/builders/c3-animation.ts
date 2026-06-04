@@ -90,28 +90,6 @@ function themeFromSeed(seed: string): number {
   return h % 3; // 3 light theme trong animation.html (lavender/cream/mist)
 }
 
-/** Tách voiceOver thành 4–6 câu ngắn + gán mốc t chia đều theo duration (caption phụ đề).
- *  Anti-fabrication: chỉ dùng text THẬT từ voiceOver; rỗng → []. */
-function buildCaptions(voiceOver: string, durationSec: number): { t: number; text: string }[] {
-  const raw = (voiceOver || "").replace(/\s+/g, " ").trim();
-  if (!raw) return [];
-  const sentences = raw
-    .split(/(?<=[.!?…])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  // gộp/chia về 4–6 segment cho dễ đọc
-  let segs = sentences;
-  if (sentences.length > 6) {
-    const per = Math.ceil(sentences.length / 6);
-    segs = [];
-    for (let i = 0; i < sentences.length; i += per) segs.push(sentences.slice(i, i + per).join(" "));
-  }
-  segs = segs.slice(0, 6).map((s) => s.slice(0, 140));
-  const n = segs.length;
-  if (n === 0) return [];
-  return segs.map((text, i) => ({ t: Math.round((durationSec * i) / n * 100) / 100, text }));
-}
-
 /** Token đơn vị NGẮN (1 từ) cho chip/bar. */
 function oneToken(unit: string): string {
   return ((unit || "").split(/[\s,;.]/).filter(Boolean)[0] || "").slice(0, 10);
@@ -293,14 +271,11 @@ export async function buildAnimation(input: {
         .trim()
         .slice(0, 120);
       const imgHeroUrl = await generateHeroImageUrl(input.scriptId, `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video`);
-      // Caption phụ đề (segment-level) từ voiceOver thật, chia đều theo độ dài.
-      const captions = buildCaptions(script.script.variantPrompts.animation.voiceOver, durationSec);
       const variables = {
         ...buildAnimationVariables(script.script),
         voice_url: voiceUrl,
         duration: String(durationSec),
         img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
-        captions: JSON.stringify(captions),
         visionQC: true, // VPS chỉ chấm QC (bỏ imagePrompts — không sinh ảnh trên VPS nữa)
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });

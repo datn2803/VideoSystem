@@ -24,7 +24,6 @@
     {"id":"cta_sub","type":"string","label":"CTA phụ đề","default":""},
     {"id":"cta_hl","type":"string","label":"CTA từ khoá nhấn","default":""},
     {"id":"img_hero","type":"string","label":"Ảnh nhân vật 3D PNG URL (rỗng=ẩn thẻ)","default":""},
-    {"id":"captions","type":"string","label":"Caption phụ đề JSON [{t,text}]","default":"[]"},
     {"id":"accent_color","type":"color","label":"Màu nhấn (không dùng — theme quyết định)","default":"#7c3aed"},
     {"id":"voice_url","type":"string","label":"Voice-over URL (mp3/wav, public)","default":""},
     {"id":"duration","type":"string","label":"Tổng thời lượng (giây) — khớp voice-over","default":"18.5"},
@@ -181,12 +180,6 @@
       #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; line-height: 1.2; margin-top: 44px;
         display: flex; align-items: center; justify-content: center; gap: 14px; }
       #s7 .e3 .emo { font-size: 56px; line-height: 1; }
-
-      /* ===================== Caption phụ đề (overlay) ===================== */
-      #caps { position: absolute; inset: 0; pointer-events: none; }
-      .cap-pill { position: absolute; left: 50%; transform: translateX(-50%); bottom: 150px; width: max-content; max-width: 860px;
-        background: rgba(20,18,30,0.82); color: #fff; font-weight: 700; font-size: 42px; line-height: 1.25;
-        padding: 20px 36px; border-radius: 22px; text-align: center; opacity: 0; }
     </style>
   </head>
 
@@ -267,9 +260,6 @@
           <div class="e3" id="s7e3"><span id="s7e3text"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
         </div>
       </div>
-
-      <!-- Caption phụ đề overlay (track 8 — luôn trên cùng, full duration) -->
-      <div id="caps" class="clip" data-start="0" data-duration="18.5" data-track-index="8"></div>
     </div>
 
     <script>
@@ -485,21 +475,6 @@
         setText("s7e3text", v.cta_sub || "");
       })();
 
-      // ── Caption phụ đề: 1 pill/segment, hiện theo mốc t (deterministic) ──
-      const caps = parseJSON(v.captions, []);
-      const capSegs = (Array.isArray(caps) ? caps : [])
-        .map((c) => ({ t: Number(c && c.t), text: String((c && c.text) || "").trim() }))
-        .filter((c) => Number.isFinite(c.t) && c.text)
-        .sort((a, b) => a.t - b.t);
-      if (capSegs.length === 0) { remove("caps"); }
-      else {
-        const host = document.getElementById("caps");
-        capSegs.forEach((c, i) => {
-          const pill = document.createElement("div"); pill.className = "cap-pill"; pill.id = "cap" + i; pill.textContent = c.text;
-          host.appendChild(pill);
-        });
-      }
-
       // ── AUTO-FIT chữ lớn (chống tràn) ──
       function fitText(id, maxPx, minPx, maxH) {
         const el = document.getElementById(id); if (!el || !String(el.textContent || "").trim()) return;
@@ -516,107 +491,124 @@
       const FT = (id, mx, mn, mh) => fitText(id, Math.round(mx * CF), mn, Math.round(mh * CF));
       FT("s1key", 150, 48, 360); FT("s1l1", 84, 40, 200); FT("s1l2", 84, 40, 200); FT("s1sub", 44, 24, 120);
       FT("s2bnum", 300, 80, 360); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 540); FT("s7e3text", 44, 24, 120);
-      capSegs.forEach((c, i) => FT("cap" + i, 42, 24, 150));
 
-      // ── Duration scaling: tile [0,BASE] → [0,dur] ──
-      const BASE = 20.5;
-      const dur = parseFloat(v.duration) || BASE;
-      const k = dur / BASE;
-      const P = (t) => +(t * k).toFixed(3);
-      ["bgbase", "s1", "s2", "s3d", "s4b", "s5", "s6", "s7", "caps"].forEach((id) => {
-        const el = document.getElementById(id); if (!el) return;
-        const st = parseFloat(el.getAttribute("data-start")) || 0;
-        const du = parseFloat(el.getAttribute("data-duration")) || 0;
-        el.setAttribute("data-start", String(+(st * k).toFixed(3)));
-        el.setAttribute("data-duration", String(+(du * k).toFixed(3)));
+      // ── Tile CHỈ scene đang hiển thị → lấp đầy toàn bộ voice (hết gap/đứng hình) ──
+      const total = parseFloat(v.duration) || 18.5;
+      const order = ["s1", "s2", "s3d", "s4b", "s5", "s6", "s7"];
+      const visible = order.filter((id) => document.getElementById(id));
+      const N = Math.max(1, visible.length);
+      const win = total / N; // mỗi scene 1 khung BẰNG NHAU, liền nhau → lấp đầy
+      const startOf = {};
+      visible.forEach((id, i) => {
+        const el = document.getElementById(id);
+        const s = +(i * win).toFixed(3);
+        el.setAttribute("data-start", String(s));
+        el.setAttribute("data-duration", win.toFixed(3));
+        startOf[id] = s;
       });
+      const bgEl = document.getElementById("bgbase");
+      if (bgEl) { bgEl.setAttribute("data-start", "0"); bgEl.setAttribute("data-duration", total.toFixed(3)); }
+      const has = (id) => startOf[id] != null;
 
-      // ── GSAP timeline (paused, deterministic) ──
+      // ── GSAP timeline (paused, deterministic) — KHÔNG nhân k; duration cố định, snappy ──
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
       gsap.defaults({ ease: "power3.out" });
 
-      /* S1 (base 0→3) */
-      tl.fromTo("#s1 .blob", { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 0.5, duration: 0.9, ease: "power2.out" }, P(0.05));
-      if (document.getElementById("s1ring"))
-        tl.fromTo("#s1ring", { rotation: -10, scale: 0.9, opacity: 0 }, { rotation: 10, scale: 1, opacity: 1, duration: P(2.8), ease: "none" }, P(0.1));
-      if (document.getElementById("s1chip"))
-        tl.fromTo("#s1chip", { scale: 0.5, opacity: 0, y: -12 }, { scale: 1, opacity: 1, y: 0, duration: 0.55, ease: "back.out(1.8)" }, P(0.35));
-      if (document.getElementById("heroWrap"))
-        tl.fromTo("#heroWrap", { scale: 0.96, opacity: 0, y: 30 }, { scale: 1.04, opacity: 1, y: 0, duration: P(2.6), ease: "power2.out" }, P(0.3));
-      tl.fromTo("#s1key", { scale: 0.4, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.8)" }, P(0.2));
-      tl.from("#s1 .l1 .word", { yPercent: 120, opacity: 0, duration: 0.5, stagger: 0.08 }, P(0.7));
-      tl.from("#s1 .l2 .word", { yPercent: 120, opacity: 0, duration: 0.5, stagger: 0.08 }, P(1.0));
-      if (document.getElementById("s1sub")) tl.fromTo("#s1sub", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5 }, P(1.8));
+      // Cross-fade + parallax CHẬM cho MỌI scene → không bao giờ chết hình.
+      visible.forEach((id, i) => {
+        const sel = "#" + id, s = startOf[id];
+        tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power1.out" }, s);
+        if (i < N - 1) tl.to(sel, { opacity: 0, duration: 0.22, ease: "power1.in" }, s + win - 0.22);
+        tl.fromTo(sel + " .dotgrid", { scale: 1.0 }, { scale: 1.05, duration: win, ease: "sine.inOut" }, s);
+      });
 
-      /* S2 (base 3→6) */
-      if (document.getElementById("s2")) {
-        tl.from("#s2label", { y: 20, opacity: 0, duration: 0.4 }, P(3.2));
-        if (bigIsNum) {
-          const cc = { v: 0 };
-          tl.to(cc, { v: bigNum, duration: 1.2, ease: "power2.out",
-            onUpdate: () => { const e = document.getElementById("s2num"); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, P(3.4));
-        } else {
-          tl.from("#s2num", { scale: 0.6, opacity: 0, duration: 0.6, ease: "back.out(1.6)" }, P(3.4));
+      /* S1 — entrance đặt tại đầu window (s + offset), duration cố định */
+      if (has("s1")) {
+        const s = startOf.s1;
+        tl.fromTo("#s1 .blob", { scale: 0.85, opacity: 0 }, { scale: 1, opacity: 0.5, duration: 0.6 }, s + 0.05);
+        if (document.getElementById("s1ring"))
+          tl.fromTo("#s1ring", { rotation: -12, opacity: 0 }, { rotation: 12, opacity: 1, duration: win, ease: "sine.inOut" }, s);
+        if (document.getElementById("s1chip"))
+          tl.fromTo("#s1chip", { scale: 0.5, opacity: 0, y: -12 }, { scale: 1, opacity: 1, y: 0, duration: 0.5, ease: "back.out(1.7)" }, s + 0.25);
+        if (document.getElementById("heroWrap")) {
+          tl.fromTo("#heroWrap", { scale: 0.94, opacity: 0, y: 24 }, { scale: 1, opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.4)" }, s + 0.15);
+          tl.to("#heroWrap", { y: -8, duration: Math.max(1, win / 2), ease: "sine.inOut", yoyo: true, repeat: 1 }, s + 0.8);
         }
-        tl.from("#s2unit", { y: 20, opacity: 0, duration: 0.4 }, P(4.7));
-        tl.to("#s2 .bnum", { scale: 1.04, duration: 0.6, yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, P(5.0));
+        tl.fromTo("#s1key", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.1);
+        tl.from("#s1 .l1 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.5);
+        tl.from("#s1 .l2 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.75);
+        if (document.getElementById("s1sub")) tl.fromTo("#s1sub", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, s + 1.05);
       }
 
-      /* S3 donut (base 6→9.2) */
-      if (document.getElementById("s3d")) {
-        tl.from("#s3title", { y: 20, opacity: 0, duration: 0.4 }, P(6.2));
+      /* S2 big number — count-up SNAPPY (0.6s) ngay đầu window */
+      if (has("s2")) {
+        const s = startOf.s2;
+        if (document.getElementById("s2label")) tl.from("#s2label", { y: 18, opacity: 0, duration: 0.4 }, s + 0.12);
+        if (bigIsNum) {
+          const cc = { v: 0 };
+          tl.to(cc, { v: bigNum, duration: 0.6, ease: "power3.out",
+            onUpdate: () => { const e = document.getElementById("s2num"); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.18);
+        } else {
+          tl.from("#s2num", { scale: 0.6, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.18);
+        }
+        if (document.getElementById("s2unit")) tl.from("#s2unit", { y: 16, opacity: 0, duration: 0.35 }, s + 0.7);
+        tl.to("#s2 .bnum", { scale: 1.03, duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 0.9);
+      }
+
+      /* S3 donut — arc draw + % count-up ≤0.8s */
+      if (has("s3d")) {
+        const s = startOf.s3d;
+        if (document.getElementById("s3title")) tl.from("#s3title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
         donutArcs.forEach((d, i) => {
-          tl.set("#" + d.id, { opacity: 1 }, P(6.4 + i * 0.35));
-          tl.fromTo("#" + d.id, { strokeDashoffset: d.off + d.len }, { strokeDashoffset: d.off, duration: 0.7, ease: "power2.out" }, P(6.4 + i * 0.35));
+          tl.set("#" + d.id, { opacity: 1 }, s + 0.2 + i * 0.18);
+          tl.fromTo("#" + d.id, { strokeDashoffset: d.off + d.len }, { strokeDashoffset: d.off, duration: 0.55, ease: "power2.out" }, s + 0.2 + i * 0.18);
         });
         const topPct = Math.max.apply(null, donut.map((d) => Number(d.pct) || 0));
         const pc = { v: 0 };
-        tl.to(pc, { v: topPct, duration: 0.9, ease: "power1.out",
-          onUpdate: () => { const e = document.getElementById("s3pct"); if (e) e.textContent = Math.round(pc.v); } }, P(6.5));
-        tl.from("#s3legend .lg", { y: 16, opacity: 0, duration: 0.4, stagger: 0.1 }, P(7.6));
+        tl.to(pc, { v: topPct, duration: 0.6, ease: "power3.out",
+          onUpdate: () => { const e = document.getElementById("s3pct"); if (e) e.textContent = Math.round(pc.v); } }, s + 0.25);
+        tl.from("#s3legend .lg", { y: 14, opacity: 0, duration: 0.35, stagger: 0.08 }, s + 0.9);
       }
 
-      /* S4 bars (base 9.2→12.2) */
-      if (document.getElementById("s4b")) {
-        tl.from("#s4title", { y: 20, opacity: 0, duration: 0.4 }, P(9.4));
+      /* S4 bars — cột mọc 0.6s stagger 0.1s */
+      if (has("s4b")) {
+        const s = startOf.s4b;
+        if (document.getElementById("s4title")) tl.from("#s4title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
         barNums.forEach((i) => {
-          tl.from("#brow" + i, { x: -50, opacity: 0, duration: 0.5 }, P(9.5 + i * 0.25));
-          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: "power3.out" }, P(9.7 + i * 0.25));
+          tl.from("#brow" + i, { x: -40, opacity: 0, duration: 0.4 }, s + 0.2 + i * 0.1);
+          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.out" }, s + 0.3 + i * 0.1);
         });
       }
 
-      /* S5 (base 12.2→15) */
-      if (document.getElementById("s5")) {
-        if (document.getElementById("s5title")) tl.from("#s5title", { y: 20, opacity: 0, duration: 0.4 }, P(12.4));
-        if (s5mode === "flow") tl.from("#s5 .fnode", { x: -40, opacity: 0, duration: 0.45, stagger: 0.14 }, P(12.5));
+      /* S5 */
+      if (has("s5")) {
+        const s = startOf.s5;
+        if (document.getElementById("s5title")) tl.from("#s5title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
+        if (s5mode === "flow") tl.from("#s5 .fnode", { x: -36, opacity: 0, duration: 0.4, stagger: 0.1 }, s + 0.2);
         else if (s5mode === "pic") {
-          tl.from("#s5 .pic .pi", { scale: 0, opacity: 0, duration: 0.4, stagger: 0.04, ease: "back.out(2)" }, P(12.5));
-          if (document.getElementById("s5piclabel")) tl.from("#s5piclabel", { y: 18, opacity: 0, duration: 0.4 }, P(13.8));
-        } else if (s5mode === "news") tl.from("#s5 .ncard", { y: 60, opacity: 0, duration: 0.5, stagger: 0.16, ease: "back.out(1.4)" }, P(12.5));
+          tl.from("#s5 .pic .pi", { scale: 0, opacity: 0, duration: 0.35, stagger: 0.03, ease: "back.out(2)" }, s + 0.2);
+          if (document.getElementById("s5piclabel")) tl.from("#s5piclabel", { y: 16, opacity: 0, duration: 0.35 }, s + 0.9);
+        } else if (s5mode === "news") tl.from("#s5 .ncard", { y: 50, opacity: 0, duration: 0.45, stagger: 0.12, ease: "back.out(1.4)" }, s + 0.2);
       }
 
-      /* S6 cards (base 15→17.8) */
-      if (document.getElementById("s6")) {
-        tl.from("#s6 .title", { y: 30, opacity: 0, duration: 0.5 }, P(15.2));
-        tl.from("#s6 .card", { x: -60, opacity: 0, duration: 0.5, stagger: 0.18 }, P(15.5));
+      /* S6 cards */
+      if (has("s6")) {
+        const s = startOf.s6;
+        if (document.getElementById("s6title")) tl.from("#s6 .title", { y: 24, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.from("#s6 .card", { x: -50, opacity: 0, duration: 0.45, stagger: 0.12 }, s + 0.3);
       }
 
-      /* S7 CTA (base 17.8→20.5) */
-      tl.from("#s7e1", { y: 30, opacity: 0, duration: 0.5 }, P(18.0));
-      tl.fromTo("#s7e2", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.6, ease: "back.out(1.8)" }, P(18.3));
-      tl.to("#s7e2", { scale: 1.05, duration: 0.6, yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, P(19.1));
-      if (document.getElementById("s7e3")) tl.from("#s7e3", { y: 24, opacity: 0, duration: 0.5 }, P(19.0));
+      /* S7 CTA */
+      if (has("s7")) {
+        const s = startOf.s7;
+        tl.from("#s7e1", { y: 24, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.fromTo("#s7e2", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.35);
+        tl.to("#s7e2", { scale: 1.04, duration: Math.max(0.8, win / 3), yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 1.0);
+        if (document.getElementById("s7e3")) tl.from("#s7e3", { y: 20, opacity: 0, duration: 0.4 }, s + 0.7);
+      }
 
-      /* Caption phụ đề — hiện theo mốc t THẬT (giây), không qua P() vì t đã là real-time. */
-      capSegs.forEach((c, i) => {
-        const start = Math.max(0, Math.min(dur - 0.1, c.t));
-        const end = i + 1 < capSegs.length ? Math.min(dur, capSegs[i + 1].t) : dur;
-        tl.fromTo("#cap" + i, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.3 }, start);
-        if (end < dur) tl.set("#cap" + i, { opacity: 0 }, Math.max(start + 0.3, end - 0.05));
-      });
-
-      tl.to({}, { duration: 0.001 }, Math.max(0, dur - 0.001));
+      tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
       window.__timelines["main"] = tl;
     </script>
   </body>
