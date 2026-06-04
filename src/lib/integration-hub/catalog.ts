@@ -193,9 +193,9 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
         type: "select",
         required: false,
         options: [
-          { value: "gpt-image-1", label: "GPT Image 1 (ổn định)" },
-          { value: "gpt-image-2", label: "GPT Image 2 (mới nhất)" },
-          { value: "gpt-image-1-mini", label: "GPT Image 1 Mini (rẻ nhất)" },
+          { value: "gpt-image-1", label: "GPT Image 1 (ổn định · hỗ trợ nền trong)" },
+          { value: "gpt-image-2", label: "GPT Image 2 (mới nhất · KHÔNG nền trong)" },
+          { value: "gpt-image-1-mini", label: "GPT Image 1 Mini (rẻ nhất · KHÔNG nền trong)" },
         ],
       },
       {

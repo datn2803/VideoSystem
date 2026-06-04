@@ -16,11 +16,15 @@ export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string;
   const quality = opts.quality || "low";
   return {
     async generate({ prompt, transparent, quality: qOverride }): Promise<ImageResult> {
-      const body: Record<string, unknown> = { model, prompt, n: 1, size };
+      // gpt-image-2 / mini KHÔNG hỗ trợ background:transparent → ép gpt-image-1 cho ảnh cutout.
+      // Opaque (C2) giữ nguyên model cấu hình.
+      const TRANSPARENT_OK = new Set(["gpt-image-1"]);
+      const effModel = transparent && !TRANSPARENT_OK.has(model) ? "gpt-image-1" : model;
+      const body: Record<string, unknown> = { model: effModel, prompt, n: 1, size };
       // chỉ gpt-image hỗ trợ low/medium/high; dall-e dùng standard/hd → bỏ qua.
-      if (model.includes("gpt-image")) body.quality = qOverride || quality;
+      if (effModel.includes("gpt-image")) body.quality = qOverride || quality;
       // Ảnh cutout C3: nền TRONG SUỐT (PNG) để ghép trên nền tối composition.
-      if (transparent && model.includes("gpt-image")) {
+      if (transparent && effModel.includes("gpt-image")) {
         body.background = "transparent";
         body.output_format = "png";
       }
@@ -33,7 +37,7 @@ export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string;
       const data = (await res.json()) as { data?: { b64_json?: string }[] };
       const b64 = data.data?.[0]?.b64_json;
       if (!b64) throw new Error("OpenAI Image: response thiếu b64_json");
-      return { imageBase64: b64, mimeType: "image/png", costUsd: estimateCost(model, size) };
+      return { imageBase64: b64, mimeType: "image/png", costUsd: estimateCost(effModel, size) };
     },
     async testConnection() {
       const t0 = Date.now();
