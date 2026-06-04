@@ -6,19 +6,14 @@
     {"id":"hook_line2","type":"string","label":"Hook dòng 2","default":"làm content"},
     {"id":"hook_keyword","type":"string","label":"Hook từ khoá (accent)","default":"Đang vô hình"},
     {"id":"hook_sub","type":"string","label":"Hook phụ đề","default":""},
-    {"id":"hook_stat","type":"string","label":"Hook stat chip value|unit (rỗng=ẩn)","default":""},
-    {"id":"bignum_value","type":"string","label":"S2 số khổng lồ (rỗng=ẩn)","default":""},
-    {"id":"bignum_unit","type":"string","label":"S2 đơn vị số lớn","default":""},
-    {"id":"bignum_label","type":"string","label":"S2 eyebrow (IN HOA)","default":""},
-    {"id":"donut_segments","type":"string","label":"S3 donut JSON [{label,pct,color}]","default":"[]"},
-    {"id":"donut_title","type":"string","label":"S3 eyebrow","default":""},
-    {"id":"data_bars","type":"string","label":"S4 bar JSON [{label,value,unit}]","default":"[]"},
-    {"id":"bars_title","type":"string","label":"S4 eyebrow","default":""},
-    {"id":"pictogram","type":"string","label":"S5 pictogram JSON {icons,active,label}","default":""},
-    {"id":"flow_nodes","type":"string","label":"S5 flow JSON [\"a\",\"b\",..]","default":"[]"},
-    {"id":"news_cards","type":"string","label":"S5 news JSON [{title,body}]","default":"[]"},
-    {"id":"levels_title","type":"string","label":"S6 tiêu đề point cards","default":""},
-    {"id":"levels","type":"string","label":"S6 point cards JSON [{n,label,desc,active}]","default":"[]"},
+    {"id":"hook_eyebrow","type":"string","label":"S1 eyebrow (IN HOA, rỗng=ẩn)","default":""},
+    {"id":"bignum_value","type":"string","label":"S2 số lớn (rỗng=ẩn)","default":""},
+    {"id":"bignum_unit","type":"string","label":"S2 đơn vị","default":""},
+    {"id":"bignum_label","type":"string","label":"S2 eyebrow/nhãn","default":""},
+    {"id":"data_bars","type":"string","label":"S3 progress JSON [{label,value,unit}]","default":"[]"},
+    {"id":"bars_title","type":"string","label":"S3 eyebrow","default":""},
+    {"id":"levels_title","type":"string","label":"S4 eyebrow/headline","default":""},
+    {"id":"levels","type":"string","label":"S4 pills JSON [{n,label}]","default":"[]"},
     {"id":"cta_top","type":"string","label":"CTA dòng trên","default":"Bạn đang ở"},
     {"id":"cta_keyword","type":"string","label":"CTA từ khoá (accent)","default":"Level mấy?"},
     {"id":"cta_sub","type":"string","label":"CTA phụ đề","default":""},
@@ -27,8 +22,8 @@
     {"id":"accent_color","type":"color","label":"Màu nhấn (không dùng — theme quyết định)","default":"#7c3aed"},
     {"id":"voice_url","type":"string","label":"Voice-over URL (mp3/wav, public)","default":""},
     {"id":"duration","type":"string","label":"Tổng thời lượng (giây) — khớp voice-over","default":"18.5"},
-    {"id":"theme","type":"string","label":"Theme index (0-2) — đổi màu nền sáng theo content","default":"0"},
-    {"id":"compact","type":"string","label":"QC: compact=1 → co chữ mạnh hơn (chống tràn)","default":""}
+    {"id":"theme","type":"string","label":"Theme index (0-2) — màu nền sáng","default":"0"},
+    {"id":"compact","type":"string","label":"QC: compact=1 → co chữ mạnh hơn","default":""}
   ]'
 >
   <head>
@@ -39,8 +34,7 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
-        width: 1080px; height: 1920px; overflow: hidden;
-        background: #f3f0fb;
+        width: 1080px; height: 1920px; overflow: hidden; background: #f3f0fb;
         font-family: "Be Vietnam Pro", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
       }
@@ -50,12 +44,14 @@
       }
       #root { position: relative; width: 1080px; height: 1920px; }
 
-      /* ---- Scene base ---- */
-      .scene {
-        position: absolute; inset: 0; width: 1080px; height: 1920px; overflow: hidden;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-      }
-      /* LIGHT background: pastel gradient + soft accent glow + warm frame. */
+      /* ── Scene base ── */
+      .scene { position: absolute; inset: 0; width: 1080px; height: 1920px; overflow: hidden; display: flex; }
+      /* center (Hero, CTA) */
+      .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
+      /* left (mặc định khối bố cục mẫu): bám lề trái, bắt đầu ~20% chiều cao */
+      .scene.left { flex-direction: column; justify-content: flex-start; align-items: stretch; padding: 380px 80px 120px; text-align: left; }
+      .scene.left .stack { display: flex; flex-direction: column; gap: 28px; width: 100%; }
+
       .bg-light {
         background:
           radial-gradient(90% 60% at 50% 8%, var(--glow) 0%, rgba(255,255,255,0) 55%),
@@ -70,200 +66,145 @@
         mask-image: radial-gradient(85% 75% at 50% 45%, #000 30%, transparent 82%);
       }
 
-      /* Bento card primitives */
-      .bento { background: var(--card); border-radius: 28px; border: 1px solid rgba(120,90,210,0.08);
-        box-shadow: 0 10px 30px rgba(80,60,160,0.10); }
-      .bento-accent { background: linear-gradient(160deg, var(--accent), var(--accent2)); color: #fff;
-        border-radius: 28px; box-shadow: 0 14px 36px var(--glow); }
-      .eyebrow {
-        display: inline-flex; align-items: center; gap: 12px; align-self: center;
-        background: rgba(124,58,237,0.10); color: var(--accent); font-weight: 800; font-size: 32px;
-        letter-spacing: 2px; text-transform: uppercase; padding: 12px 26px; border-radius: 999px; margin-bottom: 34px;
-      }
-      .eyebrow::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+      /* ── Eyebrow: dot-pill (center) + icon-square (left) ── */
+      .eyebrow { display: inline-flex; align-items: center; gap: 12px; }
+      .eyebrow.dot { align-self: center; background: rgba(124,58,237,0.10); color: var(--accent);
+        font-weight: 800; font-size: 32px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 26px; border-radius: 999px; }
+      .eyebrow.dot::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+      .eyebrow.icon .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--accent);
+        display: flex; align-items: center; justify-content: center; }
+      .eyebrow.icon .ico svg { width: 24px; height: 24px; }
+      .eyebrow.icon .lbl { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
 
-      .img-cutout { width: 100%; height: 100%; object-fit: contain; pointer-events: none; will-change: transform, opacity; }
+      /* ── Headline ── */
+      .h-title { color: var(--ink); font-weight: 900; font-size: 76px; line-height: 1.08; letter-spacing: -0.5px; }
+      .h-title .ac { color: var(--accent); }
 
-      /* ===================== S1 — hook ===================== */
-      #s1 { padding: 0 80px; }
-      #s1 .cap { text-align: center; line-height: 1.04; position: relative; z-index: 2; }
-      #s1 .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; letter-spacing: -1px;
-        line-height: 0.98; margin-bottom: 18px; }
-      #s1 .l { display: block; color: var(--ink); font-weight: 900; letter-spacing: -0.5px; }
-      #s1 .l1, #s1 .l2 { font-size: 84px; line-height: 1.04; }
-      #s1 .sub { display: block; color: var(--sub); font-weight: 600; font-size: 44px; margin-top: 20px; }
-      .word { display: inline-block; will-change: transform, opacity; }
-      #s1 .blob { position: absolute; inset: 0; margin: auto; width: 760px; height: 760px; border-radius: 50%;
-        pointer-events: none; opacity: 0.5; filter: blur(8px);
-        background: radial-gradient(circle, var(--glow) 0%, rgba(255,255,255,0) 62%); }
-      #s1 .ring { position: absolute; inset: 0; margin: auto; width: 660px; height: 660px; border-radius: 50%;
-        border: 2.5px dashed rgba(124,58,237,0.16); pointer-events: none; will-change: transform; }
-      #s1 .chip { position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; top: 210px;
-        display: flex; align-items: center; gap: 14px; padding: 16px 32px; border-radius: 999px;
-        background: var(--card); border: 1px solid rgba(120,90,210,0.10); box-shadow: 0 10px 30px rgba(80,60,160,0.12);
-        will-change: transform, opacity; }
-      #s1 .chip .cv { color: var(--accent); font-weight: 900; font-size: 60px; line-height: 1; }
-      #s1 .chip .ct { color: var(--sub); font-weight: 700; font-size: 32px; }
-      #s1 .herocard { position: absolute; left: 50%; transform: translateX(-50%); bottom: 120px;
-        width: 520px; height: 560px; padding: 18px; overflow: hidden;
-        display: flex; align-items: center; justify-content: center; will-change: transform, opacity; }
+      /* ── Bento card primitives ── */
+      .bento { background: var(--card); border-radius: 22px; border: 1px solid rgba(120,90,210,0.08);
+        box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
+      .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; }
 
-      /* ===================== S2 — big number ===================== */
-      #s2 .big { text-align: center; position: relative; z-index: 2; padding: 0 60px; }
-      #s2 .bnum { color: var(--accent); font-weight: 900; font-size: 300px; line-height: 0.96; letter-spacing: -4px;
-        white-space: nowrap; display: flex; align-items: flex-start; justify-content: center; flex-wrap: nowrap; gap: 0.04em; }
-      #s2 .bunit { font-size: 0.45em; font-weight: 800; color: var(--accent2); letter-spacing: 0;
-        align-self: flex-start; margin-top: 0.1em; line-height: 1; }
+      /* pill2 (2×2) */
+      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+      .pill { display: flex; align-items: center; gap: 18px; padding: 26px 28px; will-change: transform, opacity; }
+      .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: rgba(124,58,237,0.12);
+        color: var(--accent); font-weight: 900; font-size: 26px; display: flex; align-items: center; justify-content: center; }
+      .pill .pt { color: var(--ink); font-weight: 700; font-size: 34px; line-height: 1.18; }
 
-      /* ===================== S3 — donut ===================== */
-      #s3d .wrap { position: relative; width: 720px; height: 720px; }
-      #s3d svg { width: 720px; height: 720px; transform: rotate(-90deg); }
-      #s3d .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-      #s3d .cpct { color: var(--ink); font-weight: 900; font-size: 150px; line-height: 1; }
-      #s3d .clab { color: var(--sub); font-weight: 600; font-size: 40px; margin-top: 8px; }
-      #s3d .legend { display: flex; gap: 40px; margin-top: 50px; flex-wrap: wrap; justify-content: center; }
-      #s3d .lg { display: flex; align-items: center; gap: 14px; color: var(--ink); font-weight: 700; font-size: 38px; }
-      #s3d .lg .sw { width: 28px; height: 28px; border-radius: 8px; }
+      /* listcard */
+      .listcard { display: flex; flex-direction: column; gap: 20px; }
+      .lrow { display: flex; align-items: flex-start; gap: 18px; padding: 26px 30px; will-change: transform, opacity; }
+      .lrow .bullet { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 12px; border-radius: 50%; background: var(--accent); }
+      .lrow .lt { color: var(--ink); font-weight: 600; font-size: 38px; line-height: 1.25; }
 
-      /* ===================== S4 — bars ===================== */
-      #s4b { padding: 0 70px; }
-      #s4b .bars { width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 40px; }
-      #s4b .brow { will-change: transform, opacity; padding: 28px 32px; }
-      #s4b .bname { color: var(--ink); font-weight: 800; font-size: 38px; line-height: 1.2; letter-spacing: -0.3px; margin-bottom: 16px; }
-      #s4b .bbar { display: flex; align-items: center; gap: 22px; }
-      #s4b .btrack { flex: 1; min-width: 0; height: 40px; border-radius: 20px; background: rgba(124,58,237,0.10); overflow: hidden; }
-      #s4b .bfill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--accent2), var(--accent));
+      /* callout (thanh tím) */
+      .callout { background: rgba(124,58,237,0.08); border-left: 6px solid var(--accent); border-radius: 16px;
+        padding: 26px 30px; color: var(--ink); font-weight: 600; font-size: 38px; line-height: 1.3; will-change: transform, opacity; }
+      .callout b { color: var(--accent); font-weight: 900; }
+
+      /* emph (gradient) */
+      .emph { padding: 36px; will-change: transform, opacity; }
+      .emph .eb { color: rgba(255,255,255,0.8); font-weight: 800; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
+      .emph .em { color: #fff; font-weight: 800; font-size: 52px; line-height: 1.15; margin-top: 12px; }
+
+      /* compare (2 cột) */
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
+      .ccard { padding: 32px 30px; text-align: left; will-change: transform, opacity; }
+      .ccard .ct { font-weight: 800; font-size: 40px; line-height: 1.1; }
+      .ccard .cs { font-weight: 500; font-size: 32px; line-height: 1.3; margin-top: 12px; }
+      .ccard.l { color: var(--ink); } .ccard.l .cs { color: var(--sub); }
+      .ccard.r .ct, .ccard.r .cs { color: #fff; }
+
+      /* progress bars */
+      .pbars { display: flex; flex-direction: column; gap: 30px; }
+      .pbar { will-change: transform, opacity; padding: 26px 30px; }
+      .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+      .pbar .pn { color: var(--ink); font-weight: 800; font-size: 38px; }
+      .pbar .pv { color: var(--accent); font-weight: 900; font-size: 40px; white-space: nowrap; }
+      .pbar .ptrack { height: 36px; border-radius: 18px; background: rgba(124,58,237,0.10); overflow: hidden; }
+      .pbar .pfill { height: 100%; border-radius: 18px; background: linear-gradient(90deg, var(--accent2), var(--accent));
         transform-origin: left center; transform: scaleX(0); will-change: transform; }
-      #s4b .bval { color: var(--accent); font-weight: 900; font-size: 48px; line-height: 1; white-space: nowrap; flex: 0 0 auto; }
 
-      /* ===================== S5 — pills / flow / news ===================== */
-      #s5 { padding: 0 70px; }
-      #s5 .pic { display: grid; grid-template-columns: repeat(5, 1fr); gap: 28px 32px; max-width: 720px; }
-      #s5 .pic .pi { width: 92px; height: 92px; opacity: 0.22; will-change: opacity, transform; color: var(--accent); }
-      #s5 .pic .pi.on { opacity: 1; }
-      #s5 .pic .pi svg { width: 100%; height: 100%; }
-      #s5 .piclabel { color: var(--ink); font-weight: 800; font-size: 48px; margin-top: 56px; text-align: center; }
-      #s5 .flow { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 760px; }
-      #s5 .fnode { display: flex; align-items: center; gap: 22px; padding: 30px 36px; border-radius: 22px;
-        color: var(--ink); font-weight: 700; font-size: 42px; will-change: transform, opacity; }
-      #s5 .fnode .fn { flex: 0 0 60px; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center;
-        justify-content: center; font-size: 32px; background: rgba(124,58,237,0.12); color: var(--accent); font-weight: 900; }
-      #s5 .news { position: relative; width: 100%; height: 1100px; }
-      #s5 .ncard { position: absolute; width: 560px; padding: 34px 36px; border-radius: 18px; background: var(--card);
-        box-shadow: 0 22px 50px rgba(80,60,160,0.18); will-change: transform, opacity; }
-      #s5 .ncard .nt { color: var(--accent); font-weight: 900; font-size: 48px; line-height: 1.1; }
-      #s5 .ncard .nb { color: var(--sub); font-weight: 500; font-size: 34px; line-height: 1.3; margin-top: 14px; }
+      /* bignum */
+      .bignum { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 0.04em; line-height: 0.92;
+        color: var(--accent); font-weight: 900; font-size: 280px; letter-spacing: -4px; white-space: nowrap; }
+      .bignum .bu { font-size: 0.42em; font-weight: 800; color: var(--accent2); align-self: flex-start; margin-top: 0.12em; }
+      .blabel { color: var(--sub); font-weight: 600; font-size: 40px; }
 
-      /* ===================== S6 — point cards ===================== */
-      #s6 { padding: 0 70px; justify-content: flex-start; }
-      #s6 .title { color: var(--ink); font-weight: 900; font-size: 60px; text-align: center; letter-spacing: -0.5px;
-        margin-top: 240px; margin-bottom: 64px; line-height: 1.06; }
-      #s6 .cards { width: 100%; display: flex; flex-direction: column; gap: 28px; }
-      .card { display: flex; align-items: center; gap: 32px; border-radius: 26px; padding: 32px 38px; will-change: transform, opacity; }
-      .card .badge { flex: 0 0 88px; width: 88px; height: 88px; border-radius: 22px; display: flex; align-items: center;
-        justify-content: center; font-weight: 900; font-size: 48px; color: var(--accent); background: rgba(124,58,237,0.10); }
-      .card .meta { text-align: left; }
-      .card .lv { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 3px; text-transform: uppercase; }
-      .card .name { color: var(--ink); font-weight: 800; font-size: 40px; line-height: 1.18; }
-      .card .desc { color: var(--sub); font-weight: 500; font-size: 32px; margin-top: 6px; }
-      .card.active { color: #fff; }
-      .card.active .badge { background: rgba(255,255,255,0.22); color: #fff; }
-      .card.active .lv { color: rgba(255,255,255,0.85); }
-      .card.active .name, .card.active .desc { color: #fff; }
+      /* ── S1 hero (center) ── */
+      #s1 .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; line-height: 0.98; letter-spacing: -1px; }
+      #s1 .l { display: block; color: var(--ink); font-weight: 900; font-size: 78px; line-height: 1.05; }
+      #s1 .sub { display: block; color: var(--sub); font-weight: 600; font-size: 44px; margin-top: 18px; }
+      #s1 .herocard { width: 560px; height: 540px; margin-top: 44px; padding: 20px; display: flex; align-items: center; justify-content: center; overflow: hidden; will-change: transform, opacity; }
+      #s1 .herocard img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 24px 40px rgba(90,70,170,0.25)); }
 
-      /* ===================== S7 — CTA ===================== */
-      #s7 .end { text-align: center; max-width: 920px; }
-      #s7 .e1 { color: var(--ink); font-weight: 800; font-size: 80px; line-height: 1.14; letter-spacing: -0.5px; }
-      #s7 .e2 { color: var(--accent); font-weight: 900; font-size: 150px; line-height: 1.12; letter-spacing: -1px;
-        margin-top: 18px; will-change: transform; }
+      /* ── S7 CTA (center) ── */
+      #s7 .e1 { color: var(--ink); font-weight: 800; font-size: 80px; line-height: 1.14; }
+      #s7 .e2 { color: var(--accent); font-weight: 900; font-size: 150px; line-height: 1.12; letter-spacing: -1px; margin-top: 18px; will-change: transform; }
       #s7 .e2 .e2hl { color: var(--accent2); }
-      #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; line-height: 1.2; margin-top: 44px;
-        display: flex; align-items: center; justify-content: center; gap: 14px; }
+      #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
       #s7 .e3 .emo { font-size: 56px; line-height: 1; }
     </style>
   </head>
 
   <body>
     <div id="root" class="composition" data-composition-id="main" data-start="0" data-duration="18.5" data-width="1080" data-height="1920">
-      <!-- Voice-over: STATIC src (server bakes voice_url + data-duration at compile time). track 9 = off-screen. -->
       <audio id="vo" class="clip" data-start="0" data-duration="18.5" data-track-index="9" data-volume="1" src=""></audio>
 
-      <!-- Persistent LIGHT backdrop (track 0) covering any hidden-scene gap. -->
       <div id="bgbase" class="scene bg-light clip" data-start="0" data-duration="18.5" data-track-index="0">
         <div class="dotgrid"></div>
       </div>
 
-      <!-- S1 hook -->
-      <div id="s1" class="scene bg-light clip" data-start="0" data-duration="3" data-track-index="1">
+      <!-- S1 Hero (center): eyebrow → keyword → headline → sub → herocard 3D -->
+      <div id="s1" class="scene center bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
-        <div class="blob"></div><div class="ring" id="s1ring"></div>
-        <div class="chip" id="s1chip"><span class="cv" id="s1chipv"></span><span class="ct" id="s1chipt"></span></div>
-        <div class="herocard bento" id="heroWrap"><img id="imgHero" class="img-cutout" src="" alt="" /></div>
-        <div class="cap">
-          <span class="key" id="s1key"></span>
-          <span class="l l1" id="s1l1"></span>
-          <span class="l l2" id="s1l2"></span>
-          <span class="sub" id="s1sub"></span>
+        <div class="eyebrow dot" id="s1eb"></div>
+        <span class="key" id="s1key"></span>
+        <span class="l" id="s1l1"></span>
+        <span class="l" id="s1l2"></span>
+        <span class="sub" id="s1sub"></span>
+        <div class="herocard bento" id="heroWrap"><img id="imgHero" src="" alt="" /></div>
+      </div>
+
+      <!-- S2 Big number (left) -->
+      <div id="s2" class="scene left bg-light clip" data-start="3.7" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="s2eb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></span><span class="lbl" id="s2lbl"></span></div>
+          <div class="bignum" id="s2bnum"><span id="s2num">0</span><span class="bu" id="s2unit"></span></div>
+          <div class="blabel" id="s2label"></div>
         </div>
       </div>
 
-      <!-- S2 big number -->
-      <div id="s2" class="scene bg-light clip" data-start="3" data-duration="3" data-track-index="1">
+      <!-- S3 Progress bars (left) -->
+      <div id="s4b" class="scene left bg-light clip" data-start="7.4" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
-        <div class="big">
-          <div class="eyebrow" id="s2label"></div>
-          <div class="bnum" id="s2bnum"><span id="s2num">0</span><span class="bunit" id="s2unit"></span></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="s4eb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="8"/><rect x="13" y="5" width="3" height="13"/></svg></span><span class="lbl" id="s4lbl"></span></div>
+          <div class="pbars" id="s4bars"></div>
         </div>
       </div>
 
-      <!-- S3 donut -->
-      <div id="s3d" class="scene bg-light clip" data-start="6" data-duration="3.2" data-track-index="1">
+      <!-- S4 Pills 2×2 (left) -->
+      <div id="s6" class="scene left bg-light clip" data-start="11.1" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
-        <div class="eyebrow" id="s3title"></div>
-        <div class="wrap">
-          <svg id="s3svg" viewBox="0 0 320 320"></svg>
-          <div class="center"><div class="cpct"><span id="s3pct">0</span>%</div><div class="clab" id="s3clab"></div></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="s6eb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="lbl" id="s6lbl"></span></div>
+          <div class="pill2" id="s6pills"></div>
         </div>
-        <div class="legend" id="s3legend"></div>
       </div>
 
-      <!-- S4 bars -->
-      <div id="s4b" class="scene bg-light clip" data-start="9.2" data-duration="3" data-track-index="1">
+      <!-- S5 CTA (center) -->
+      <div id="s7" class="scene center bg-light clip" data-start="14.8" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
-        <div class="eyebrow" id="s4title"></div>
-        <div class="bars" id="s4bars"></div>
-      </div>
-
-      <!-- S5 pills / flow / news (multiplexed) -->
-      <div id="s5" class="scene bg-light clip" data-start="12.2" data-duration="2.8" data-track-index="1">
-        <div class="dotgrid"></div>
-        <div class="eyebrow" id="s5title"></div>
-        <div class="pic" id="s5pic"></div>
-        <div class="piclabel" id="s5piclabel"></div>
-        <div class="flow" id="s5flow"></div>
-        <div class="news" id="s5news"></div>
-      </div>
-
-      <!-- S6 point cards -->
-      <div id="s6" class="scene bg-light clip" data-start="15" data-duration="2.8" data-track-index="1">
-        <div class="dotgrid"></div>
-        <div class="title" id="s6title"></div>
-        <div class="cards" id="s6cards"></div>
-      </div>
-
-      <!-- S7 CTA -->
-      <div id="s7" class="scene bg-light clip" data-start="17.8" data-duration="2.7" data-track-index="1">
-        <div class="dotgrid"></div>
-        <div class="end">
-          <div class="e1" id="s7e1"></div>
-          <div class="e2" id="s7e2"></div>
-          <div class="e3" id="s7e3"><span id="s7e3text"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
-        </div>
+        <div class="e1" id="s7e1"></div>
+        <div class="e2" id="s7e2"></div>
+        <div class="e3" id="s7e3"><span id="s7e3text"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
       </div>
     </div>
 
     <script>
-      // ── Variables (sync) ──
       const v = (window.__hyperframes && window.__hyperframes.getVariables) ? window.__hyperframes.getVariables() : {};
       const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val == null ? "" : String(val); };
       const fillWords = (id, phrase) => {
@@ -271,17 +212,18 @@
         el.textContent = "";
         String(phrase || "").trim().split(/\s+/).filter(Boolean).forEach((w, i) => {
           if (i > 0) el.appendChild(document.createTextNode(" "));
-          const sp = document.createElement("span"); sp.className = "word"; sp.textContent = w; el.appendChild(sp);
+          const sp = document.createElement("span"); sp.className = "word"; sp.style.display = "inline-block"; sp.textContent = w; el.appendChild(sp);
         });
       };
       const parseJSON = (s, fb) => { try { const p = JSON.parse(s); return p == null ? fb : p; } catch (e) { return fb; } };
       const remove = (id) => { const el = document.getElementById(id); if (el) el.remove(); };
+      const hideIfEmpty = (id, val) => { if (!String(val || "").trim()) remove(id); else setText(id, val); };
 
-      // ── THEME (LIGHT — nền sáng pastel) ──
+      // ── THEME (light) ──
       const THEMES = [
-        { name: "lavender", bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
-        { name: "cream",    bg1: "#f8f2e9", bg2: "#f1e7d6", accent: "#7c3aed", accent2: "#f59e0b", ink: "#2b2238", sub: "#6b6480", card: "#fffdfa", glow: "rgba(124,58,237,0.14)" },
-        { name: "mist",     bg1: "#eef1fb", bg2: "#e3e8f7", accent: "#6d28d9", accent2: "#60a5fa", ink: "#1b1d2e", sub: "#646b80", card: "#ffffff", glow: "rgba(109,40,217,0.15)" },
+        { bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
+        { bg1: "#f8f2e9", bg2: "#f1e7d6", accent: "#7c3aed", accent2: "#f59e0b", ink: "#2b2238", sub: "#6b6480", card: "#fffdfa", glow: "rgba(124,58,237,0.14)" },
+        { bg1: "#eef1fb", bg2: "#e3e8f7", accent: "#6d28d9", accent2: "#60a5fa", ink: "#1b1d2e", sub: "#646b80", card: "#ffffff", glow: "rgba(109,40,217,0.15)" },
       ];
       const ti = Math.max(0, Math.min(THEMES.length - 1, parseInt(v.theme, 10) || 0));
       const TH = THEMES[ti];
@@ -291,173 +233,70 @@
       rs.setProperty("--ink", TH.ink); rs.setProperty("--sub", TH.sub);
       rs.setProperty("--card", TH.card); rs.setProperty("--glow", TH.glow);
 
-      // ── Hook stat chip ──
-      const hs = String(v.hook_stat || "").trim();
-      if (hs) { const p = hs.split("|"); setText("s1chipv", (p[0] || "").trim()); const t = (p[1] || "").trim(); if (t) setText("s1chipt", t); else remove("s1chipt"); }
-      else remove("s1chip");
-
-      // ── Nhân vật 3D (rỗng → ẩn thẻ hero; scene vẫn đẹp) ──
+      // ── S1 hero ──
+      hideIfEmpty("s1eb", v.hook_eyebrow);
+      setText("s1key", v.hook_keyword);
+      if (!String(v.hook_keyword || "").trim()) remove("s1key");
+      fillWords("s1l1", v.hook_line1); fillWords("s1l2", v.hook_line2);
+      if (!String(v.hook_line2 || "").trim()) remove("s1l2");
+      hideIfEmpty("s1sub", v.hook_sub);
       const heroUrl = String(v.img_hero || "").trim();
       if (heroUrl) { const im = document.getElementById("imgHero"); if (im) im.setAttribute("src", heroUrl); }
       else remove("heroWrap");
 
-      // ── S1 hook ──
-      setText("s1key", v.hook_keyword);
-      fillWords("s1l1", v.hook_line1); fillWords("s1l2", v.hook_line2);
-      setText("s1sub", v.hook_sub);
-      if (!String(v.hook_sub || "").trim()) remove("s1sub");
-
-      // ── S2 big number (anti-fab) ──
+      // ── S2 big number (left) — ẩn nếu không có số ──
       const bigRaw = String(v.bignum_value || "").trim();
       const bigNum = Number(bigRaw.replace(/[^\d.-]/g, ""));
       const bigIsNum = bigRaw !== "" && Number.isFinite(bigNum);
       if (bigRaw === "") { remove("s2"); }
       else {
-        setText("s2label", v.bignum_label); setText("s2unit", v.bignum_unit);
+        hideIfEmpty("s2lbl", v.bignum_label); if (!String(v.bignum_label || "").trim()) remove("s2eb");
         if (!bigIsNum) setText("s2num", bigRaw);
-        if (!String(v.bignum_label || "").trim()) remove("s2label");
-        if (!String(v.bignum_unit || "").trim()) remove("s2unit");
+        if (!String(v.bignum_unit || "").trim()) remove("s2unit"); else setText("s2unit", v.bignum_unit);
+        hideIfEmpty("s2label", v.bignum_label);
       }
 
-      // ── S3 donut (light) ──
-      const donut = parseJSON(v.donut_segments, []);
-      const donutOK = Array.isArray(donut) && donut.length >= 1 && donut.every((d) => Number(d && d.pct) > 0);
-      const DONUT_PALETTE = [TH.accent, "#f59e0b", "#1f9e9e", "#3b82f6", "#a855f7"];
-      const R = 130, C2 = 2 * Math.PI * R;
-      const donutArcs = [];
-      if (!donutOK) { remove("s3d"); }
-      else {
-        setText("s3title", v.donut_title);
-        if (!String(v.donut_title || "").trim()) remove("s3title");
-        const svg = document.getElementById("s3svg");
-        const NS = "http://www.w3.org/2000/svg";
-        const track = document.createElementNS(NS, "circle");
-        track.setAttribute("cx", "160"); track.setAttribute("cy", "160"); track.setAttribute("r", String(R));
-        track.setAttribute("fill", "none"); track.setAttribute("stroke", "rgba(124,58,237,0.10)"); track.setAttribute("stroke-width", "30");
-        svg.appendChild(track);
-        let offsetPct = 0;
-        donut.slice(0, 5).forEach((seg, i) => {
-          const pct = Math.max(0, Math.min(100, Number(seg.pct) || 0));
-          const color = seg.color || DONUT_PALETTE[i % DONUT_PALETTE.length];
-          const arc = document.createElementNS(NS, "circle");
-          arc.setAttribute("cx", "160"); arc.setAttribute("cy", "160"); arc.setAttribute("r", String(R));
-          arc.setAttribute("fill", "none"); arc.setAttribute("stroke", color); arc.setAttribute("stroke-width", "30");
-          arc.setAttribute("stroke-linecap", "butt");
-          const len = (pct / 100) * C2;
-          arc.setAttribute("stroke-dasharray", len.toFixed(2) + " " + (C2 - len).toFixed(2));
-          arc.setAttribute("stroke-dashoffset", String(-(offsetPct / 100) * C2));
-          arc.id = "darc" + i; arc.style.opacity = "0";
-          svg.appendChild(arc);
-          donutArcs.push({ id: "darc" + i, len: len, off: -(offsetPct / 100) * C2 });
-          offsetPct += pct;
-          const lg = document.createElement("div"); lg.className = "lg";
-          const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = color;
-          const tx = document.createElement("span"); tx.textContent = String(seg.label || "") + " " + pct + "%";
-          lg.appendChild(sw); lg.appendChild(tx);
-          document.getElementById("s3legend").appendChild(lg);
-        });
-        const top = donut.reduce((m, d) => (Number(d.pct) > Number(m.pct) ? d : m), donut[0]);
-        setText("s3clab", top.label || "");
-      }
-
-      // ── S4 bars (light bento rows) ──
+      // ── S3 progress bars (left) — ẩn nếu < 2 ──
       const bars = parseJSON(v.data_bars, []);
       const barsOK = Array.isArray(bars) && bars.length >= 2;
       const barNums = [];
       if (!barsOK) { remove("s4b"); }
       else {
-        setText("s4title", v.bars_title);
-        if (!String(v.bars_title || "").trim()) remove("s4title");
+        hideIfEmpty("s4lbl", v.bars_title); if (!String(v.bars_title || "").trim()) remove("s4eb");
         const host = document.getElementById("s4bars");
         const nums = bars.map((b) => { const x = Number(String(b.value).replace(/[^\d.-]/g, "")); return Number.isFinite(x) ? x : 0; });
         const maxv = Math.max.apply(null, nums.concat([1]));
         bars.slice(0, 4).forEach((b, i) => {
-          const row = document.createElement("div"); row.className = "brow bento"; row.id = "brow" + i;
-          const nm = document.createElement("div"); nm.className = "bname"; nm.textContent = String(b.label || "");
-          const bbar = document.createElement("div"); bbar.className = "bbar";
-          const track = document.createElement("div"); track.className = "btrack";
-          const fill = document.createElement("div"); fill.className = "bfill"; fill.id = "bfill" + i;
+          const row = document.createElement("div"); row.className = "pbar bento"; row.id = "brow" + i;
+          const pl = document.createElement("div"); pl.className = "pl";
+          const pn = document.createElement("span"); pn.className = "pn"; pn.textContent = String(b.label || "");
+          const pv = document.createElement("span"); pv.className = "pv"; pv.textContent = String(b.value || "") + (b.unit ? " " + String(b.unit) : "");
+          pl.appendChild(pn); pl.appendChild(pv);
+          const track = document.createElement("div"); track.className = "ptrack";
+          const fill = document.createElement("div"); fill.className = "pfill"; fill.id = "bfill" + i;
           fill.style.width = Math.max(6, Math.round((nums[i] / maxv) * 100)) + "%";
           track.appendChild(fill);
-          const vl = document.createElement("span"); vl.className = "bval";
-          vl.textContent = String(b.value || "") + (b.unit ? " " + String(b.unit) : "");
-          bbar.appendChild(track); bbar.appendChild(vl);
-          row.appendChild(nm); row.appendChild(bbar); host.appendChild(row);
+          row.appendChild(pl); row.appendChild(track); host.appendChild(row);
           barNums.push(i);
         });
       }
 
-      // ── S5 multiplexer ──
-      const flow = parseJSON(v.flow_nodes, []);
-      const pic = parseJSON(v.pictogram, null);
-      const news = parseJSON(v.news_cards, []);
-      const PERSON = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
-      let s5mode = "none";
-      if (Array.isArray(flow) && flow.length >= 2) s5mode = "flow";
-      else if (pic && Number(pic.icons) > 0) s5mode = "pic";
-      else if (Array.isArray(news) && news.length >= 2) s5mode = "news";
-
-      if (s5mode === "none") { remove("s5"); }
-      else {
-        if (s5mode !== "flow") remove("s5flow");
-        if (s5mode !== "pic") { remove("s5pic"); remove("s5piclabel"); }
-        if (s5mode !== "news") remove("s5news");
-        if (s5mode === "flow") {
-          remove("s5title");
-          const host = document.getElementById("s5flow");
-          flow.slice(0, 4).forEach((label, i) => {
-            const node = document.createElement("div"); node.className = "fnode bento"; node.id = "fnode" + i;
-            const n = document.createElement("div"); n.className = "fn"; n.textContent = String(i + 1);
-            const tx = document.createElement("span"); tx.textContent = String(label || "");
-            node.appendChild(n); node.appendChild(tx); host.appendChild(node);
-          });
-        } else if (s5mode === "pic") {
-          remove("s5title");
-          const total = Math.max(1, Math.min(20, Math.round(Number(pic.icons) || 0)));
-          const active = Math.max(0, Math.min(total, Math.round(Number(pic.active) || 0)));
-          const host = document.getElementById("s5pic");
-          for (let i = 0; i < total; i++) {
-            const d = document.createElement("div"); d.className = "pi" + (i < active ? " on" : ""); d.id = "pi" + i;
-            d.innerHTML = PERSON; host.appendChild(d);
-          }
-          setText("s5piclabel", pic.label || "");
-          if (!String(pic.label || "").trim()) remove("s5piclabel");
-        } else {
-          remove("s5title");
-          const host = document.getElementById("s5news");
-          const rot = [-6, 5, -3, 7]; const tops = [40, 360, 700]; const lefts = [40, 420, 120];
-          news.slice(0, 3).forEach((nc, i) => {
-            const card = document.createElement("div"); card.className = "ncard"; card.id = "ncard" + i;
-            card.style.top = tops[i % tops.length] + "px"; card.style.left = lefts[i % lefts.length] + "px";
-            card.style.transform = "rotate(" + rot[i % rot.length] + "deg)";
-            const t = document.createElement("div"); t.className = "nt"; t.textContent = String(nc.title || "");
-            card.appendChild(t);
-            if (nc.body) { const b = document.createElement("div"); b.className = "nb"; b.textContent = String(nc.body); card.appendChild(b); }
-            host.appendChild(card);
-          });
-        }
-      }
-
-      // ── S6 point cards (bento; active = gradient tím) ──
+      // ── S4 pills 2×2 (left) từ levels(keyMessages) — ẩn nếu rỗng ──
       const levels = parseJSON(v.levels, []);
-      if (!Array.isArray(levels) || levels.length === 0) { remove("s6"); }
+      const pillsOK = Array.isArray(levels) && levels.length >= 1;
+      if (!pillsOK) { remove("s6"); }
       else {
-        setText("s6title", v.levels_title);
-        if (!String(v.levels_title || "").trim()) remove("s6title");
-        const host = document.getElementById("s6cards");
-        levels.slice(0, 3).forEach((lv) => {
-          const card = document.createElement("div");
-          card.className = "card " + (lv.active ? "bento-accent active" : "bento");
-          const badge = document.createElement("div"); badge.className = "badge"; badge.textContent = lv.n == null ? "" : String(lv.n);
-          const meta = document.createElement("div"); meta.className = "meta";
-          if (lv.kicker) { const k = document.createElement("div"); k.className = "lv"; k.textContent = String(lv.kicker); meta.appendChild(k); }
-          const name = document.createElement("div"); name.className = "name"; name.textContent = lv.label == null ? "" : String(lv.label); meta.appendChild(name);
-          if (lv.desc) { const d = document.createElement("div"); d.className = "desc"; d.textContent = String(lv.desc); meta.appendChild(d); }
-          card.appendChild(badge); card.appendChild(meta); host.appendChild(card);
+        hideIfEmpty("s6lbl", v.levels_title); if (!String(v.levels_title || "").trim()) remove("s6eb");
+        const host = document.getElementById("s6pills");
+        levels.slice(0, 4).forEach((lv, i) => {
+          const pill = document.createElement("div"); pill.className = "pill bento"; pill.id = "pill" + i;
+          const pn = document.createElement("div"); pn.className = "pn"; pn.textContent = lv.n == null ? String(i + 1) : String(lv.n);
+          const pt = document.createElement("div"); pt.className = "pt"; pt.textContent = lv.label == null ? "" : String(lv.label);
+          pill.appendChild(pn); pill.appendChild(pt); host.appendChild(pill);
         });
       }
 
-      // ── S7 CTA ──
+      // ── S5 CTA (center) ──
       setText("s7e1", v.cta_top);
       (function () {
         const e2 = document.getElementById("s7e2"); if (!e2) return; e2.textContent = "";
@@ -475,10 +314,10 @@
         setText("s7e3text", v.cta_sub || "");
       })();
 
-      // ── AUTO-FIT chữ lớn (chống tràn) ──
+      // ── AUTO-FIT chữ lớn ──
       function fitText(id, maxPx, minPx, maxH) {
         const el = document.getElementById(id); if (!el || !String(el.textContent || "").trim()) return;
-        el.style.lineHeight = el.style.lineHeight || "1.16";
+        el.style.lineHeight = el.style.lineHeight || "1.12";
         let lo = minPx, hi = maxPx, best = minPx;
         for (let i = 0; i < 12; i++) {
           const mid = (lo + hi) / 2; el.style.fontSize = mid + "px";
@@ -489,15 +328,15 @@
       }
       const CF = String(v.compact || "") === "1" ? 0.82 : 1;
       const FT = (id, mx, mn, mh) => fitText(id, Math.round(mx * CF), mn, Math.round(mh * CF));
-      FT("s1key", 150, 48, 360); FT("s1l1", 84, 40, 200); FT("s1l2", 84, 40, 200); FT("s1sub", 44, 24, 120);
-      FT("s2bnum", 300, 80, 360); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 540); FT("s7e3text", 44, 24, 120);
+      FT("s1key", 150, 48, 320); FT("s1l1", 78, 40, 180); FT("s1l2", 78, 40, 180); FT("s1sub", 44, 24, 120);
+      FT("s2bnum", 280, 80, 340); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
 
-      // ── Tile CHỈ scene đang hiển thị → lấp đầy toàn bộ voice (hết gap/đứng hình) ──
+      // ── Tile CHỈ scene đang hiển thị → lấp đầy toàn bộ voice ──
       const total = parseFloat(v.duration) || 18.5;
-      const order = ["s1", "s2", "s3d", "s4b", "s5", "s6", "s7"];
+      const order = ["s1", "s2", "s4b", "s6", "s7"];
       const visible = order.filter((id) => document.getElementById(id));
       const N = Math.max(1, visible.length);
-      const win = total / N; // mỗi scene 1 khung BẰNG NHAU, liền nhau → lấp đầy
+      const win = total / N;
       const startOf = {};
       visible.forEach((id, i) => {
         const el = document.getElementById(id);
@@ -510,96 +349,64 @@
       if (bgEl) { bgEl.setAttribute("data-start", "0"); bgEl.setAttribute("data-duration", total.toFixed(3)); }
       const has = (id) => startOf[id] != null;
 
-      // ── GSAP timeline (paused, deterministic) — KHÔNG nhân k; duration cố định, snappy ──
+      // ── GSAP timeline (paused, deterministic) — snappy, duration cố định ──
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
       gsap.defaults({ ease: "power3.out" });
 
-      // Cross-fade scene (RẺ — chỉ opacity). KHÔNG animate scale nền dotgrid (full-screen
-      // repaint mỗi frame → chậm trên render mềm). "Sống" nhờ cross-fade + entrance + ring xoay.
+      // Cross-fade scene (RẺ — chỉ opacity).
       visible.forEach((id, i) => {
         const sel = "#" + id, s = startOf[id];
         tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power1.out" }, s);
         if (i < N - 1) tl.to(sel, { opacity: 0, duration: 0.22, ease: "power1.in" }, s + win - 0.22);
       });
 
-      /* S1 — entrance đặt tại đầu window (s + offset), duration cố định */
+      /* S1 hero */
       if (has("s1")) {
         const s = startOf.s1;
-        tl.fromTo("#s1 .blob", { scale: 0.85, opacity: 0 }, { scale: 1, opacity: 0.5, duration: 0.6 }, s + 0.05);
-        if (document.getElementById("s1ring"))
-          tl.fromTo("#s1ring", { rotation: -12, opacity: 0 }, { rotation: 12, opacity: 1, duration: win, ease: "sine.inOut" }, s);
-        if (document.getElementById("s1chip"))
-          tl.fromTo("#s1chip", { scale: 0.5, opacity: 0, y: -12 }, { scale: 1, opacity: 1, y: 0, duration: 0.5, ease: "back.out(1.7)" }, s + 0.25);
-        // entrance 1 lần; KHÔNG float liên tục (thẻ có shadow + ảnh có drop-shadow filter →
-        // re-rasterize mỗi frame rất tốn trên render mềm).
+        if (document.getElementById("s1eb")) tl.from("#s1eb", { y: 16, opacity: 0, duration: 0.4 }, s + 0.1);
+        if (document.getElementById("s1key"))
+          tl.fromTo("#s1key", { scale: 0.55, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.2);
+        tl.from("#s1l1 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.55);
+        if (document.getElementById("s1l2")) tl.from("#s1l2 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.8);
+        if (document.getElementById("s1sub")) tl.fromTo("#s1sub", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, s + 1.1);
         if (document.getElementById("heroWrap"))
-          tl.fromTo("#heroWrap", { scale: 0.94, opacity: 0, y: 24 }, { scale: 1, opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.4)" }, s + 0.15);
-        tl.fromTo("#s1key", { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.1);
-        tl.from("#s1 .l1 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.5);
-        tl.from("#s1 .l2 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.75);
-        if (document.getElementById("s1sub")) tl.fromTo("#s1sub", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, s + 1.05);
+          tl.fromTo("#heroWrap", { scale: 0.94, opacity: 0, y: 24 }, { scale: 1, opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.4)" }, s + 0.5);
       }
 
-      /* S2 big number — count-up SNAPPY (0.6s) ngay đầu window */
+      /* S2 big number */
       if (has("s2")) {
         const s = startOf.s2;
-        if (document.getElementById("s2label")) tl.from("#s2label", { y: 18, opacity: 0, duration: 0.4 }, s + 0.12);
+        if (document.getElementById("s2eb")) tl.from("#s2eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         if (bigIsNum) {
           const cc = { v: 0 };
           tl.to(cc, { v: bigNum, duration: 0.6, ease: "power3.out",
-            onUpdate: () => { const e = document.getElementById("s2num"); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.18);
+            onUpdate: () => { const e = document.getElementById("s2num"); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.2);
         } else {
-          tl.from("#s2num", { scale: 0.6, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.18);
+          tl.from("#s2num", { scale: 0.6, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.2);
         }
-        if (document.getElementById("s2unit")) tl.from("#s2unit", { y: 16, opacity: 0, duration: 0.35 }, s + 0.7);
-        tl.to("#s2 .bnum", { scale: 1.03, duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 0.9);
+        if (document.getElementById("s2label")) tl.from("#s2label", { y: 16, opacity: 0, duration: 0.35 }, s + 0.8);
+        tl.to("#s2bnum", { scale: 1.03, duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 1.0);
       }
 
-      /* S3 donut — arc draw + % count-up ≤0.8s */
-      if (has("s3d")) {
-        const s = startOf.s3d;
-        if (document.getElementById("s3title")) tl.from("#s3title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
-        donutArcs.forEach((d, i) => {
-          tl.set("#" + d.id, { opacity: 1 }, s + 0.2 + i * 0.18);
-          tl.fromTo("#" + d.id, { strokeDashoffset: d.off + d.len }, { strokeDashoffset: d.off, duration: 0.55, ease: "power2.out" }, s + 0.2 + i * 0.18);
-        });
-        const topPct = Math.max.apply(null, donut.map((d) => Number(d.pct) || 0));
-        const pc = { v: 0 };
-        tl.to(pc, { v: topPct, duration: 0.6, ease: "power3.out",
-          onUpdate: () => { const e = document.getElementById("s3pct"); if (e) e.textContent = Math.round(pc.v); } }, s + 0.25);
-        tl.from("#s3legend .lg", { y: 14, opacity: 0, duration: 0.35, stagger: 0.08 }, s + 0.9);
-      }
-
-      /* S4 bars — cột mọc 0.6s stagger 0.1s */
+      /* S3 progress bars */
       if (has("s4b")) {
         const s = startOf.s4b;
-        if (document.getElementById("s4title")) tl.from("#s4title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
+        if (document.getElementById("s4eb")) tl.from("#s4eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         barNums.forEach((i) => {
-          tl.from("#brow" + i, { x: -40, opacity: 0, duration: 0.4 }, s + 0.2 + i * 0.1);
-          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.out" }, s + 0.3 + i * 0.1);
+          tl.from("#brow" + i, { x: -40, opacity: 0, duration: 0.4 }, s + 0.25 + i * 0.12);
+          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.out" }, s + 0.4 + i * 0.12);
         });
       }
 
-      /* S5 */
-      if (has("s5")) {
-        const s = startOf.s5;
-        if (document.getElementById("s5title")) tl.from("#s5title", { y: 16, opacity: 0, duration: 0.35 }, s + 0.12);
-        if (s5mode === "flow") tl.from("#s5 .fnode", { x: -36, opacity: 0, duration: 0.4, stagger: 0.1 }, s + 0.2);
-        else if (s5mode === "pic") {
-          tl.from("#s5 .pic .pi", { scale: 0, opacity: 0, duration: 0.35, stagger: 0.03, ease: "back.out(2)" }, s + 0.2);
-          if (document.getElementById("s5piclabel")) tl.from("#s5piclabel", { y: 16, opacity: 0, duration: 0.35 }, s + 0.9);
-        } else if (s5mode === "news") tl.from("#s5 .ncard", { y: 50, opacity: 0, duration: 0.45, stagger: 0.12, ease: "back.out(1.4)" }, s + 0.2);
-      }
-
-      /* S6 cards */
+      /* S4 pills */
       if (has("s6")) {
         const s = startOf.s6;
-        if (document.getElementById("s6title")) tl.from("#s6 .title", { y: 24, opacity: 0, duration: 0.4 }, s + 0.12);
-        tl.from("#s6 .card", { x: -50, opacity: 0, duration: 0.45, stagger: 0.12 }, s + 0.3);
+        if (document.getElementById("s6eb")) tl.from("#s6eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.from("#s6pills .pill", { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
       }
 
-      /* S7 CTA */
+      /* S5 CTA */
       if (has("s7")) {
         const s = startOf.s7;
         tl.from("#s7e1", { y: 24, opacity: 0, duration: 0.4 }, s + 0.12);
