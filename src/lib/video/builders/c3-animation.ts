@@ -109,28 +109,6 @@ function shortUnit(unit: string): string {
   return u.slice(0, 8);
 }
 
-/**
- * Donut = 1 TỈ LỆ THẬT (phần của tổng): chọn 1 phần trăm headline P (0<P<100).
- * Ưu tiên dataPoint có label gợi tỉ lệ (tiết kiệm/chiếm/đạt/tỉ lệ…); nếu không, lấy % đầu hợp lệ.
- * KHÔNG gom nhiều % độc lập thành bánh (đó là sai ngữ nghĩa donut). Null nếu không có %.
- */
-function pickHeadlinePercent(points: string[]): { label: string; pct: number } | null {
-  const cands: { label: string; pct: number }[] = [];
-  for (const raw of points || []) {
-    const s = String(raw || "");
-    const m = s.match(/(\d[\d.,]*)\s*%/);
-    if (!m) continue;
-    const pct = parseFloat(m[1].replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(pct) || pct <= 0 || pct >= 100) continue;
-    let label = s.slice(0, m.index ?? 0).replace(/[:\-–—]\s*$/, "").trim();
-    if (!label) label = s.slice((m.index ?? 0) + m[0].length).replace(/^[\s:.\-–—]+/, "").trim();
-    cands.push({ label: label.slice(0, 24), pct: Math.round(pct * 10) / 10 });
-  }
-  if (cands.length === 0) return null;
-  const ratioRe = /(tiết kiệm|chiếm|đạt|tỉ lệ|tỷ lệ|tỉ trọng|tỷ trọng|tới|lên|chỉ)/i;
-  return cands.find((c) => ratioRe.test(c.label)) || cands[0];
-}
-
 function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
   const anim = s.variantPrompts.animation;
   const [hookLine1, hookLine2] = splitTwoLines(s.hook || "");
@@ -147,16 +125,7 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     ? parsed.reduce((m, p) => (magnitude(p.value) > magnitude(m.value) ? p : m))
     : null;
 
-  // S3 donut: CHỈ 1 tỉ lệ thật P → [P, 100−P]. Không có % hợp lệ → ẩn.
-  const headline = pickHeadlinePercent(anim.dataPoints || []);
-  const donutSegs = headline
-    ? [
-        { label: headline.label || "Đạt được", pct: headline.pct }, // color bỏ trống → theme accent
-        { label: "Còn lại", pct: Math.round((100 - headline.pct) * 10) / 10, color: "#3a3a40" },
-      ]
-    : [];
-
-  // S4 bars: chỉ cột CÙNG ĐƠN VỊ (mode đơn vị), ≥2 mới hiện (tránh trộn % với "tuần").
+  // S3 bars: chỉ cột CÙNG ĐƠN VỊ (mode đơn vị), ≥2 mới hiện (tránh trộn % với "tuần").
   const unitOf = (p: ParsedDataPoint) => oneToken(p.unit);
   const counts = new Map<string, number>();
   for (const p of parsed) counts.set(unitOf(p), (counts.get(unitOf(p)) || 0) + 1);
@@ -191,30 +160,66 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
   const hlMatch = ctaRaw.match(/['"“”']([^'"“”']{1,20})['"“”']/);
   const ctaHl = hlMatch ? hlMatch[1].trim() : "";
 
+  // ── v4.1: nội dung DISTINCT cho từng archetype — ưu tiên trường LLM, fallback data cũ ──
+  // Số: ưu tiên bigStat (LLM khẳng định số thật); nếu không có thì dùng số lớn nhất parse được.
+  const bigStat =
+    anim.bigStat && String(anim.bigStat.value || "").trim() ? anim.bigStat : null;
+  const bignumValue = bigStat ? String(bigStat.value) : big ? big.value : "";
+  const bignumUnit = bigStat ? shortUnit(String(bigStat.unit || "")) : big ? shortUnit(big.unit) : "";
+  const bignumLabel = (bigStat ? String(bigStat.label || "") : big ? big.label || "" : "").toUpperCase();
+
+  // Bars: ưu tiên anim.bars (số thật, có chữ số), fallback dataBars parse; ≥2 mới hiện.
+  const llmBars = Array.isArray(anim.bars)
+    ? anim.bars
+        .map((b) => ({ label: String(b.label || "").slice(0, 24), value: String(b.value || ""), unit: oneToken(String(b.unit || "")).slice(0, 8) }))
+        .filter((b) => b.label && /\d/.test(b.value))
+    : [];
+  const finalBars = llmBars.length >= 2 ? llmBars.slice(0, 4) : barsOK ? dataBars : [];
+
+  // Pills: ưu tiên anim.pills (4 distinct), fallback keyMessages.
+  const llmPills = Array.isArray(anim.pills)
+    ? anim.pills.map((p) => String(p.text || "").trim()).filter(Boolean).slice(0, 4)
+    : [];
+  const pillTexts = llmPills.length ? llmPills : points;
+  const pills = pillTexts.map((t, i) => ({ n: String(i + 1), label: t.slice(0, 60) }));
+
+  // Compare / principle / callout (định tính — content hợp lệ, không phải số bịa).
+  const cmp =
+    anim.compare && String(anim.compare.leftTitle || "").trim() && Array.isArray(anim.compare.leftItems)
+      ? {
+          leftTitle: String(anim.compare.leftTitle).slice(0, 40),
+          leftItems: anim.compare.leftItems.map((x) => String(x).slice(0, 60)).filter(Boolean).slice(0, 3),
+          rightTitle: String(anim.compare.rightTitle || "Với AI").slice(0, 40),
+          rightItems: (anim.compare.rightItems || []).map((x) => String(x).slice(0, 60)).filter(Boolean).slice(0, 3),
+        }
+      : null;
+  const principle = String(anim.principle || "").trim();
+  const callout = String(anim.callout || "").trim();
+
   return {
     // S1 hook
     hook_line1: hookLine1,
     hook_line2: hookLine2,
     hook_keyword: keyword,
     hook_sub: "",
+    hook_eyebrow: "",
     hook_stat: hookStat,
     // S2 big number (rỗng nếu không có số → scene tự ẩn)
-    bignum_value: big ? big.value : "",
-    bignum_unit: big ? shortUnit(big.unit) : "",
-    bignum_label: big ? (big.label || "").toUpperCase() : "",
-    // S3 donut (rỗng nếu không có % → tự ẩn)
-    donut_segments: JSON.stringify(donutSegs),
-    donut_title: donutSegs.length ? "Cơ cấu" : "",
-    // S4 bars (chỉ khi ≥2 số)
-    data_bars: JSON.stringify(barsOK ? dataBars : []),
-    bars_title: barsOK ? "Những con số" : "",
-    // S5 pictogram/flow/news: để rỗng ở 2A (tự ẩn). Sẽ nối ở chặng sau khi có parser nội dung.
-    pictogram: "",
-    flow_nodes: "[]",
-    news_cards: "[]",
-    // S6 point cards
+    bignum_value: bignumValue,
+    bignum_unit: bignumUnit,
+    bignum_label: bignumLabel,
+    // S3 progress bars (≥2 mục cùng đơn vị)
+    data_bars: JSON.stringify(finalBars),
+    bars_title: finalBars.length >= 2 ? "Những con số" : "",
+    // S4 pills 2×2 (distinct) + levels (backward-compat)
+    pills: JSON.stringify(pills),
+    pills_title: pills.length ? "Điểm chính" : "",
     levels_title: points.length ? "Những điểm cốt lõi" : "",
     levels: JSON.stringify(levels),
+    // S_cmp compare 2 cột / S_emph principle + callout (định tính, rỗng → ẩn)
+    compare: cmp ? JSON.stringify(cmp) : "",
+    principle: principle,
+    callout: callout,
     // S7 CTA
     cta_top: ctaTop,
     cta_keyword: ctaKeyword,
@@ -266,7 +271,8 @@ export async function buildAnimation(input: {
           : script.script.estimatedDurationSec || 18.5;
       // 2B-fix: sinh ảnh cutout NGAY TRÊN VERCEL (VPS bị OpenAI chặn IP) → URL Supabase.
       // Subject GENERIC từ keyMessage/hook; lỗi → "" (scene tự ẩn ảnh).
-      const heroSubject = (script.script.variantPrompts.animation.keyMessages?.[0] || script.script.hook || "modern finance concept")
+      const anim = script.script.variantPrompts.animation;
+      const heroSubject = (anim.heroSubject || anim.keyMessages?.[0] || script.script.hook || "modern finance concept")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 120);

@@ -13,7 +13,12 @@
     {"id":"data_bars","type":"string","label":"S3 progress JSON [{label,value,unit}]","default":"[]"},
     {"id":"bars_title","type":"string","label":"S3 eyebrow","default":""},
     {"id":"levels_title","type":"string","label":"S4 eyebrow/headline","default":""},
-    {"id":"levels","type":"string","label":"S4 pills JSON [{n,label}]","default":"[]"},
+    {"id":"levels","type":"string","label":"S4 pills JSON [{n,label}] (fallback)","default":"[]"},
+    {"id":"pills","type":"string","label":"S4 pills 2×2 JSON [{n,label}]","default":"[]"},
+    {"id":"pills_title","type":"string","label":"S4 eyebrow pills","default":""},
+    {"id":"compare","type":"string","label":"S_cmp JSON {leftTitle,leftItems,rightTitle,rightItems}","default":""},
+    {"id":"principle","type":"string","label":"S_emph nguyên tắc (gradient card)","default":""},
+    {"id":"callout","type":"string","label":"S_emph insight (callout bar)","default":""},
     {"id":"cta_top","type":"string","label":"CTA dòng trên","default":"Bạn đang ở"},
     {"id":"cta_keyword","type":"string","label":"CTA từ khoá (accent)","default":"Level mấy?"},
     {"id":"cta_sub","type":"string","label":"CTA phụ đề","default":""},
@@ -48,8 +53,8 @@
       .scene { position: absolute; inset: 0; width: 1080px; height: 1920px; overflow: hidden; display: flex; }
       /* center (Hero, CTA) */
       .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
-      /* left (mặc định khối bố cục mẫu): bám lề trái, bắt đầu ~20% chiều cao */
-      .scene.left { flex-direction: column; justify-content: flex-start; align-items: stretch; padding: 380px 80px 120px; text-align: left; }
+      /* left (bố cục mẫu): bám lề trái, KHỐI căn GIỮA dọc (hết trống đáy) */
+      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 120px 80px; text-align: left; }
       .scene.left .stack { display: flex; flex-direction: column; gap: 28px; width: 100%; }
 
       .bg-light {
@@ -195,6 +200,24 @@
         </div>
       </div>
 
+      <!-- S_emph: callout bar + nguyên tắc (gradient card) — left -->
+      <div id="s_emph" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="callout" id="emphCallout"></div>
+          <div class="emph bento-accent" id="emphCard"><div class="eb">Nguyên tắc</div><div class="em" id="emphPrinciple"></div></div>
+        </div>
+      </div>
+
+      <!-- S_cmp: so sánh 2 cột — left -->
+      <div id="s_cmp" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="cmpEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7h8M8 12h8M8 17h8"/></svg></span><span class="lbl">So sánh</span></div>
+          <div class="compare" id="cmpGrid"></div>
+        </div>
+      </div>
+
       <!-- S5 CTA (center) -->
       <div id="s7" class="scene center bg-light clip" data-start="14.8" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
@@ -281,19 +304,45 @@
         });
       }
 
-      // ── S4 pills 2×2 (left) từ levels(keyMessages) — ẩn nếu rỗng ──
-      const levels = parseJSON(v.levels, []);
-      const pillsOK = Array.isArray(levels) && levels.length >= 1;
-      if (!pillsOK) { remove("s6"); }
+      // ── S4 pills 2×2 (left) — ưu tiên `pills` (4 distinct), fallback `levels` ──
+      const pillsData = parseJSON(v.pills, []);
+      const pillSrc = (Array.isArray(pillsData) && pillsData.length) ? pillsData : parseJSON(v.levels, []);
+      if (!Array.isArray(pillSrc) || pillSrc.length === 0) { remove("s6"); }
       else {
-        hideIfEmpty("s6lbl", v.levels_title); if (!String(v.levels_title || "").trim()) remove("s6eb");
+        const ebText = String(v.pills_title || v.levels_title || "").trim();
+        if (!ebText) remove("s6eb"); else setText("s6lbl", ebText);
         const host = document.getElementById("s6pills");
-        levels.slice(0, 4).forEach((lv, i) => {
+        pillSrc.slice(0, 4).forEach((lv, i) => {
           const pill = document.createElement("div"); pill.className = "pill bento"; pill.id = "pill" + i;
           const pn = document.createElement("div"); pn.className = "pn"; pn.textContent = lv.n == null ? String(i + 1) : String(lv.n);
           const pt = document.createElement("div"); pt.className = "pt"; pt.textContent = lv.label == null ? "" : String(lv.label);
           pill.appendChild(pn); pill.appendChild(pt); host.appendChild(pill);
         });
+      }
+
+      // ── S_emph: callout bar + nguyên tắc (gradient) — ẩn cả scene nếu cả 2 rỗng ──
+      const calloutTxt = String(v.callout || "").trim();
+      const principleTxt = String(v.principle || "").trim();
+      if (!calloutTxt && !principleTxt) { remove("s_emph"); }
+      else {
+        if (calloutTxt) setText("emphCallout", calloutTxt); else remove("emphCallout");
+        if (principleTxt) setText("emphPrinciple", principleTxt); else remove("emphCard");
+      }
+
+      // ── S_cmp: so sánh 2 cột — ẩn nếu thiếu data ──
+      const cmp = parseJSON(v.compare, null);
+      const cmpOK = cmp && String(cmp.leftTitle || "").trim() && Array.isArray(cmp.leftItems) && cmp.leftItems.length;
+      if (!cmpOK) { remove("s_cmp"); }
+      else {
+        const grid = document.getElementById("cmpGrid");
+        const mk = (side, title, items) => {
+          const c = document.createElement("div"); c.className = "ccard " + side + (side === "r" ? " bento-accent" : " bento");
+          const t = document.createElement("div"); t.className = "ct"; t.textContent = String(title || ""); c.appendChild(t);
+          (items || []).slice(0, 3).forEach((it) => { const d = document.createElement("div"); d.className = "cs"; d.textContent = "• " + String(it); c.appendChild(d); });
+          return c;
+        };
+        grid.appendChild(mk("l", cmp.leftTitle, cmp.leftItems));
+        grid.appendChild(mk("r", cmp.rightTitle || "Với AI", cmp.rightItems || []));
       }
 
       // ── S5 CTA (center) ──
@@ -333,7 +382,7 @@
 
       // ── Tile CHỈ scene đang hiển thị → lấp đầy toàn bộ voice ──
       const total = parseFloat(v.duration) || 18.5;
-      const order = ["s1", "s2", "s4b", "s6", "s7"];
+      const order = ["s1", "s2", "s4b", "s6", "s_emph", "s_cmp", "s7"];
       const visible = order.filter((id) => document.getElementById(id));
       const N = Math.max(1, visible.length);
       const win = total / N;
@@ -404,6 +453,20 @@
         const s = startOf.s6;
         if (document.getElementById("s6eb")) tl.from("#s6eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         tl.from("#s6pills .pill", { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
+      }
+
+      /* S_emph */
+      if (has("s_emph")) {
+        const s = startOf.s_emph;
+        if (document.getElementById("emphCallout")) tl.from("#emphCallout", { x: -40, opacity: 0, duration: 0.45 }, s + 0.15);
+        if (document.getElementById("emphCard")) tl.fromTo("#emphCard", { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4);
+      }
+
+      /* S_cmp */
+      if (has("s_cmp")) {
+        const s = startOf.s_cmp;
+        if (document.getElementById("cmpEb")) tl.from("#cmpEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.from("#cmpGrid .ccard", { y: 36, opacity: 0, duration: 0.5, stagger: 0.14, ease: "back.out(1.4)" }, s + 0.3);
       }
 
       /* S5 CTA */

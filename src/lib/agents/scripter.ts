@@ -10,7 +10,20 @@ export type ScriptResult = {
   variantPrompts: {
     talking: string;
     broll: { shotList: { footageTag: string; durationSec: number; note: string }[]; voiceOver: string };
-    animation: { keyMessages: string[]; dataPoints: string[]; visualCues: string[]; voiceOver: string };
+    animation: {
+      keyMessages: string[];
+      dataPoints: string[];
+      visualCues: string[];
+      voiceOver: string;
+      // C3 v4.1 — nội dung RIÊNG cho từng archetype bento (tuỳ chọn → backward-compat).
+      heroSubject?: string;
+      bigStat?: { value: string; unit: string; label: string };
+      bars?: { label: string; value: string; unit: string }[];
+      pills?: { text: string }[];
+      compare?: { leftTitle: string; leftItems: string[]; rightTitle: string; rightItems: string[] };
+      principle?: string;
+      callout?: string;
+    };
   };
   estimatedDurationSec: number;
   raw?: string;
@@ -58,14 +71,26 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
       "voiceOver": "voice-over text cho video b-roll"
     },
     "animation": {
-      "keyMessages": ["thông điệp 1", "thông điệp 2"],
-      "dataPoints": ["số liệu 1", "số liệu 2"],
-      "visualCues": ["icon/animation 1", "icon/animation 2"],
-      "voiceOver": "voice-over text cho video animation"
+      "keyMessages": ["3-4 thông điệp cốt lõi"],
+      "dataPoints": ["số liệu THẬT nếu có (vd 'tiết kiệm 80% thời gian')"],
+      "visualCues": ["gợi ý icon"],
+      "voiceOver": "voice-over text cho video animation",
+      "heroSubject": "1 cụm NGẮN mô tả nhân vật/chủ thể minh hoạ 3D (vd 'trợ lý AI cho founder')",
+      "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN"},
+      "bars": [{"label": "...", "value": "70", "unit": "%"}],
+      "pills": [{"text": ".."}, {"text": ".."}, {"text": ".."}, {"text": ".."}],
+      "compare": {"leftTitle": "Cách cũ", "leftItems": ["..", ".."], "rightTitle": "Với AI", "rightItems": ["..", ".."]},
+      "principle": "1 câu nguyên tắc cốt lõi đắt giá (≤12 từ)",
+      "callout": "1 insight nhấn mạnh (≤16 từ)"
     }
   },
   "estimatedDurationSec": ${lengthSec}
-}`;
+}
+
+QUY TẮC trường animation:
+- pills/compare/principle/callout phải là nội dung RIÊNG BIỆT, KHÔNG lặp lại nhau hay lặp keyMessages.
+- pills: ĐÚNG 4 điểm NGẮN (≤8 từ mỗi điểm), khác nhau.
+- bigStat & bars: CHỈ điền khi có số liệu THẬT/đáng tin — KHÔNG bịa số; không có thì BỎ HẲN trường đó.`;
 }
 
 async function recordLLMUsage(costUsd: number, tokensIn: number, tokensOut: number) {
@@ -93,7 +118,7 @@ export async function generateScript(input: {
   const result = await llm.complete({
     system: SYSTEM,
     messages: [{ role: "user", content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec) }],
-    maxTokens: 3000,
+    maxTokens: 4000,
     responseFormat: "json",
   });
 
