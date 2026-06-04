@@ -54,8 +54,8 @@
       /* center (Hero, CTA) */
       .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
       /* left (bố cục mẫu): bám lề trái, KHỐI căn GIỮA dọc (hết trống đáy) */
-      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 120px 80px; text-align: left; }
-      .scene.left .stack { display: flex; flex-direction: column; gap: 28px; width: 100%; }
+      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 130px 72px; text-align: left; }
+      .scene.left .stack { display: flex; flex-direction: column; gap: 32px; width: 100%; }
 
       .bg-light {
         background:
@@ -90,12 +90,15 @@
         box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
       .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; }
 
-      /* pill2 (2×2) */
-      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-      .pill { display: flex; align-items: center; gap: 18px; padding: 26px 28px; will-change: transform, opacity; }
+      /* pill2 (2×2) — icon-led (đúng style donnie) */
+      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+      .pill { display: flex; align-items: center; gap: 22px; padding: 42px 32px; will-change: transform, opacity; }
+      .pill .pic { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 18px; background: rgba(124,58,237,0.12);
+        display: flex; align-items: center; justify-content: center; will-change: transform; }
+      .pill .pic svg { width: 38px; height: 38px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
       .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: rgba(124,58,237,0.12);
         color: var(--accent); font-weight: 900; font-size: 26px; display: flex; align-items: center; justify-content: center; }
-      .pill .pt { color: var(--ink); font-weight: 700; font-size: 34px; line-height: 1.18; }
+      .pill .pt { color: var(--ink); font-weight: 700; font-size: 40px; line-height: 1.18; }
 
       /* listcard */
       .listcard { display: flex; flex-direction: column; gap: 20px; }
@@ -104,38 +107,46 @@
       .lrow .lt { color: var(--ink); font-weight: 600; font-size: 38px; line-height: 1.25; }
 
       /* callout (thanh tím) */
-      .callout { background: rgba(124,58,237,0.08); border-left: 6px solid var(--accent); border-radius: 16px;
-        padding: 26px 30px; color: var(--ink); font-weight: 600; font-size: 38px; line-height: 1.3; will-change: transform, opacity; }
+      .callout { background: rgba(124,58,237,0.08); border-left: 8px solid var(--accent); border-radius: 18px;
+        padding: 40px 38px; color: var(--ink); font-weight: 600; font-size: 44px; line-height: 1.32; will-change: transform, opacity; }
       .callout b { color: var(--accent); font-weight: 900; }
 
       /* emph (gradient) */
-      .emph { padding: 36px; will-change: transform, opacity; }
-      .emph .eb { color: rgba(255,255,255,0.8); font-weight: 800; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
-      .emph .em { color: #fff; font-weight: 800; font-size: 52px; line-height: 1.15; margin-top: 12px; }
+      .emph { padding: 50px 44px; will-change: transform, opacity; }
+      .emph .eb { color: rgba(255,255,255,0.85); font-weight: 800; font-size: 30px; letter-spacing: 2px; text-transform: uppercase; }
+      .emph .em { color: #fff; font-weight: 800; font-size: 62px; line-height: 1.14; margin-top: 14px; }
 
       /* compare (2 cột) */
-      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
-      .ccard { padding: 32px 30px; text-align: left; will-change: transform, opacity; }
-      .ccard .ct { font-weight: 800; font-size: 40px; line-height: 1.1; }
-      .ccard .cs { font-weight: 500; font-size: 32px; line-height: 1.3; margin-top: 12px; }
+      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; width: 100%; align-items: stretch; }
+      .ccard { padding: 46px 38px; text-align: left; will-change: transform, opacity; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+      .ccard .ct { font-weight: 800; font-size: 48px; line-height: 1.1; }
+      .ccard .cs { font-weight: 500; font-size: 36px; line-height: 1.3; margin-top: 10px; }
       .ccard.l { color: var(--ink); } .ccard.l .cs { color: var(--sub); }
       .ccard.r .ct, .ccard.r .cs { color: #fff; }
 
       /* progress bars */
-      .pbars { display: flex; flex-direction: column; gap: 30px; }
-      .pbar { will-change: transform, opacity; padding: 26px 30px; }
-      .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
-      .pbar .pn { color: var(--ink); font-weight: 800; font-size: 38px; }
-      .pbar .pv { color: var(--accent); font-weight: 900; font-size: 40px; white-space: nowrap; }
-      .pbar .ptrack { height: 36px; border-radius: 18px; background: rgba(124,58,237,0.10); overflow: hidden; }
-      .pbar .pfill { height: 100%; border-radius: 18px; background: linear-gradient(90deg, var(--accent2), var(--accent));
-        transform-origin: left center; transform: scaleX(0); will-change: transform; }
+      .pbars { display: flex; flex-direction: column; gap: 36px; }
+      .pbar { will-change: transform, opacity; padding: 38px 34px; }
+      .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+      .pbar .pn { color: var(--ink); font-weight: 800; font-size: 42px; }
+      .pbar .pv { color: var(--accent); font-weight: 900; font-size: 46px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      .pbar .ptrack { position: relative; height: 44px; border-radius: 22px; background: rgba(124,58,237,0.10); overflow: hidden; }
+      .pbar .pfill { position: relative; height: 100%; border-radius: 18px; background: linear-gradient(90deg, var(--accent2), var(--accent));
+        transform-origin: left center; transform: scaleX(0); will-change: transform; overflow: hidden; }
+      /* sheen: vệt sáng quét qua thanh sau khi đầy (motion-graphics, không tĩnh) */
+      .pbar .sheen { position: absolute; top: 0; bottom: 0; width: 120px; transform: translateX(-160px) skewX(-18deg);
+        background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%); will-change: transform; }
 
       /* bignum */
       .bignum { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 0.04em; line-height: 0.92;
-        color: var(--accent); font-weight: 900; font-size: 280px; letter-spacing: -4px; white-space: nowrap; }
+        color: var(--accent); font-weight: 900; font-size: 280px; letter-spacing: -4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
       .bignum .bu { font-size: 0.42em; font-weight: 800; color: var(--accent2); align-self: flex-start; margin-top: 0.12em; }
       .blabel { color: var(--sub); font-weight: 600; font-size: 40px; }
+
+      /* glow blob nền — trôi nhẹ suốt clip (nền "sống", không phẳng lì) */
+      .glowblob { position: absolute; width: 820px; height: 820px; border-radius: 50%; left: 6%; top: 16%;
+        background: radial-gradient(circle, var(--glow) 0%, rgba(255,255,255,0) 68%);
+        filter: blur(50px); opacity: 0.7; pointer-events: none; will-change: transform; }
 
       /* ── S1 hero (center) ── */
       #s1 .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; line-height: 0.98; letter-spacing: -1px; }
@@ -158,6 +169,7 @@
       <audio id="vo" class="clip" data-start="0" data-duration="18.5" data-track-index="9" data-volume="1" src=""></audio>
 
       <div id="bgbase" class="scene bg-light clip" data-start="0" data-duration="18.5" data-track-index="0">
+        <div class="glowblob" id="glowblob"></div>
         <div class="dotgrid"></div>
       </div>
 
@@ -242,6 +254,47 @@
       const remove = (id) => { const el = document.getElementById(id); if (el) el.remove(); };
       const hideIfEmpty = (id, val) => { if (!String(val || "").trim()) remove(id); else setText(id, val); };
 
+      // ── Bộ icon line (đúng vibe donnie): chọn theo TỪ KHOÁ trong nhãn, fallback theo index ──
+      const ICONS = {
+        clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        refresh: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>',
+        chart: '<path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="7"/><rect x="13" y="6" width="3" height="12"/>',
+        target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/>',
+        check: '<circle cx="12" cy="12" r="9"/><path d="m8.4 12 2.5 2.5 4.7-5"/>',
+        shield: '<path d="M12 3 5 6v5c0 4 3 7 7 8 4-1 7-4 7-8V6l-7-3z"/>',
+        layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
+        puzzle: '<path d="M10 4a2 2 0 1 1 4 0h3a1 1 0 0 1 1 1v3a2 2 0 1 1 0 4v3a1 1 0 0 1-1 1h-3a2 2 0 1 0-4 0H7a1 1 0 0 1-1-1v-3a2 2 0 1 1 0-4V5a1 1 0 0 1 1-1h3z"/>',
+        rocket: '<path d="M5 15c-1 1-1 4-1 4s3 0 4-1m10-14c-3 0-7 2-9 6l-1 3 3-1c4-2 6-6 6-9z"/><circle cx="14" cy="9" r="1.3"/>',
+        database: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+        spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/>',
+        bolt: '<path d="M13 2 4 14h7l-1 8 10-12h-7z"/>',
+      };
+      const ICON_RULES = [
+        [/thời gian|nhanh|chậm|tốc độ|giờ|phút/i, "clock"],
+        [/lặp|tự động|định kỳ|vòng|quy trình|workflow/i, "refresh"],
+        [/đo lường|kết quả|hiệu quả|tăng|giảm|số liệu|dữ liệu|data|doanh/i, "chart"],
+        [/pattern|nhận diện|phân tích|insight|mục tiêu|target|tầm nhìn/i, "target"],
+        [/chính xác|đúng|chuẩn|kiểm|đánh giá|đảm bảo/i, "check"],
+        [/bảo mật|an toàn|rủi ro|bảo vệ/i, "shield"],
+        [/xây|hệ thống|kiến trúc|module|cấu trúc|nền tảng/i, "layers"],
+        [/tích hợp|kết nối|công cụ|api|tool/i, "puzzle"],
+        [/triển khai|ra mắt|bứt phá|tăng trưởng|scale|mở rộng/i, "rocket"],
+        [/lưu trữ|bộ nhớ|kho|memory|context|tài liệu/i, "database"],
+        [/ý tưởng|sáng tạo|ai|thông minh|tối ưu|gợi ý/i, "spark"],
+      ];
+      const ICON_CYCLE = ["target", "bolt", "refresh", "chart", "check", "layers", "puzzle", "rocket"];
+      function pickIconKey(label, i) {
+        const s = String(label || "");
+        for (const [re, key] of ICON_RULES) if (re.test(s)) return key;
+        return ICON_CYCLE[i % ICON_CYCLE.length];
+      }
+      function makeIconSVG(key) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.innerHTML = ICONS[key] || ICONS.spark;
+        return svg;
+      }
+
       // ── THEME (light) ──
       const THEMES = [
         { bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
@@ -298,6 +351,8 @@
           const track = document.createElement("div"); track.className = "ptrack";
           const fill = document.createElement("div"); fill.className = "pfill"; fill.id = "bfill" + i;
           fill.style.width = Math.max(6, Math.round((nums[i] / maxv) * 100)) + "%";
+          const sheen = document.createElement("div"); sheen.className = "sheen"; sheen.id = "bsheen" + i;
+          fill.appendChild(sheen);
           track.appendChild(fill);
           row.appendChild(pl); row.appendChild(track); host.appendChild(row);
           barNums.push(i);
@@ -314,9 +369,10 @@
         const host = document.getElementById("s6pills");
         pillSrc.slice(0, 4).forEach((lv, i) => {
           const pill = document.createElement("div"); pill.className = "pill bento"; pill.id = "pill" + i;
-          const pn = document.createElement("div"); pn.className = "pn"; pn.textContent = lv.n == null ? String(i + 1) : String(lv.n);
+          const pic = document.createElement("div"); pic.className = "pic";
+          pic.appendChild(makeIconSVG(pickIconKey(lv.label, i)));
           const pt = document.createElement("div"); pt.className = "pt"; pt.textContent = lv.label == null ? "" : String(lv.label);
-          pill.appendChild(pn); pill.appendChild(pt); host.appendChild(pill);
+          pill.appendChild(pic); pill.appendChild(pt); host.appendChild(pill);
         });
       }
 
@@ -403,6 +459,11 @@
       const tl = gsap.timeline({ paused: true });
       gsap.defaults({ ease: "power3.out" });
 
+      // Nền SỐNG: glow blob trôi chậm + phình nhẹ suốt clip (transform-only → rẻ trên software render).
+      if (document.getElementById("glowblob"))
+        tl.fromTo("#glowblob", { x: -40, y: -20, scale: 0.92 },
+          { x: 260, y: 200, scale: 1.18, duration: Math.max(2, total / 2), ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+
       // Cross-fade scene (RẺ — chỉ opacity).
       visible.forEach((id, i) => {
         const sel = "#" + id, s = startOf[id];
@@ -419,8 +480,11 @@
         tl.from("#s1l1 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.55);
         if (document.getElementById("s1l2")) tl.from("#s1l2 .word", { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.8);
         if (document.getElementById("s1sub")) tl.fromTo("#s1sub", { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, s + 1.1);
-        if (document.getElementById("heroWrap"))
+        if (document.getElementById("heroWrap")) {
           tl.fromTo("#heroWrap", { scale: 0.94, opacity: 0, y: 24 }, { scale: 1, opacity: 1, y: 0, duration: 0.6, ease: "back.out(1.4)" }, s + 0.5);
+          // Mid-scene: thẻ 3D "thở" nhẹ (breathing float) — không tĩnh.
+          tl.to("#heroWrap", { y: "-=16", duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.2);
+        }
       }
 
       /* S2 big number */
@@ -443,8 +507,10 @@
         const s = startOf.s4b;
         if (document.getElementById("s4eb")) tl.from("#s4eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         barNums.forEach((i) => {
-          tl.from("#brow" + i, { x: -40, opacity: 0, duration: 0.4 }, s + 0.25 + i * 0.12);
-          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power3.out" }, s + 0.4 + i * 0.12);
+          tl.from("#brow" + i, { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.25 + i * 0.12);
+          tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.65, ease: "power3.out" }, s + 0.4 + i * 0.12);
+          // vệt sáng quét qua thanh sau khi đầy → motion-graphics, không tĩnh
+          tl.fromTo("#bsheen" + i, { x: -160 }, { x: 1240, duration: 0.75, ease: "power2.in" }, s + 0.95 + i * 0.12);
         });
       }
 
@@ -453,13 +519,21 @@
         const s = startOf.s6;
         if (document.getElementById("s6eb")) tl.from("#s6eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         tl.from("#s6pills .pill", { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
+        // mid-scene: icon trong từng pill "nảy" lần lượt thành sóng → sống động
+        for (let i = 0; i < 4; i++)
+          if (document.getElementById("pill" + i))
+            tl.to("#pill" + i + " .pic", { scale: 1.16, duration: 0.32, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 0.95 + i * 0.42);
       }
 
       /* S_emph */
       if (has("s_emph")) {
         const s = startOf.s_emph;
-        if (document.getElementById("emphCallout")) tl.from("#emphCallout", { x: -40, opacity: 0, duration: 0.45 }, s + 0.15);
-        if (document.getElementById("emphCard")) tl.fromTo("#emphCard", { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4);
+        if (document.getElementById("emphCallout")) tl.from("#emphCallout", { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.15);
+        if (document.getElementById("emphCard")) {
+          tl.fromTo("#emphCard", { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4);
+          // mid-scene: thẻ gradient "thở" nhẹ
+          tl.to("#emphCard", { scale: 1.018, duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0);
+        }
       }
 
       /* S_cmp */
@@ -467,6 +541,8 @@
         const s = startOf.s_cmp;
         if (document.getElementById("cmpEb")) tl.from("#cmpEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         tl.from("#cmpGrid .ccard", { y: 36, opacity: 0, duration: 0.5, stagger: 0.14, ease: "back.out(1.4)" }, s + 0.3);
+        // mid-scene: cột "với AI" (gradient) trôi nổi nhẹ
+        tl.to("#cmpGrid .ccard.r", { y: "-=12", duration: Math.max(1, win / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0);
       }
 
       /* S5 CTA */
