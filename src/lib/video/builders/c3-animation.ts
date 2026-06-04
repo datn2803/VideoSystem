@@ -1,9 +1,36 @@
+import crypto from "node:crypto";
 import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
+import { blobUpload } from "@/lib/backend/blob-store";
 import type { ScriptResult } from "@/lib/agents/scripter";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
+
+/**
+ * Sinh 1 ảnh cutout nền TRONG SUỐT trên Vercel (OpenAI reach được; VPS bị Cloudflare
+ * chặn IP datacenter) → upload Supabase → trả PUBLIC URL cho VPS render fetch.
+ * Lỗi bất kỳ → trả "" (scene tự ẩn ảnh — fallback 2A, KHÔNG fail render).
+ */
+async function generateHeroImageUrl(scriptId: string, subject: string): Promise<string> {
+  try {
+    const img = await hub.image();
+    if (!img) return "";
+    const prompt =
+      `isolated subject on transparent background, ${subject}, ` +
+      `studio cutout, soft rim light, dramatic dark-friendly lighting, no text, no watermark, ` +
+      `not a real identifiable person, centered, high detail, photoreal`;
+    // quality "medium" vừa Vercel 60s (1 ảnh); adapter tự fallback nếu provider không phải gpt-image.
+    const r = await img.generate({ prompt, transparent: true, quality: "medium" });
+    const buf = Buffer.from(r.imageBase64, "base64");
+    const hash = crypto.createHash("sha256").update(prompt).digest("hex").slice(0, 10);
+    const filename = `c3-hero-${scriptId}-${hash}.png`;
+    return await blobUpload({ bucket: "broll-images", filename, buffer: buf, contentType: r.mimeType || "image/png" });
+  } catch (e) {
+    console.error("[c3 hero image]", e instanceof Error ? e.message : e);
+    return "";
+  }
+}
 
 type ParsedDataPoint = { label: string; value: string; unit: string };
 
@@ -235,22 +262,19 @@ export async function buildAnimation(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 18.5;
-      // 2B: brief sinh ảnh cutout (VPS dùng OpenAI gpt-image) + bật vision-QC.
-      // Subject GENERIC từ keyMessage/hook (genimage tự ép "not a real identifiable person").
-      // KHÔNG sinh ảnh ở Vercel — chỉ gửi prompt; VPS gate theo key + tự fallback nếu thiếu.
+      // 2B-fix: sinh ảnh cutout NGAY TRÊN VERCEL (VPS bị OpenAI chặn IP) → URL Supabase.
+      // Subject GENERIC từ keyMessage/hook; lỗi → "" (scene tự ẩn ảnh).
       const heroSubject = (script.script.variantPrompts.animation.keyMessages?.[0] || script.script.hook || "modern finance concept")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 120);
-      const imagePrompts = [
-        { id: "hero", prompt: `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video` },
-      ];
+      const imgHeroUrl = await generateHeroImageUrl(input.scriptId, `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video`);
       const variables = {
         ...buildAnimationVariables(script.script),
         voice_url: voiceUrl,
         duration: String(durationSec),
-        imagePrompts: JSON.stringify(imagePrompts),
-        visionQC: true,
+        img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
+        visionQC: true, // VPS chỉ chấm QC (bỏ imagePrompts — không sinh ảnh trên VPS nữa)
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {

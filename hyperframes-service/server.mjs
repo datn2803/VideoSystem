@@ -22,7 +22,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { generateImages } from "./lib/genimage.mjs";
 import { assessFrame } from "./lib/vision.mjs";
 
 const execFileP = promisify(execFile);
@@ -262,10 +261,10 @@ async function renderTemplate({ template, variables, quality }) {
   return { tmpDir, outFile };
 }
 
-// ── Vision-QC pipeline (2B): sinh ảnh cutout + render + chấm 6 frame + tự sửa, ≤3 vòng ──
-const QC_FRAME_MARKS = [0.08, 0.18, 0.3, 0.45, 0.62, 0.85];
+// ── Vision-QC pipeline (2B-fix): ảnh do APP sinh & gửi URL (img_hero) — VPS KHÔNG gọi OpenAI
+//    (Cloudflare edge OpenAI chặn IP datacenter VPS). VPS chỉ render + chấm QC nhẹ. ──
+const QC_FRAME_MARKS = [0.15, 0.45, 0.8]; // 3 mốc → tối đa 3×2=6 call Gemini/clip (đỡ đốt quota)
 const QC_HEAVY = new Set(["text_overflow", "overlap", "unbalanced", "image_ugly", "empty", "low_contrast"]);
-const COMP_IMGS_DIR = path.join(COMP_DIR, ".imgs"); // ảnh tạm cho composition đọc (relative .imgs/..)
 
 async function extractFrame(outFile, t) {
   const f = path.join(os.tmpdir(), `frm-${crypto.randomBytes(5).toString("hex")}.png`);
@@ -281,79 +280,42 @@ async function extractFrame(outFile, t) {
   }
 }
 
-// Copy ảnh đã sinh vào compositions/.imgs/ và set biến img_<id> = đường dẫn tương đối.
-async function placeImages(vars, prompts, createdImgs) {
-  const map = await generateImages(prompts); // id → file tuyệt đối (hoặc {} nếu lỗi/thiếu key)
-  if (Object.keys(map).length) await fs.mkdir(COMP_IMGS_DIR, { recursive: true });
-  for (const [id, src] of Object.entries(map)) {
-    const name = `${crypto.randomBytes(6).toString("hex")}.png`;
-    const dest = path.join(COMP_IMGS_DIR, name);
-    try {
-      await fs.copyFile(src, dest);
-      createdImgs.push(dest);
-      vars[`img_${id}`] = `.imgs/${name}`;
-    } catch (e) {
-      console.error("[qc] copy img", id, e && e.message ? e.message : e);
-    }
-  }
-}
-
 async function renderAnimationWithQC({ variables }) {
-  const haveOpenAI = !!process.env.OPENAI_API_KEY;
   const haveGemini = !!process.env.GEMINI_API_KEY;
-  const vars = { ...variables };
-  const createdImgs = [];
-  const basePrompts = safeJsonArray(variables.imagePrompts);
-
-  // 1) Ảnh cutout (nếu có key + prompts). Lỗi → bỏ ảnh, render như 2A.
-  if (haveOpenAI && basePrompts.length) await placeImages(vars, basePrompts, createdImgs);
-
-  // 2) Vòng QC. Không có Gemini → render 1 lần (vẫn có ảnh nếu sinh được).
-  const rounds = haveGemini ? 3 : 1;
+  const vars = { ...variables }; // img_hero = URL do app gửi (đã có sẵn) → render fetch trực tiếp
+  const rounds = haveGemini ? 2 : 1; // ≤2 vòng (chỉ còn fix compact, không regen ảnh)
   let best = null; // { tmpDir, outFile, avg, report }
-  try {
-    for (let round = 0; round < rounds; round++) {
-      const r = await renderTemplate({ template: "animation", variables: vars, quality: "standard" });
-      if (!haveGemini) { best = { ...r, avg: 10, report: [] }; break; }
 
-      const dur = (await probeDuration(r.outFile)) || Number(vars.duration) || 18.5;
-      const report = [];
-      let sum = 0, n = 0, heavy = false, wantCompact = false, wantRegen = false;
-      for (const m of QC_FRAME_MARKS) {
-        let b64;
-        try { b64 = await extractFrame(r.outFile, +(m * dur).toFixed(2)); } catch { continue; }
-        const a = await assessFrame(b64);
-        report.push({ round, t: +(m * dur).toFixed(2), score: a.score, issues: a.issues });
-        sum += a.score; n++;
-        const issues = a.issues || [];
-        if (a.score < 8 || issues.some((i) => QC_HEAVY.has(i))) heavy = true;
-        if (issues.includes("image_ugly")) wantRegen = true;
-        if (issues.some((i) => i === "text_overflow" || i === "overlap" || i === "unbalanced")) wantCompact = true;
-      }
-      const avg = n ? sum / n : 10;
-      console.log(`[qc] round ${round} avg=${avg.toFixed(2)} frames=${n} heavy=${heavy}`);
+  for (let round = 0; round < rounds; round++) {
+    const r = await renderTemplate({ template: "animation", variables: vars, quality: "standard" });
+    if (!haveGemini) { best = { ...r, avg: 10, report: [] }; break; } // 429/thiếu key → pass-through
 
-      // giữ bản điểm trung bình cao nhất
-      if (!best || avg > best.avg) {
-        if (best) await fs.rm(best.tmpDir, { recursive: true, force: true }).catch(() => {});
-        best = { ...r, avg, report };
-      } else {
-        await fs.rm(r.tmpDir, { recursive: true, force: true }).catch(() => {});
-      }
-
-      if (n > 0 && !heavy) break; // đạt
-      if (round >= rounds - 1) break;
-
-      // áp fix cho vòng sau
-      if (wantCompact) vars.compact = "1";
-      if (wantRegen && haveOpenAI && basePrompts.length) {
-        const rePrompts = basePrompts.map((p) => ({ id: p.id, prompt: `${p.prompt}, alternative composition v${round + 2}` }));
-        await placeImages(vars, rePrompts, createdImgs);
-      }
+    const dur = (await probeDuration(r.outFile)) || Number(vars.duration) || 18.5;
+    const report = [];
+    let sum = 0, n = 0, heavy = false, wantCompact = false;
+    for (const m of QC_FRAME_MARKS) {
+      let b64;
+      try { b64 = await extractFrame(r.outFile, +(m * dur).toFixed(2)); } catch { continue; }
+      const a = await assessFrame(b64);
+      report.push({ round, t: +(m * dur).toFixed(2), score: a.score, issues: a.issues });
+      sum += a.score; n++;
+      const issues = a.issues || [];
+      if (a.score < 8 || issues.some((i) => QC_HEAVY.has(i))) heavy = true;
+      if (issues.some((i) => i === "text_overflow" || i === "overlap" || i === "unbalanced")) wantCompact = true;
     }
-  } finally {
-    // dọn ảnh tạm (đã được bake/đọc trong render xong)
-    for (const f of createdImgs) await fs.rm(f, { force: true }).catch(() => {});
+    const avg = n ? sum / n : 10;
+    console.log(`[qc] round ${round} avg=${avg.toFixed(2)} frames=${n} heavy=${heavy}`);
+
+    if (!best || avg > best.avg) {
+      if (best) await fs.rm(best.tmpDir, { recursive: true, force: true }).catch(() => {});
+      best = { ...r, avg, report };
+    } else {
+      await fs.rm(r.tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+
+    if (n > 0 && !heavy) break; // đạt
+    if (round >= rounds - 1) break;
+    if (wantCompact) vars.compact = "1"; // chỉ còn fix layout (ảnh do app sinh, không regen ở VPS)
   }
   return best;
 }

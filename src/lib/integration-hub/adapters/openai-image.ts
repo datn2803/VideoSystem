@@ -15,10 +15,15 @@ export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string;
   // từ tham số quality. Chỉ tăng nếu chuyển sinh ảnh sang nền không-timeout (VPS).
   const quality = opts.quality || "low";
   return {
-    async generate({ prompt }): Promise<ImageResult> {
+    async generate({ prompt, transparent, quality: qOverride }): Promise<ImageResult> {
       const body: Record<string, unknown> = { model, prompt, n: 1, size };
       // chỉ gpt-image hỗ trợ low/medium/high; dall-e dùng standard/hd → bỏ qua.
-      if (model.includes("gpt-image")) body.quality = quality;
+      if (model.includes("gpt-image")) body.quality = qOverride || quality;
+      // Ảnh cutout C3: nền TRONG SUỐT (PNG) để ghép trên nền tối composition.
+      if (transparent && model.includes("gpt-image")) {
+        body.background = "transparent";
+        body.output_format = "png";
+      }
       const res = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { authorization: `Bearer ${opts.apiKey}`, "content-type": "application/json" },

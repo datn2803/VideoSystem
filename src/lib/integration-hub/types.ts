@@ -118,7 +118,7 @@ export interface ImageResult {
 }
 
 export interface ImageProvider {
-  generate(input: { prompt: string }): Promise<ImageResult>;
+  generate(input: { prompt: string; transparent?: boolean; quality?: string }): Promise<ImageResult>;
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }
 
