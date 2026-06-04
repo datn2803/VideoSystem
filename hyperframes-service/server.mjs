@@ -181,7 +181,9 @@ async function renderTemplate({ template, variables, quality }) {
   // TỐI ƯU TỐC ĐỘ ($0): B-roll nặng (5 ảnh + Ken Burns) render software trên VPS
   // 2-vCPU rất chậm → ép "draft" cho NHANH hơn nhiều (đủ đẹp cho ảnh nền + caption).
   // C1/C3 nhẹ hơn → giữ "standard". Bỏ override này nếu nâng VPS để lấy chất lượng cao.
-  const q = template === "broll" ? "draft" : quality;
+  // C2 broll + C3 animation đều motion-graphics → "draft" nhanh hơn nhiều, gần như không
+  // khác mắt thường (perf guide HyperFrames). Chỉ C1/khác giữ quality truyền vào.
+  const q = ["broll", "animation"].includes(template) ? "draft" : quality;
   const id = crypto.randomBytes(8).toString("hex");
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hf-"));
   const varsFile = path.join(tmpDir, "vars.json");
@@ -236,9 +238,14 @@ async function renderTemplate({ template, variables, quality }) {
     "--variables-file", varsFile,
     "--quality", q,
     "--output", outFile,
+    // Dùng CẢ 2 vCPU: mặc định 2-core → 1 worker (render đơn luồng). 2 worker (~256MB/worker,
+    // RAM 8GB dư) → capture song song ≈ nhanh ~1.5–2×. Mutex withRenderLock đã đảm bảo
+    // chỉ 1 job render/lúc nên 2 worker không tranh tài nguyên với render khác.
+    "--workers", "2",
+    // 24fps (cinematic) thay 30fps mặc định → bớt ~20% frame, mắt thường gần như không khác.
+    "--fps", "24",
     // VPS KHÔNG có GPU thật → auto-probe chọn "hardware" (SwiftShader) rồi CRASH khi
-    // render cảnh nặng (broll: 5 ảnh + Ken Burns + grain + transitions). Ép SOFTWARE
-    // (SwiftShader thuần) cho ỔN ĐỊNH (chậm hơn chút nhưng không crash GPU).
+    // render cảnh nặng. Ép SOFTWARE (SwiftShader thuần) cho ỔN ĐỊNH.
     "--no-browser-gpu",
   ];
   try {
@@ -264,7 +271,6 @@ async function renderTemplate({ template, variables, quality }) {
 // ── Vision-QC pipeline (2B-fix): ảnh do APP sinh & gửi URL (img_hero) — VPS KHÔNG gọi OpenAI
 //    (Cloudflare edge OpenAI chặn IP datacenter VPS). VPS chỉ render + chấm QC nhẹ. ──
 const QC_FRAME_MARKS = [0.15, 0.45, 0.8]; // 3 mốc → tối đa 3×2=6 call Gemini/clip (đỡ đốt quota)
-const QC_HEAVY = new Set(["text_overflow", "overlap", "unbalanced", "image_ugly", "empty", "low_contrast"]);
 
 async function extractFrame(outFile, t) {
   const f = path.join(os.tmpdir(), `frm-${crypto.randomBytes(5).toString("hex")}.png`);
@@ -280,19 +286,23 @@ async function extractFrame(outFile, t) {
   }
 }
 
+// Ngưỡng re-render: CHỈ render lại khi điểm < 6 (layout thảm hoạ thật sự). Render mềm trên
+// 2 vCPU ~10 phút/lần → re-render vì 7.x là phí thời gian (đã đo: 7.67 → 7.33, tệ hơn).
+const QC_REDO_BELOW = 6;
+
 async function renderAnimationWithQC({ variables }) {
   const haveGemini = !!process.env.GEMINI_API_KEY;
   const vars = { ...variables }; // img_hero = URL do app gửi (đã có sẵn) → render fetch trực tiếp
-  const rounds = haveGemini ? 2 : 1; // ≤2 vòng (chỉ còn fix compact, không regen ảnh)
+  const rounds = haveGemini ? 2 : 1; // tối đa 2 nhưng vòng 2 CHỈ chạy khi điểm < 6
   let best = null; // { tmpDir, outFile, avg, report }
 
   for (let round = 0; round < rounds; round++) {
-    const r = await renderTemplate({ template: "animation", variables: vars, quality: "standard" });
+    const r = await renderTemplate({ template: "animation", variables: vars, quality: "draft" });
     if (!haveGemini) { best = { ...r, avg: 10, report: [] }; break; } // 429/thiếu key → pass-through
 
     const dur = (await probeDuration(r.outFile)) || Number(vars.duration) || 18.5;
     const report = [];
-    let sum = 0, n = 0, heavy = false, wantCompact = false;
+    let sum = 0, n = 0, wantCompact = false;
     for (const m of QC_FRAME_MARKS) {
       let b64;
       try { b64 = await extractFrame(r.outFile, +(m * dur).toFixed(2)); } catch { continue; }
@@ -300,11 +310,10 @@ async function renderAnimationWithQC({ variables }) {
       report.push({ round, t: +(m * dur).toFixed(2), score: a.score, issues: a.issues });
       sum += a.score; n++;
       const issues = a.issues || [];
-      if (a.score < 8 || issues.some((i) => QC_HEAVY.has(i))) heavy = true;
       if (issues.some((i) => i === "text_overflow" || i === "overlap" || i === "unbalanced")) wantCompact = true;
     }
     const avg = n ? sum / n : 10;
-    console.log(`[qc] round ${round} avg=${avg.toFixed(2)} frames=${n} heavy=${heavy}`);
+    console.log(`[qc] round ${round} avg=${avg.toFixed(2)} frames=${n}`);
 
     if (!best || avg > best.avg) {
       if (best) await fs.rm(best.tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -313,9 +322,10 @@ async function renderAnimationWithQC({ variables }) {
       await fs.rm(r.tmpDir, { recursive: true, force: true }).catch(() => {});
     }
 
-    if (n > 0 && !heavy) break; // đạt
+    // 6+ coi như ĐẠT → KHÔNG re-render (tiết kiệm ~50% thời gian). Chỉ render lại nếu < 6.
+    if (n === 0 || avg >= QC_REDO_BELOW) break;
     if (round >= rounds - 1) break;
-    if (wantCompact) vars.compact = "1"; // chỉ còn fix layout (ảnh do app sinh, không regen ở VPS)
+    if (wantCompact) vars.compact = "1"; // vòng cứu: co chữ gọn hơn
   }
   return best;
 }
