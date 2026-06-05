@@ -62,9 +62,20 @@
       /* center (Hero, CTA) */
       .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
       /* left (bố cục mẫu): bám lề trái, KHỐI căn GIỮA dọc (hết trống đáy) */
-      /* canh giữa (cân nhất cho mọi loại nội dung); header lo đỉnh, progress lo đáy, watermark lo point */
-      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 220px 72px 200px; text-align: left; }
-      .scene.left .stack { display: flex; flex-direction: column; gap: 38px; width: 100%; }
+      /* FILL khung header→đáy: stack dãn đầy, nội dung phân bố (poster cho cảnh 1-khối, fill cho lưới).
+         → hết "band trống" giữa header và nội dung. */
+      .scene.left { flex-direction: column; justify-content: flex-start; align-items: stretch; padding: 168px 72px 150px; text-align: left; }
+      .scene.left .stack { display: flex; flex-direction: column; gap: 34px; width: 100%; flex: 1 1 auto; justify-content: space-between; }
+      /* host nội dung dạng lưới/nhiều mục → chiếm hết chỗ trống còn lại (dưới eyebrow) */
+      .scene.left .pbars, .scene.left .pill2, .scene.left .minigrid, .scene.left .compare, .scene.left .steps,
+      .scene.left .bawrap { flex: 1 1 auto; }
+      /* donut/trend giữ kích thước cố định (flex:1 sẽ méo vòng tròn / giãn đồ thị) — căn giữa khối */
+      #s_donut .donutwrap, #s_trend .trendwrap { align-self: center; }
+      /* cảnh 2-khối (callout + principle) → dãn đều */
+      #s_emph .stack { justify-content: space-evenly; }
+      /* cảnh point (1 dòng) → canh giữa (cân), watermark số to lo đáy-phải */
+      .scene.left.ptscene { justify-content: center; }
+      .scene.left.ptscene .stack { flex: 0 1 auto; justify-content: center; }
 
       .bg-light {
         background:
@@ -100,7 +111,7 @@
       .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; }
 
       /* pill2 (2×2) — icon-led (đúng style donnie) */
-      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-content: space-between; }
       .pill { display: flex; align-items: center; gap: 22px; padding: 42px 32px; will-change: transform, opacity; }
       .pill .pic { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 18px; background: rgba(124,58,237,0.12);
         display: flex; align-items: center; justify-content: center; will-change: transform; }
@@ -126,15 +137,17 @@
       .emph .em { color: #fff; font-weight: 800; font-size: 62px; line-height: 1.14; margin-top: 14px; }
 
       /* compare (2 cột) */
-      .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; width: 100%; align-items: stretch; }
+      .compare { display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 26px; width: 100%; align-items: stretch; }
       .ccard { padding: 46px 38px; text-align: left; will-change: transform, opacity; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
       .ccard .ct { font-weight: 800; font-size: 48px; line-height: 1.1; }
       .ccard .cs { font-weight: 500; font-size: 36px; line-height: 1.3; margin-top: 10px; }
       .ccard.l { color: var(--ink); } .ccard.l .cs { color: var(--sub); }
       .ccard.r .ct, .ccard.r .cs { color: #fff; }
+      /* CONTRAST: cột "Với AI" NỔI hơn (rộng hơn ở grid + bóng đậm) — mắt dừng ở giải pháp */
+      .ccard.r { box-shadow: 0 24px 58px var(--glow); position: relative; z-index: 2; }
 
       /* progress bars */
-      .pbars { display: flex; flex-direction: column; gap: 36px; }
+      .pbars { display: flex; flex-direction: column; gap: 36px; justify-content: space-between; }
       .pbar { will-change: transform, opacity; padding: 38px 34px; }
       .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
       .pbar .pn { color: var(--ink); font-weight: 800; font-size: 42px; }
@@ -145,6 +158,10 @@
       /* sheen: vệt sáng quét qua thanh sau khi đầy (motion-graphics, không tĩnh) */
       .pbar .sheen { position: absolute; top: 0; bottom: 0; width: 120px; transform: translateX(-160px) skewX(-18deg);
         background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%); will-change: transform; }
+      /* CONTRAST: bar GIÁ TRỊ CAO NHẤT nổi bật (viền accent + nền tint + bóng) */
+      .pbar.win { background: linear-gradient(135deg, rgba(124,58,237,0.11), rgba(124,58,237,0.02));
+        border: 2px solid rgba(124,58,237,0.38); box-shadow: 0 18px 44px var(--glow); }
+      .pbar.win .pn { color: var(--accent); }
 
       /* bignum */
       .bignum { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 0.04em; line-height: 0.92;
@@ -223,7 +240,7 @@
       .baarrow { flex: 0 0 66px; width: 66px; height: 66px; color: var(--accent); }
 
       /* ── S_mini: lưới 2×2 mini-stat ── */
-      .minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
+      .minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; align-content: space-between; }
       .ministat { padding: 36px 32px; border-radius: 22px; background: var(--card); box-shadow: 0 12px 30px rgba(90,70,170,0.10);
         display: flex; flex-direction: column; will-change: transform, opacity; }
       .ministat .mi { width: 58px; height: 58px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
@@ -535,7 +552,7 @@
         const nums = bars.map((b) => { const x = Number(String(b.value).replace(/[^\d.-]/g, "")); return Number.isFinite(x) ? x : 0; });
         const maxv = Math.max.apply(null, nums.concat([1]));
         bars.slice(0, 4).forEach((b, i) => {
-          const row = document.createElement("div"); row.className = "pbar bento"; row.id = "brow" + i;
+          const row = document.createElement("div"); row.className = "pbar bento" + (nums[i] === maxv ? " win" : ""); row.id = "brow" + i;
           const pl = document.createElement("div"); pl.className = "pl";
           const pn = document.createElement("span"); pn.className = "pn"; pn.textContent = String(b.label || "");
           const pv = document.createElement("span"); pv.className = "pv"; pv.id = "bval" + i;
@@ -665,7 +682,7 @@
           const num = String(p.n || i + 1);
           const iconKey = ICON_CYCLE[i % ICON_CYCLE.length];
           const sc = document.createElement("div");
-          sc.className = "scene left bg-light clip"; sc.id = id;
+          sc.className = "scene left ptscene bg-light clip"; sc.id = id;
           sc.setAttribute("data-variant", String(variant));
           sc.setAttribute("data-start", "0"); sc.setAttribute("data-duration", "3.7"); sc.setAttribute("data-track-index", "1");
           const dg = document.createElement("div"); dg.className = "dotgrid"; sc.appendChild(dg);
@@ -864,6 +881,9 @@
           tl.to(cc, { v: bi.num, duration: 0.7, ease: "power2.out",
             onUpdate: () => { const e = document.getElementById("bval" + bi.i); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN") + bi.unit; } }, s + 0.4 + bi.i * 0.12);
         });
+        // KHOẢNH KHẮC: bar THẮNG "nảy" nhẹ + hút mắt sau khi tất cả đầy.
+        const winRow = document.querySelector("#s4bars .pbar.win");
+        if (winRow) tl.to(winRow, { scale: 1.035, duration: 0.32, yoyo: true, repeat: 1, ease: "back.out(2.2)", transformOrigin: "left center" }, s + 1.5);
       }
 
       /* S_donut: vòng tròn quét + số đếm */
