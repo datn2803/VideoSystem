@@ -71,13 +71,13 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
       "voiceOver": "voice-over text cho video b-roll"
     },
     "animation": {
-      "keyMessages": ["3-4 thông điệp cốt lõi"],
-      "dataPoints": ["số liệu THẬT nếu có (vd 'tiết kiệm 80% thời gian')"],
+      "keyMessages": ["4-5 thông điệp cốt lõi, mỗi cái 1 Ý RIÊNG (mỗi cái = 1 cảnh point)"],
+      "dataPoints": ["3-5 số liệu MINH HOẠ có ngữ cảnh, GHI RÕ tính ví dụ (vd 'ví dụ tiết kiệm ~8 tiếng/tuần', 'thường giảm ~30% chi phí')"],
       "visualCues": ["gợi ý icon"],
-      "voiceOver": "voice-over text cho video animation",
+      "voiceOver": "voice-over cho animation — GIỮ NGẮN ~${lengthSec}s, KHÔNG dài hơn lời đọc gốc",
       "heroSubject": "1 cụm NGẮN mô tả nhân vật/chủ thể minh hoạ 3D (vd 'trợ lý AI cho founder')",
-      "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN"},
-      "bars": [{"label": "...", "value": "70", "unit": "%"}],
+      "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN (vd 'ƯỚC TÍNH TIẾT KIỆM')"},
+      "bars": [{"label": "Cách cũ", "value": "30", "unit": "%"}, {"label": "Với AI", "value": "75", "unit": "%"}, {"label": "Tối ưu", "value": "90", "unit": "%"}],
       "pills": [{"text": ".."}, {"text": ".."}, {"text": ".."}, {"text": ".."}],
       "compare": {"leftTitle": "Cách cũ", "leftItems": ["..", ".."], "rightTitle": "Với AI", "rightItems": ["..", ".."]},
       "principle": "1 câu nguyên tắc cốt lõi đắt giá (≤12 từ)",
@@ -87,10 +87,13 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
   "estimatedDurationSec": ${lengthSec}
 }
 
-QUY TẮC trường animation:
-- pills/compare/principle/callout phải là nội dung RIÊNG BIỆT, KHÔNG lặp lại nhau hay lặp keyMessages.
-- pills: ĐÚNG 4 điểm NGẮN (≤8 từ mỗi điểm), khác nhau.
-- bigStat & bars: CHỈ điền khi có số liệu THẬT/đáng tin — KHÔNG bịa số; không có thì BỎ HẲN trường đó.`;
+QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — làm ĐẦY ĐỦ):
+- keyMessages: 4-5 ý RIÊNG BIỆT (mỗi ý thành 1 cảnh) → đủ cảnh, video không bị ít cảnh.
+- bigStat + bars + dataPoints: LUÔN ĐIỀN bằng số liệu MINH HOẠ HỢP LÝ theo chủ đề (đây là phần "data motion" chạy số). Ghi rõ tính ví dụ/ước tính ở nhãn/dataPoints. TUYỆT ĐỐI KHÔNG bịa trích dẫn nghiên cứu (không "theo Gartner/McKinsey...").
+- bars: 2-4 mục CÙNG ĐƠN VỊ để so sánh được (vd cùng "%"), giá trị KHÁC nhau.
+- compare: 2 cột cụ thể (cũ vs mới); pills: 4 điểm NGẮN (≤8 từ) khác nhau.
+- pills/compare/principle/callout RIÊNG BIỆT, không lặp keyMessages.
+- ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
 }
 
 async function recordLLMUsage(costUsd: number, tokensIn: number, tokensOut: number) {
@@ -118,7 +121,7 @@ export async function generateScript(input: {
   const result = await llm.complete({
     system: SYSTEM,
     messages: [{ role: "user", content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec) }],
-    maxTokens: 4000,
+    maxTokens: 5500, // đủ chỗ cho JSON giàu data (bars/dataPoints/keyMessages) — KHÔNG làm dài video, chỉ tránh cắt JSON
     responseFormat: "json",
   });
 

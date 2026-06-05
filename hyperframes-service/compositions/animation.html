@@ -391,6 +391,7 @@
       const bars = parseJSON(v.data_bars, []);
       const barsOK = Array.isArray(bars) && bars.length >= 2;
       const barNums = [];
+      const barInfo = [];
       if (!barsOK) { remove("s4b"); }
       else {
         hideIfEmpty("s4lbl", v.bars_title); if (!String(v.bars_title || "").trim()) remove("s4eb");
@@ -401,7 +402,11 @@
           const row = document.createElement("div"); row.className = "pbar bento"; row.id = "brow" + i;
           const pl = document.createElement("div"); pl.className = "pl";
           const pn = document.createElement("span"); pn.className = "pn"; pn.textContent = String(b.label || "");
-          const pv = document.createElement("span"); pv.className = "pv"; pv.textContent = String(b.value || "") + (b.unit ? " " + String(b.unit) : "");
+          const pv = document.createElement("span"); pv.className = "pv"; pv.id = "bval" + i;
+          const unitTxt = b.unit ? " " + String(b.unit) : "";
+          const isNum = /\d/.test(String(b.value || ""));
+          pv.textContent = isNum ? "0" + unitTxt : String(b.value || "") + unitTxt; // count-up từ 0 (data motion)
+          barInfo.push({ i, num: nums[i], unit: unitTxt, isNum });
           pl.appendChild(pn); pl.appendChild(pv);
           const track = document.createElement("div"); track.className = "ptrack";
           const fill = document.createElement("div"); fill.className = "pfill"; fill.id = "bfill" + i;
@@ -630,6 +635,13 @@
           tl.fromTo("#bfill" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.65, ease: "power3.out" }, s + 0.4 + i * 0.12);
           // vệt sáng quét qua thanh sau khi đầy → motion-graphics, không tĩnh
           tl.fromTo("#bsheen" + i, { x: -160 }, { x: 1240, duration: 0.75, ease: "power2.in" }, s + 0.95 + i * 0.12);
+        });
+        // DATA MOTION: giá trị mỗi bar ĐẾM TĂNG dần từ 0 (khớp lúc thanh mọc).
+        barInfo.forEach((bi) => {
+          if (!bi.isNum) return;
+          const cc = { v: 0 };
+          tl.to(cc, { v: bi.num, duration: 0.7, ease: "power2.out",
+            onUpdate: () => { const e = document.getElementById("bval" + bi.i); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN") + bi.unit; } }, s + 0.4 + bi.i * 0.12);
         });
       }
 
