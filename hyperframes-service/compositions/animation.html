@@ -35,7 +35,8 @@
     {"id":"before_after","type":"string","label":"S_ba JSON {fromValue,fromLabel,toValue,toLabel,unit}","default":""},
     {"id":"mini_stats","type":"string","label":"S_mini JSON [{value,unit,label}]","default":"[]"},
     {"id":"mini_title","type":"string","label":"S_mini eyebrow","default":"Chỉ số"},
-    {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""}
+    {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""},
+    {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""}
   ]'
 >
   <head>
@@ -61,9 +62,9 @@
       /* center (Hero, CTA) */
       .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
       /* left (bố cục mẫu): bám lề trái, KHỐI căn GIỮA dọc (hết trống đáy) */
-      /* canh giữa + nội dung TO (đầy khung); progress bar lo phần đáy, watermark lo cảnh point */
-      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 150px 72px 170px; text-align: left; }
-      .scene.left .stack { display: flex; flex-direction: column; gap: 36px; width: 100%; }
+      /* canh giữa (cân nhất cho mọi loại nội dung); header lo đỉnh, progress lo đáy, watermark lo point */
+      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 220px 72px 200px; text-align: left; }
+      .scene.left .stack { display: flex; flex-direction: column; gap: 38px; width: 100%; }
 
       .bg-light {
         background:
@@ -151,10 +152,11 @@
       .bignum .bu { font-size: 0.42em; font-weight: 800; color: var(--accent2); align-self: flex-start; margin-top: 0.12em; }
       .blabel { color: var(--sub); font-weight: 600; font-size: 40px; }
 
-      /* glow blob nền — trôi nhẹ suốt clip (nền "sống", không phẳng lì) */
-      .glowblob { position: absolute; width: 820px; height: 820px; border-radius: 50%; left: 6%; top: 16%;
-        background: radial-gradient(circle, var(--glow) 0%, rgba(255,255,255,0) 68%);
-        filter: blur(50px); opacity: 0.7; pointer-events: none; will-change: transform; }
+      /* glow blob nền — trôi nhẹ suốt clip. TỐI ƯU RENDER: KHÔNG dùng filter:blur (rất chậm trên
+         software render no-GPU) — dùng radial-gradient mềm sẵn (gần như y hệt mắt thường, nhanh hơn nhiều). */
+      .glowblob { position: absolute; width: 920px; height: 920px; border-radius: 50%; left: 4%; top: 12%;
+        background: radial-gradient(circle, var(--glow) 0%, rgba(255,255,255,0) 62%);
+        opacity: 0.85; pointer-events: none; will-change: transform; }
 
       /* point scene — 3 BIẾN THỂ luân phiên (phá đơn điệu) + .word cho kinetic typography */
       .ptt .word { display: inline-block; will-change: transform, opacity; }
@@ -189,15 +191,24 @@
       #progress .pfb { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
         border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); will-change: transform; }
 
+      /* header trên (brand/topic) — đóng khung phần đỉnh ở mọi cảnh, hết trống đầu */
+      #topbar { position: absolute; left: 72px; top: 76px; display: inline-flex; align-items: center; gap: 16px; z-index: 40; }
+      #topbar .tmark { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+      #topbar .tmark svg { width: 22px; height: 22px; }
+      #topbar .ttxt { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 2.5px; text-transform: uppercase; }
+      #topbar .tline { width: 60px; height: 4px; border-radius: 999px; background: rgba(124,58,237,0.25); }
+
       /* ── S_donut: vòng tròn % ── */
       .donutwrap { position: relative; width: 460px; height: 460px; align-self: flex-start; }
       .donut { width: 100%; height: 100%; transform: rotate(-90deg); }
       .donut .dtrack { fill: none; stroke: rgba(124,58,237,0.12); stroke-width: 22; }
       .donut .dfill { fill: none; stroke: var(--accent); stroke-width: 22; stroke-linecap: round;
         stroke-dasharray: 578; stroke-dashoffset: 578; will-change: stroke-dashoffset; }
-      .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-        color: var(--accent); font-weight: 900; font-size: 138px; font-variant-numeric: tabular-nums; }
-      .dcenter .du { font-size: 0.46em; color: var(--accent2); align-self: flex-start; margin-top: 0.5em; }
+      .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .dcenter .dval { display: inline-flex; align-items: baseline; color: var(--accent); font-weight: 900;
+        font-size: 132px; font-variant-numeric: tabular-nums; line-height: 1; }
+      .dcenter .du { font-size: 0.5em; color: var(--accent2); margin-left: 4px; }
 
       /* ── S_ba: before → after ── */
       .bawrap { display: flex; align-items: center; gap: 26px; width: 100%; }
@@ -235,7 +246,7 @@
       #s1 .l { display: block; color: var(--ink); font-weight: 900; font-size: 78px; line-height: 1.05; }
       #s1 .sub { display: block; color: var(--sub); font-weight: 600; font-size: 44px; margin-top: 18px; }
       #s1 .herocard { width: 560px; height: 540px; margin-top: 44px; padding: 20px; display: flex; align-items: center; justify-content: center; overflow: hidden; will-change: transform, opacity; }
-      #s1 .herocard img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 24px 40px rgba(90,70,170,0.25)); }
+      #s1 .herocard img { width: 100%; height: 100%; object-fit: contain; } /* bỏ drop-shadow (filter chậm); thẻ .bento đã có box-shadow */
 
       /* ── S7 CTA (center) ── */
       #s7 .e1 { color: var(--ink); font-weight: 800; font-size: 80px; line-height: 1.14; }
@@ -322,7 +333,7 @@
               <circle class="dtrack" cx="110" cy="110" r="92"></circle>
               <circle class="dfill" id="dnFill" cx="110" cy="110" r="92"></circle>
             </svg>
-            <div class="dcenter"><span id="dnNum">0</span><span class="du" id="dnUnit"></span></div>
+            <div class="dcenter"><span class="dval"><span id="dnNum">0</span><span class="du" id="dnUnit"></span></span></div>
           </div>
           <div class="blabel" id="dnText"></div>
         </div>
@@ -372,6 +383,13 @@
         <div class="e1" id="s7e1"></div>
         <div class="e2" id="s7e2"></div>
         <div class="e3" id="s7e3"><span id="s7e3text"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
+      </div>
+
+      <!-- Header trên (brand/topic) — đóng khung đỉnh -->
+      <div id="topbar">
+        <span class="tmark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.5L19.5 10l-5.6 1.5L12 17l-1.9-5.5L4.5 10l5.6-1.5z"/></svg></span>
+        <span class="ttxt" id="topbarTxt"></span>
+        <span class="tline"></span>
       </div>
 
       <!-- Thanh tiến trình chạy suốt clip (lấp đáy) -->
@@ -477,6 +495,10 @@
       rs.setProperty("--accent", TH.accent); rs.setProperty("--accent2", TH.accent2);
       rs.setProperty("--ink", TH.ink); rs.setProperty("--sub", TH.sub);
       rs.setProperty("--card", TH.card); rs.setProperty("--glow", TH.glow);
+
+      // Header trên (topic) — đóng khung đỉnh. Rỗng → ẩn.
+      if (String(v.topic || "").trim()) setText("topbarTxt", String(v.topic).toUpperCase().slice(0, 32));
+      else remove("topbar");
 
       // ── S1 hero ──
       hideIfEmpty("s1eb", v.hook_eyebrow);

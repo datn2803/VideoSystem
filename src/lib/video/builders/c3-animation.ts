@@ -370,8 +370,8 @@ export async function buildAnimation(input: {
         voice_url: voiceUrl,
         duration: String(durationSec),
         img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
-        visionQC: true, // VPS chỉ chấm QC (bỏ imagePrompts — không sinh ảnh trên VPS nữa)
         scene_times: JSON.stringify(sceneTimes), // đồng bộ cảnh với giọng đọc
+        topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {
