@@ -71,8 +71,8 @@
       .scene.left .bawrap { flex: 1 1 auto; }
       /* donut/trend giữ kích thước cố định (flex:1 sẽ méo vòng tròn / giãn đồ thị) — căn giữa khối */
       #s_donut .donutwrap, #s_trend .trendwrap { align-self: center; }
-      /* cảnh 2-khối (callout + principle) → dãn đều */
-      #s_emph .stack { justify-content: space-evenly; }
+      /* cảnh 2-khối (callout + principle): eyebrow neo đỉnh + group căn giữa phần còn lại */
+      .scene.left .emphgroup { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-start; gap: 30px; min-height: 0; }
       /* cảnh point + cảnh 1-phần-tử → KHỐI bento lấp hết khung (tile/host flex:1) */
       .scene.left .ptbento, .scene.left .bentohost { flex: 1 1 auto; min-height: 0; }
 
@@ -111,14 +111,14 @@
 
       /* pill2 (2×2) — icon-led (đúng style donnie). Hàng dãn ĐỀU (1fr) → hết hở giữa */
       .pill2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 26px; }
-      /* tile dọc: icon TRÊN · nhãn DƯỚI (dãn đều) → lấp thẻ cao, hết rỗng */
-      .pill { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 48px 38px; will-change: transform, opacity; }
-      .pill .pic { flex: 0 0 auto; width: 88px; height: 88px; border-radius: 22px; background: rgba(124,58,237,0.12);
+      /* feature tile: icon + nhãn gom GIỮA (cohesive) → breathing đối xứng, gọn gàng */
+      .pill { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 26px; padding: 40px 34px; will-change: transform, opacity; }
+      .pill .pic { flex: 0 0 auto; width: 96px; height: 96px; border-radius: 24px; background: rgba(124,58,237,0.12);
         display: flex; align-items: center; justify-content: center; will-change: transform; }
-      .pill .pic svg { width: 46px; height: 46px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .pill .pic svg { width: 50px; height: 50px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
       .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: rgba(124,58,237,0.12);
         color: var(--accent); font-weight: 900; font-size: 26px; display: flex; align-items: center; justify-content: center; }
-      .pill .pt { color: var(--ink); font-weight: 700; font-size: 46px; line-height: 1.2; }
+      .pill .pt { color: var(--ink); font-weight: 700; font-size: 44px; line-height: 1.22; }
 
       /* listcard */
       .listcard { display: flex; flex-direction: column; gap: 20px; }
@@ -131,16 +131,18 @@
         padding: 40px 38px; color: var(--ink); font-weight: 600; font-size: 44px; line-height: 1.32; will-change: transform, opacity; }
       .callout b { color: var(--accent); font-weight: 900; }
 
-      /* emph (gradient) */
-      .emph { padding: 50px 44px; will-change: transform, opacity; }
+      /* emph (gradient) — thẻ nguyên tắc là HERO: fill phần dưới, nội dung căn giữa */
+      .emph { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: 56px 48px; will-change: transform, opacity; }
       .emph .eb { color: rgba(255,255,255,0.85); font-weight: 800; font-size: 30px; letter-spacing: 2px; text-transform: uppercase; }
-      .emph .em { color: #fff; font-weight: 800; font-size: 62px; line-height: 1.14; margin-top: 14px; }
+      .emph .em { color: #fff; font-weight: 800; font-size: 66px; line-height: 1.16; margin-top: 16px; }
 
       /* compare (2 cột) */
       .compare { display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 26px; width: 100%; align-items: stretch; }
-      .ccard { padding: 46px 38px; text-align: left; will-change: transform, opacity; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-      .ccard .ct { font-weight: 800; font-size: 48px; line-height: 1.1; }
-      .ccard .cs { font-weight: 500; font-size: 36px; line-height: 1.3; margin-top: 10px; }
+      .ccard { padding: 52px 40px; text-align: left; will-change: transform, opacity; display: flex; flex-direction: column; justify-content: center; gap: 30px; }
+      .ccard .ct { font-weight: 800; font-size: 50px; line-height: 1.1; padding-bottom: 22px; border-bottom: 2px solid rgba(124,58,237,0.16); }
+      .ccard.r .ct { border-bottom-color: rgba(255,255,255,0.28); }
+      .ccard .cslist { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: flex-start; gap: 28px; }
+      .ccard .cs { font-weight: 500; font-size: 37px; line-height: 1.32; }
       .ccard.l { color: var(--ink); } .ccard.l .cs { color: var(--sub); }
       .ccard.r .ct, .ccard.r .cs { color: #fff; }
       /* CONTRAST: cột "Với AI" NỔI hơn (rộng hơn ở grid + bóng đậm) — mắt dừng ở giải pháp */
@@ -259,7 +261,7 @@
       .donutwrap { position: relative; width: 660px; height: 660px; align-self: center; }
       .donut { width: 100%; height: 100%; transform: rotate(-90deg); }
       .donut .dtrack { fill: none; stroke: rgba(124,58,237,0.12); stroke-width: 24; }
-      .donut .dfill { fill: none; stroke: var(--accent); stroke-width: 24; stroke-linecap: round;
+      .donut .dfill { fill: none; stroke: url(#dnGrad); stroke-width: 24; stroke-linecap: round;
         stroke-dasharray: 578; stroke-dashoffset: 578; will-change: stroke-dashoffset; }
       .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
       .dcenter .dval { display: inline-flex; align-items: baseline; color: var(--accent); font-weight: 900;
@@ -274,9 +276,10 @@
       .baside.r { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 16px 40px var(--glow); }
       .baside .bahd { font-weight: 800; font-size: 32px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sub); }
       .baside.r .bahd { color: rgba(255,255,255,0.9); }
-      .baside .bav { font-weight: 900; font-size: 132px; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .baside .bav { font-weight: 900; font-size: 132px; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
       .baside.r .bav { color: #fff; }
-      .baside .bav .bu { font-size: 0.40em; }
+      .baside .bav .bu { font-size: 0.40em; margin-left: 0.1em; color: var(--accent); }
+      .baside.r .bav .bu { color: rgba(255,255,255,0.9); }
       .baside .babar { width: 100%; height: 16px; border-radius: 999px; overflow: hidden; background: rgba(124,58,237,0.14); }
       .baside.r .babar { background: rgba(255,255,255,0.28); }
       .baside .babar i { display: block; height: 100%; border-radius: 999px; transform-origin: left center; transform: scaleX(0);
@@ -298,7 +301,7 @@
       /* ── S_trend: đường tăng (CHART lấp hết thân thẻ + badge đỉnh) ── */
       .trendwrap { position: relative; width: 100%; flex: 1 1 auto; height: auto; min-height: 460px; align-self: stretch; }
       .trendsvg { width: 100%; height: 100%; overflow: visible; }
-      .trendsvg .tline { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; will-change: stroke-dashoffset; }
+      .trendsvg .tline { fill: none; stroke: url(#trGrad); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; will-change: stroke-dashoffset; }
       .trendsvg .tarea { fill: rgba(124,58,237,0.10); stroke: none; }
       .tdot { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
         box-shadow: 0 0 0 9px rgba(124,58,237,0.18); transform: translate(-50%,-50%); will-change: transform, opacity; }
@@ -378,8 +381,11 @@
       <div id="s_emph" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
         <div class="stack">
-          <div class="callout" id="emphCallout"></div>
-          <div class="emph bento-accent" id="emphCard"><div class="eb">Nguyên tắc</div><div class="em" id="emphPrinciple"></div></div>
+          <div class="eyebrow icon" id="emphEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z"/></svg></span><span class="lbl">Đúc kết</span></div>
+          <div class="emphgroup">
+            <div class="callout" id="emphCallout"></div>
+            <div class="emph bento-accent" id="emphCard"><div class="eb">Nguyên tắc</div><div class="em" id="emphPrinciple"></div></div>
+          </div>
         </div>
       </div>
 
@@ -401,6 +407,7 @@
             <div class="hostbody">
               <div class="donutwrap">
                 <svg class="donut" viewBox="0 0 220 220">
+                  <defs><linearGradient id="dnGrad" x1="0" y1="0" x2="1" y2="1"><stop id="dnG0" offset="0"></stop><stop id="dnG1" offset="1"></stop></linearGradient></defs>
                   <circle class="dtrack" cx="110" cy="110" r="92"></circle>
                   <circle class="dfill" id="dnFill" cx="110" cy="110" r="92"></circle>
                 </svg>
@@ -418,9 +425,9 @@
         <div class="stack">
           <div class="eyebrow icon" id="baEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span><span class="lbl" id="baLbl"></span></div>
           <div class="bawrap">
-            <div class="baside l"><div class="bahd" id="baFromL"></div><div class="bav" id="baFrom">0</div><div class="babar"><i id="baFromBar"></i></div></div>
+            <div class="baside l"><div class="bahd" id="baFromL"></div><div class="bav"><span id="baFrom">0</span><span class="bu" id="baFromU"></span></div><div class="babar"><i id="baFromBar"></i></div></div>
             <svg class="baarrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-            <div class="baside r"><div class="bahd" id="baToL"></div><div class="bav hi" id="baTo">0</div><div class="babar"><i id="baToBar"></i></div></div>
+            <div class="baside r"><div class="bahd" id="baToL"></div><div class="bav"><span id="baTo">0</span><span class="bu" id="baToU"></span></div><div class="babar"><i id="baToBar"></i></div></div>
           </div>
         </div>
       </div>
@@ -443,6 +450,7 @@
             <div class="hostbody">
               <div class="trendwrap">
                 <svg class="trendsvg" viewBox="0 0 600 300" preserveAspectRatio="none">
+                  <defs><linearGradient id="trGrad" x1="0" y1="0" x2="1" y2="0"><stop id="trG0" offset="0"></stop><stop id="trG1" offset="1"></stop></linearGradient></defs>
                   <polyline class="tarea" id="trArea" points=""></polyline>
                   <polyline class="tline" id="trLine" points=""></polyline>
                 </svg>
@@ -573,6 +581,10 @@
       rs.setProperty("--accent", TH.accent); rs.setProperty("--accent2", TH.accent2);
       rs.setProperty("--ink", TH.ink); rs.setProperty("--sub", TH.sub);
       rs.setProperty("--card", TH.card); rs.setProperty("--glow", TH.glow);
+      // gradient stop cho ring donut + đường trend (set trực tiếp → chắc chắn render, không lệ thuộc var() trong SVG)
+      const setStop = (id, c) => { const e = document.getElementById(id); if (e) e.setAttribute("stop-color", c); };
+      setStop("dnG0", TH.accent2); setStop("dnG1", TH.accent);
+      setStop("trG0", TH.accent2); setStop("trG1", TH.accent);
 
       // Header trên (topic) — đóng khung đỉnh. Rỗng → ẩn.
       if (String(v.topic || "").trim()) setText("topbarTxt", String(v.topic).toUpperCase().slice(0, 32));
@@ -595,7 +607,7 @@
       const bigIsNum = bigRaw !== "" && Number.isFinite(bigNum);
       if (bigRaw === "") { remove("s2"); }
       else {
-        hideIfEmpty("s2lbl", v.bignum_label); if (!String(v.bignum_label || "").trim()) remove("s2eb");
+        setText("s2lbl", "Số liệu");               // eyebrow = TAG NGẮN (caption đầy đủ ở dưới số)
         if (!bigIsNum) setText("s2num", bigRaw);
         else setText("s2num", bigNum.toLocaleString("vi-VN")); // FT đo theo GIÁ TRỊ CUỐI (rộng nhất) → không tràn khi đếm
         if (!String(v.bignum_unit || "").trim()) remove("s2unit"); else setText("s2unit", v.bignum_unit);
@@ -657,8 +669,8 @@
       if (!donutData || !String(donutData.value || "").trim()) { remove("s_donut"); }
       else {
         const lab = String(donutData.label || "").trim();
-        if (!lab) remove("dnEb"); else setText("dnLbl", lab);
-        setText("dnText", lab);
+        setText("dnLbl", "Tỉ lệ");                 // eyebrow = TAG NGẮN (tránh lặp với caption dưới)
+        if (lab) setText("dnText", lab); else remove("dnText");
         const n = Number(String(donutData.value).replace(/[^\d.-]/g, ""));
         donutIsNum = Number.isFinite(n);
         if (donutIsNum) { donutNum = n; setText("dnUnit", donutData.unit || "%"); }
@@ -673,15 +685,16 @@
         setText("baLbl", String(baData.label || "Trước & Sau")); // luôn có nhãn eyebrow (hết trơ)
         setText("baFromL", baData.fromLabel || "Trước");
         setText("baToL", baData.toLabel || "Sau");
-        const unit = baData.unit ? " " + String(baData.unit) : "";
+        const unit = baData.unit ? String(baData.unit) : "";   // đơn vị ở SPAN riêng (.bu nhỏ) → số gọn 1 dòng
+        setText("baFromU", unit); setText("baToU", unit);
         const fn = Number(String(baData.fromValue).replace(/[^\d.-]/g, ""));
         const tn = Number(String(baData.toValue).replace(/[^\d.-]/g, ""));
         const mx = Math.max(Math.abs(fn) || 0, Math.abs(tn) || 0, 1);
         baInfo = { from: fn, to: tn, fromIsNum: Number.isFinite(fn), toIsNum: Number.isFinite(tn), unit,
           fromR: Number.isFinite(fn) ? Math.max(0.08, Math.abs(fn) / mx) : 1,
           toR: Number.isFinite(tn) ? Math.max(0.08, Math.abs(tn) / mx) : 1 };
-        setText("baFrom", baInfo.fromIsNum ? "0" + unit : String(baData.fromValue));
-        setText("baTo", baInfo.toIsNum ? "0" + unit : String(baData.toValue));
+        if (!baInfo.fromIsNum) { setText("baFrom", String(baData.fromValue)); remove("baFromU"); }
+        if (!baInfo.toIsNum) { setText("baTo", String(baData.toValue)); remove("baToU"); }
       }
 
       // ── S_mini: lưới mini-stat ──
@@ -714,8 +727,9 @@
         ? trendData.points.map((p) => Number(String(p).replace(/[^\d.-]/g, ""))).filter((x) => Number.isFinite(x)) : [];
       if (trendPts.length < 2) { remove("s_trend"); }
       else {
-        const lab = String((trendData && trendData.label) || "Xu hướng").trim();
-        setText("trLbl", lab); setText("trText", lab);
+        const lab = String((trendData && trendData.label) || "").trim();
+        setText("trLbl", "Xu hướng");              // eyebrow = TAG NGẮN (tránh lặp caption dưới)
+        if (lab) setText("trText", lab); else remove("trText");
         const mn = Math.min.apply(null, trendPts), mx = Math.max.apply(null, trendPts), rng = (mx - mn) || 1;
         const W = 600, H = 300, pad = 24;
         const coords = trendPts.map((val, i) => [
@@ -796,7 +810,9 @@
         const mk = (side, title, items) => {
           const c = document.createElement("div"); c.className = "ccard " + side + (side === "r" ? " bento-accent" : " bento");
           const t = document.createElement("div"); t.className = "ct"; t.textContent = String(title || ""); c.appendChild(t);
-          (items || []).slice(0, 3).forEach((it) => { const d = document.createElement("div"); d.className = "cs"; d.textContent = "• " + String(it); c.appendChild(d); });
+          const list = document.createElement("div"); list.className = "cslist"; // bullets căn giữa vùng dưới tiêu đề → lấp đều cột
+          (items || []).slice(0, 3).forEach((it) => { const d = document.createElement("div"); d.className = "cs"; d.textContent = "• " + String(it); list.appendChild(d); });
+          c.appendChild(list);
           return c;
         };
         grid.appendChild(mk("l", cmp.leftTitle, cmp.leftItems));
@@ -981,8 +997,8 @@
         tl.from("#s_ba .baside.l", { x: -30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.3);
         tl.from("#s_ba .baarrow", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.7)" }, s + 0.55);
         tl.from("#s_ba .baside.r", { x: 30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.7);
-        if (baInfo && baInfo.fromIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.from, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baFrom"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.45); }
-        if (baInfo && baInfo.toIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.to, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baTo"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.85); }
+        if (baInfo && baInfo.fromIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.from, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baFrom"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.45); }
+        if (baInfo && baInfo.toIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.to, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baTo"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.85); }
         // thanh tỉ lệ mọc (số to → thanh dài) — lấp đáy thẻ + tăng tính data
         if (baInfo) {
           tl.fromTo("#baFromBar", { scaleX: 0 }, { scaleX: baInfo.fromR, duration: 0.7, ease: "power3.out" }, s + 0.5);
@@ -1024,7 +1040,8 @@
       /* S_emph */
       if (has("s_emph")) {
         const s = startOf.s_emph;
-        if (document.getElementById("emphCallout")) tl.from("#emphCallout", { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.15);
+        if (document.getElementById("emphEb")) tl.from("#emphEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.1);
+        if (document.getElementById("emphCallout")) tl.from("#emphCallout", { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.2);
         if (document.getElementById("emphCard")) {
           tl.fromTo("#emphCard", { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4);
           // mid-scene: thẻ gradient "thở" nhẹ
