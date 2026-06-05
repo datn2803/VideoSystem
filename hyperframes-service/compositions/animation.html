@@ -54,6 +54,9 @@
       :root {
         --bg1: #f4f0fc; --bg2: #e9e3f8; --accent: #7c3aed; --accent2: #a78bfa;
         --ink: #1e1b2e; --sub: #6b6480; --card: #ffffff; --glow: rgba(124,58,237,0.16);
+        /* hệ ELEVATION 2 lớp (depth premium): 1 bóng tight ghì thẻ + 1 bóng to mềm nâng thẻ */
+        --elev-1: 0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13);
+        --elev-2: 0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow);
       }
       #root { position: relative; width: 1080px; height: 1920px; }
 
@@ -106,8 +109,14 @@
 
       /* ── Bento card primitives ── */
       .bento { background: var(--card); border-radius: 22px; border: 1px solid rgba(120,90,210,0.08);
-        box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
-      .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; }
+        box-shadow: var(--elev-1); }
+      .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; box-shadow: var(--elev-2); }
+      /* SHEEN kính: vệt sáng góc trên-trái trên thẻ gradient → chiều sâu 3D, premium (không dùng blur → render nhanh) */
+      .bento-accent, .pt-num.grad, .baside.r { position: relative; overflow: hidden; }
+      .bento-accent::before, .pt-num.grad::before, .baside.r::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+        background: radial-gradient(125% 92% at 14% -12%, rgba(255,255,255,0.20), rgba(255,255,255,0) 56%); }
+      .bento-accent > *, .pt-num.grad > *, .baside.r > * { position: relative; z-index: 1; }
 
       /* pill2 (2×2) — icon-led (đúng style donnie). Hàng dãn ĐỀU (1fr) → hết hở giữa */
       .pill2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 26px; }
@@ -146,7 +155,7 @@
       .ccard.l { color: var(--ink); } .ccard.l .cs { color: var(--sub); }
       .ccard.r .ct, .ccard.r .cs { color: #fff; }
       /* CONTRAST: cột "Với AI" NỔI hơn (rộng hơn ở grid + bóng đậm) — mắt dừng ở giải pháp */
-      .ccard.r { box-shadow: 0 24px 58px var(--glow); position: relative; z-index: 2; }
+      .ccard.r { box-shadow: var(--elev-2); position: relative; z-index: 2; }
 
       /* progress bars */
       .pbars { display: flex; flex-direction: column; gap: 36px; justify-content: space-between; }
@@ -215,7 +224,7 @@
       .pt-num .picr { width: 66px; height: 66px; border-radius: 18px; display: flex; align-items: center; justify-content: center; align-self: flex-end; }
       .pt-num .picr svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
       .pt-body { flex: 1 1 auto; justify-content: flex-start; background: var(--card); border: 1px solid rgba(120,90,210,0.07);
-        box-shadow: 0 14px 38px rgba(90,70,170,0.12); }
+        box-shadow: var(--elev-1); }
       .pt-body .ptt { position: relative; z-index: 2; font-weight: 800; font-size: 60px; line-height: 1.16; color: var(--ink); }
       .pt-body .ptt .ac { color: var(--accent); }
       /* glyph icon mờ KHỔNG LỒ lấp góc dưới-phải tile nội dung → cân bố cục (chữ trên-trái · glyph dưới-phải) */
@@ -224,7 +233,7 @@
       .ptbento.v0 .ptglyph svg { width: 300px; height: 300px; }
       .ptbento.v1 .ptglyph svg { width: 200px; height: 200px; }
       /* treatment GRAD — tile số gradient (chữ trắng) */
-      .pt-num.grad { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 18px 44px var(--glow); color: #fff; }
+      .pt-num.grad { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: var(--elev-2); color: #fff; }
       .pt-num.grad .pnum { color: #fff; } .pt-num.grad .pteb { color: rgba(255,255,255,0.85); }
       .pt-num.grad .picr { background: rgba(255,255,255,0.18); color: #fff; }
       /* treatment TINT — tile số nền tím nhạt (chữ accent) */
@@ -238,8 +247,8 @@
       .bentohost .hosthead { flex: 0 0 auto; }
       .bentohost .hostbody { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 30px; min-height: 0; }
-      .bentohost.plain { background: var(--card); box-shadow: 0 18px 46px rgba(90,70,170,0.12); border: 1px solid rgba(120,90,210,0.08); }
-      .bentohost.tint { background: linear-gradient(155deg, rgba(124,58,237,0.075), rgba(124,58,237,0.015)); border: 1px solid rgba(124,58,237,0.12); }
+      .bentohost.plain { background: var(--card); box-shadow: var(--elev-1); border: 1px solid rgba(120,90,210,0.08); }
+      .bentohost.tint { background: linear-gradient(155deg, rgba(124,58,237,0.075), rgba(124,58,237,0.015)); border: 1px solid rgba(124,58,237,0.12); box-shadow: var(--elev-1); }
       .bentohost::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px;
         background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
@@ -272,8 +281,8 @@
       .bawrap { display: flex; align-items: stretch; gap: 26px; width: 100%; }
       .baside { flex: 1; padding: 50px 30px; border-radius: 26px; text-align: center; display: flex; flex-direction: column;
         justify-content: space-between; gap: 18px; will-change: transform, opacity; }
-      .baside.l { background: var(--card); box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
-      .baside.r { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 16px 40px var(--glow); }
+      .baside.l { background: var(--card); box-shadow: var(--elev-1); }
+      .baside.r { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: var(--elev-2); }
       .baside .bahd { font-weight: 800; font-size: 32px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sub); }
       .baside.r .bahd { color: rgba(255,255,255,0.9); }
       .baside .bav { font-weight: 900; font-size: 132px; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -289,8 +298,8 @@
 
       /* ── S_mini: lưới 2×2 mini-stat (hàng dãn ĐỀU 1fr → thẻ cao đều, hết hở giữa) ── */
       .minigrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 24px; width: 100%; }
-      .ministat { padding: 40px 34px; border-radius: 22px; background: var(--card); box-shadow: 0 12px 30px rgba(90,70,170,0.10);
-        display: flex; flex-direction: column; justify-content: space-between; will-change: transform, opacity; }
+      .ministat { padding: 40px 34px; border-radius: 22px; background: var(--card); box-shadow: var(--elev-1);
+        border: 1px solid rgba(120,90,210,0.06); display: flex; flex-direction: column; justify-content: space-between; will-change: transform, opacity; }
       .ministat .mi { width: 58px; height: 58px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
         display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
       .ministat .mi svg { width: 32px; height: 32px; }
