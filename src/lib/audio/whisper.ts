@@ -102,7 +102,7 @@ export function alignByWeights(
     B[n] = total;
   }
 
-  const MIN = 1.2; // mỗi cảnh tối thiểu ~1.2s (đủ đọc)
+  const MIN = 2.2; // mỗi cảnh tối thiểu ~2.2s (tránh "hơi nhanh" — đủ để mắt kịp đọc)
   for (let k = 1; k <= n; k++) if (B[k] < B[k - 1] + MIN) B[k] = B[k - 1] + MIN;
   if (B[n] > total) {
     const scale = total / B[n];

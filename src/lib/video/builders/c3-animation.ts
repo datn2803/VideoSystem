@@ -205,19 +205,26 @@ function buildAnimationVariables(
   const principle = String(anim.principle || "").trim();
   const callout = String(anim.callout || "").trim();
 
-  // ── Danh sách CẢNH ĐANG HIỂN THỊ + trọng số (số chữ) — KHỚP THỨ TỰ với `order` trong
-  //    animation.html: s1, s2, s4b, point scenes, s6, s_emph, s_cmp, s7. Dùng để Whisper
-  //    căn scene_times (cảnh nội dung nhiều → giữ lâu hơn). ──
+  // ── Danh sách CẢNH (khớp thứ tự `order` trong animation.html) + trọng số CĂN THEO GIỌNG ĐỌC.
+  //    GIỌNG = read script (hook+body+cta). hero↔hook, cta↔cta. CÁC CẢNH BODY (stat/bars/point/
+  //    compare/emph) đều rơi trong phần BODY → CHIA ĐỀU thời lượng body (vì data là NON-READ,
+  //    không có lời riêng — chúng minh hoạ trong lúc giọng đọc body). → hết dồn/lỡ nhịp. ──
   const wc = (t: string) => Math.max(1, String(t || "").trim().split(/\s+/).filter(Boolean).length);
-  const sceneSpecs: SceneSpec[] = [];
-  sceneSpecs.push({ id: "s1", weight: wc(s.hook) + 2 });
-  if (bignumValue) sceneSpecs.push({ id: "s2", weight: 3 });
-  if (finalBars.length >= 2) sceneSpecs.push({ id: "s4b", weight: 4 });
-  pointScenes.forEach((p, i) => sceneSpecs.push({ id: "spt" + i, weight: wc(p.text) }));
-  if (pills.length) sceneSpecs.push({ id: "s6", weight: pills.reduce((a, p) => a + wc(p.label), 0) });
-  if (callout || principle) sceneSpecs.push({ id: "s_emph", weight: wc(callout) + wc(principle) });
-  if (cmp) sceneSpecs.push({ id: "s_cmp", weight: 6 });
-  sceneSpecs.push({ id: "s7", weight: wc(s.cta) });
+  const hookW = wc(s.hook), bodyW = wc(s.body), ctaW = wc(s.cta);
+  const ids: string[] = ["s1"];
+  if (bignumValue) ids.push("s2");
+  if (finalBars.length >= 2) ids.push("s4b");
+  pointScenes.forEach((_p, i) => ids.push("spt" + i));
+  if (pills.length) ids.push("s6");
+  if (callout || principle) ids.push("s_emph");
+  if (cmp) ids.push("s_cmp");
+  ids.push("s7");
+  const numBody = Math.max(1, ids.length - 2); // trừ hero (s1) + cta (s7)
+  const bodyEach = bodyW / numBody;
+  const sceneSpecs: SceneSpec[] = ids.map((id) => ({
+    id,
+    weight: id === "s1" ? hookW : id === "s7" ? ctaW : bodyEach,
+  }));
 
   const variables = {
     // S1 hook
@@ -267,9 +274,11 @@ export async function buildAnimation(input: {
   if (!script) throw new Error("Script not found");
 
   const audios = await audioStore.byScript(input.scriptId);
+  // GIỌNG C3 = "full" (read script = hook+body+cta) → KHỚP C1/C2 khi ghép/đồng bộ.
+  // (Trước đây dùng part "animation" = text riêng → lệch C1. Giờ bỏ, dùng chung read script.)
   const audio = input.audioId
     ? await audioStore.get(input.audioId)
-    : audios.find((a) => a.part === "animation") || audios.find((a) => a.part === "full");
+    : audios.find((a) => a.part === "full") || audios.find((a) => a.part === "animation");
 
   const provider = await pickRenderProvider();
   const mode =

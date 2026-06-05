@@ -329,9 +329,10 @@ export async function buildBroll(input: {
   const profile = script.profileId;
 
   const audios = await audioStore.byScript(input.scriptId);
+  // GIỌNG C2 = "full" (read script = hook+body+cta) → KHỚP C1/C3 khi ghép/đồng bộ.
   const audio = input.audioId
     ? await audioStore.get(input.audioId)
-    : audios.find((a) => a.part === "broll") || audios.find((a) => a.part === "full");
+    : audios.find((a) => a.part === "full") || audios.find((a) => a.part === "broll");
 
   const provider = await pickRenderProvider();
   const mode =
@@ -368,7 +369,13 @@ export async function buildBroll(input: {
       // 9:16, KHÔNG chữ. Cost-guard RENDER_LIVE + cache + retry trong helper.
       // Không bật / thiếu provider → bgUrls rỗng → template dùng gradient (KHÔNG throw).
       const topic = script.topic || script.script.hook || "";
-      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      // Nguồn caption + chỉ đạo ảnh = READ SCRIPT (hook+body+cta) → ảnh/caption KHỚP giọng đọc
+      // (giọng C2 giờ là "full"). Fallback voiceOver b-roll cũ nếu read script rỗng.
+      const captionSource =
+        [script.script.hook, script.script.body, script.script.cta].filter(Boolean).join(" ").trim() ||
+        script.script.variantPrompts.broll.voiceOver ||
+        script.script.caption ||
+        "";
       const openaiKey = await getOpenAIKey();
 
       // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
@@ -462,7 +469,13 @@ export async function buildBroll(input: {
       // vì lặp lại vòng sinh ảnh inline — 1 nguồn sự thật, hết trùng lặp.
       const imageProvider = await pickImageProvider();
       const topic = script.topic || script.script.hook || "";
-      const captionSource = script.script.variantPrompts.broll.voiceOver || script.script.caption || "";
+      // Nguồn caption + chỉ đạo ảnh = READ SCRIPT (hook+body+cta) → ảnh/caption KHỚP giọng đọc
+      // (giọng C2 giờ là "full"). Fallback voiceOver b-roll cũ nếu read script rỗng.
+      const captionSource =
+        [script.script.hook, script.script.body, script.script.cta].filter(Boolean).join(" ").trim() ||
+        script.script.variantPrompts.broll.voiceOver ||
+        script.script.caption ||
+        "";
       const seconds = script.script.estimatedDurationSec || 30;
       const imgResult = await generateBrollImages(input.scriptId, topic, captionSource, shotList, seconds);
       const useAI = imgResult.intended;

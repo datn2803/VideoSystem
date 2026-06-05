@@ -71,10 +71,10 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
       "voiceOver": "voice-over text cho video b-roll"
     },
     "animation": {
-      "keyMessages": ["4-5 thông điệp cốt lõi, mỗi cái 1 Ý RIÊNG (mỗi cái = 1 cảnh point)"],
+      "keyMessages": ["4-5 ý cốt lõi của BODY theo ĐÚNG THỨ TỰ giọng đọc (mỗi ý = 1 cảnh; tóm tắt NGẮN ý đó trong body)"],
       "dataPoints": ["3-5 số liệu MINH HOẠ có ngữ cảnh, GHI RÕ tính ví dụ (vd 'ví dụ tiết kiệm ~8 tiếng/tuần', 'thường giảm ~30% chi phí')"],
       "visualCues": ["gợi ý icon"],
-      "voiceOver": "voice-over cho animation — GIỮ NGẮN ~${lengthSec}s, KHÔNG dài hơn lời đọc gốc",
+      "voiceOver": "(KHÔNG dùng để đọc — C3 đọc CHUNG read script hook+body+cta. Để '' )",
       "heroSubject": "1 cụm NGẮN mô tả nhân vật/chủ thể minh hoạ 3D (vd 'trợ lý AI cho founder')",
       "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN (vd 'ƯỚC TÍNH TIẾT KIỆM')"},
       "bars": [{"label": "Cách cũ", "value": "30", "unit": "%"}, {"label": "Với AI", "value": "75", "unit": "%"}, {"label": "Tối ưu", "value": "90", "unit": "%"}],
@@ -88,6 +88,9 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
 }
 
 QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — làm ĐẦY ĐỦ):
+- ⚠ HÌNH C3 chạy KHỚP GIỌNG ĐỌC (đọc hook+body+cta). keyMessages PHẢI là các ý của BODY theo
+  ĐÚNG THỨ TỰ giọng đọc (keyMessage i hiện đúng lúc giọng đọc tới ý đó). dataPoints/bars MINH HOẠ
+  cho chính các ý đó — KHÔNG lạc đề, không thêm ý không có trong lời đọc.
 - keyMessages: 4-5 ý RIÊNG BIỆT (mỗi ý thành 1 cảnh) → đủ cảnh, video không bị ít cảnh.
 - bigStat + bars + dataPoints: LUÔN ĐIỀN bằng số liệu MINH HOẠ HỢP LÝ theo chủ đề (đây là phần "data motion" chạy số). Ghi rõ tính ví dụ/ước tính ở nhãn/dataPoints. TUYỆT ĐỐI KHÔNG bịa trích dẫn nghiên cứu (không "theo Gartner/McKinsey...").
 - bars: 2-4 mục CÙNG ĐƠN VỊ để so sánh được (vd cùng "%"), giá trị KHÁC nhau.
