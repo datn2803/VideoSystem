@@ -109,15 +109,16 @@
         box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
       .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; }
 
-      /* pill2 (2×2) — icon-led (đúng style donnie) */
-      .pill2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-content: space-between; }
-      .pill { display: flex; align-items: center; gap: 22px; padding: 42px 32px; will-change: transform, opacity; }
-      .pill .pic { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 18px; background: rgba(124,58,237,0.12);
+      /* pill2 (2×2) — icon-led (đúng style donnie). Hàng dãn ĐỀU (1fr) → hết hở giữa */
+      .pill2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 26px; }
+      /* tile dọc: icon TRÊN · nhãn DƯỚI (dãn đều) → lấp thẻ cao, hết rỗng */
+      .pill { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 48px 38px; will-change: transform, opacity; }
+      .pill .pic { flex: 0 0 auto; width: 88px; height: 88px; border-radius: 22px; background: rgba(124,58,237,0.12);
         display: flex; align-items: center; justify-content: center; will-change: transform; }
-      .pill .pic svg { width: 38px; height: 38px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .pill .pic svg { width: 46px; height: 46px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
       .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: rgba(124,58,237,0.12);
         color: var(--accent); font-weight: 900; font-size: 26px; display: flex; align-items: center; justify-content: center; }
-      .pill .pt { color: var(--ink); font-weight: 700; font-size: 40px; line-height: 1.18; }
+      .pill .pt { color: var(--ink); font-weight: 700; font-size: 46px; line-height: 1.2; }
 
       /* listcard */
       .listcard { display: flex; flex-direction: column; gap: 20px; }
@@ -163,7 +164,7 @@
       .pbar.win .pn { color: var(--accent); }
 
       /* bignum */
-      .bignum { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 0.04em; line-height: 0.92;
+      .bignum { display: flex; width: 100%; justify-content: center; align-items: flex-start; flex-wrap: nowrap; gap: 0.04em; line-height: 0.92;
         color: var(--accent); font-weight: 900; font-size: 280px; letter-spacing: -4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
       .bignum .bu { font-size: 0.42em; font-weight: 800; color: var(--accent2); align-self: flex-start; margin-top: 0.12em; }
       .blabel { color: var(--sub); font-weight: 600; font-size: 40px; }
@@ -283,10 +284,10 @@
       .baside.r .babar i { background: #fff; }
       .baarrow { flex: 0 0 66px; width: 66px; height: 66px; color: var(--accent); align-self: center; }
 
-      /* ── S_mini: lưới 2×2 mini-stat ── */
-      .minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; align-content: space-between; }
-      .ministat { padding: 36px 32px; border-radius: 22px; background: var(--card); box-shadow: 0 12px 30px rgba(90,70,170,0.10);
-        display: flex; flex-direction: column; will-change: transform, opacity; }
+      /* ── S_mini: lưới 2×2 mini-stat (hàng dãn ĐỀU 1fr → thẻ cao đều, hết hở giữa) ── */
+      .minigrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 24px; width: 100%; }
+      .ministat { padding: 40px 34px; border-radius: 22px; background: var(--card); box-shadow: 0 12px 30px rgba(90,70,170,0.10);
+        display: flex; flex-direction: column; justify-content: space-between; will-change: transform, opacity; }
       .ministat .mi { width: 58px; height: 58px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
         display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
       .ministat .mi svg { width: 32px; height: 32px; }
@@ -596,6 +597,7 @@
       else {
         hideIfEmpty("s2lbl", v.bignum_label); if (!String(v.bignum_label || "").trim()) remove("s2eb");
         if (!bigIsNum) setText("s2num", bigRaw);
+        else setText("s2num", bigNum.toLocaleString("vi-VN")); // FT đo theo GIÁ TRỊ CUỐI (rộng nhất) → không tràn khi đếm
         if (!String(v.bignum_unit || "").trim()) remove("s2unit"); else setText("s2unit", v.bignum_unit);
         hideIfEmpty("s2label", v.bignum_label);
       }
@@ -833,11 +835,18 @@
       }
       const CF = String(v.compact || "") === "1" ? 0.82 : 1;
       const FT = (id, mx, mn, mh) => fitText(id, Math.round(mx * CF), mn, Math.round(mh * CF));
-      FT("s1key", 150, 48, 320); FT("s1l1", 78, 40, 180); FT("s1l2", 78, 40, 180); FT("s1sub", 44, 24, 120);
-      FT("s2bnum", 450, 110, 680); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
-
-      // auto-fit nội dung point scene cho gọn TILE nội dung (chiều rộng tile tự co theo layout)
-      (pointIds || []).forEach((id) => FT(id + "tt", 66, 28, 640));
+      // doFit chạy 2 lần: ngay khi load + LẠI sau khi web-font sẵn sàng (FT đo lúc chưa có font sẽ
+      // hụt bề rộng → text to bị tràn khi font thật load. Re-fit khử triệt để).
+      function doFit() {
+        const s2n = document.getElementById("s2num");
+        if (s2n && bigRaw !== "") s2n.textContent = bigIsNum ? bigNum.toLocaleString("vi-VN") : bigRaw; // đo theo giá trị CUỐI
+        FT("s1key", 150, 48, 320); FT("s1l1", 78, 40, 180); FT("s1l2", 78, 40, 180); FT("s1sub", 44, 24, 120);
+        FT("s2bnum", 450, 110, 680); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
+        (pointIds || []).forEach((id) => FT(id + "tt", 66, 28, 640));
+        if (s2n && bigIsNum) s2n.textContent = "0"; // reset → count-up chạy từ 0
+      }
+      doFit();
+      try { if (document.fonts && document.fonts.ready && document.fonts.ready.then) document.fonts.ready.then(doFit); } catch (e) {}
 
       // ── Timing: scene_times (ĐỒNG BỘ giọng đọc qua Whisper) nếu có; nếu không → chia đều ──
       const total = parseFloat(v.duration) || 18.5;
