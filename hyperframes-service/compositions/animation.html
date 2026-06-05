@@ -73,9 +73,8 @@
       #s_donut .donutwrap, #s_trend .trendwrap { align-self: center; }
       /* cảnh 2-khối (callout + principle) → dãn đều */
       #s_emph .stack { justify-content: space-evenly; }
-      /* cảnh point (1 dòng) → BÁM HEADER (nội dung trên), watermark số KHỔNG LỒ lo nửa đáy */
-      .scene.left.ptscene { justify-content: flex-start; }
-      .scene.left.ptscene .stack { flex: 0 1 auto; justify-content: flex-start; }
+      /* cảnh point + cảnh 1-phần-tử → KHỐI bento lấp hết khung (tile/host flex:1) */
+      .scene.left .ptbento, .scene.left .bentohost { flex: 1 1 auto; min-height: 0; }
 
       .bg-light {
         background:
@@ -198,9 +197,48 @@
       .pquote .qn { color: var(--accent2); font-weight: 900; font-size: 44px; font-variant-numeric: tabular-nums; }
       .pquote .ptt { color: var(--ink); font-weight: 800; font-size: 66px; line-height: 1.15; margin-top: 6px; }
 
-      /* watermark số KHỔNG LỒ mờ — lấp NỬA ĐÁY cảnh point (content bám header ở trên) */
-      .pwm { position: absolute; right: -40px; bottom: -40px; font-weight: 900; font-size: 820px; line-height: 0.66;
-        color: var(--accent); opacity: 0.07; letter-spacing: -26px; pointer-events: none; font-variant-numeric: tabular-nums; }
+      /* ── Point = 2-tile bento (tile SỐ + tile NỘI DUNG) — lấp khung, hết band trống ── */
+      .ptbento { display: flex; gap: 24px; }
+      .ptbento.v0 { flex-direction: column; }            /* số TRÊN · nội dung DƯỚI */
+      .ptbento.v1 { flex-direction: row; }               /* số TRÁI · nội dung PHẢI */
+      .pttile { position: relative; border-radius: 28px; padding: 46px 44px; display: flex; flex-direction: column;
+        min-width: 0; min-height: 0; overflow: hidden; will-change: transform, opacity; }
+      .ptbento.v0 .pt-num { flex: 0 0 33%; } .ptbento.v1 .pt-num { flex: 0 0 34%; }
+      .pt-num { justify-content: space-between; gap: 14px; }
+      .pt-num .pteb { display: inline-flex; align-items: center; gap: 12px; font-weight: 800; font-size: 27px;
+        letter-spacing: 2px; text-transform: uppercase; }
+      .pt-num .pteb .pdot { width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+      .pt-num .pnum { font-weight: 900; font-size: 210px; line-height: 0.78; letter-spacing: -8px; font-variant-numeric: tabular-nums; }
+      .pt-num .picr { width: 66px; height: 66px; border-radius: 18px; display: flex; align-items: center; justify-content: center; align-self: flex-end; }
+      .pt-num .picr svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .pt-body { flex: 1 1 auto; justify-content: flex-start; background: var(--card); border: 1px solid rgba(120,90,210,0.07);
+        box-shadow: 0 14px 38px rgba(90,70,170,0.12); }
+      .pt-body .ptt { position: relative; z-index: 2; font-weight: 800; font-size: 60px; line-height: 1.16; color: var(--ink); }
+      .pt-body .ptt .ac { color: var(--accent); }
+      /* glyph icon mờ KHỔNG LỒ lấp góc dưới-phải tile nội dung → cân bố cục (chữ trên-trái · glyph dưới-phải) */
+      .ptglyph { position: absolute; right: 26px; bottom: 20px; z-index: 1; color: var(--accent); opacity: 0.08; pointer-events: none; }
+      .ptglyph svg { display: block; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+      .ptbento.v0 .ptglyph svg { width: 300px; height: 300px; }
+      .ptbento.v1 .ptglyph svg { width: 200px; height: 200px; }
+      /* treatment GRAD — tile số gradient (chữ trắng) */
+      .pt-num.grad { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 18px 44px var(--glow); color: #fff; }
+      .pt-num.grad .pnum { color: #fff; } .pt-num.grad .pteb { color: rgba(255,255,255,0.85); }
+      .pt-num.grad .picr { background: rgba(255,255,255,0.18); color: #fff; }
+      /* treatment TINT — tile số nền tím nhạt (chữ accent) */
+      .pt-num.tint { background: linear-gradient(150deg, rgba(124,58,237,0.12), rgba(124,58,237,0.03)); border: 1px solid rgba(124,58,237,0.14); color: var(--accent); }
+      .pt-num.tint .pnum { color: var(--accent); } .pt-num.tint .pteb { color: var(--accent); }
+      .pt-num.tint .picr { background: var(--accent); color: #fff; }
+
+      /* ── Bento-host: bọc cảnh 1-phần-tử (bignum/donut/trend) cho lấp khung (breathing room TRONG tile = premium) ── */
+      .bentohost { position: relative; display: flex; flex-direction: column; border-radius: 30px; padding: 54px 50px;
+        overflow: hidden; will-change: transform, opacity; }
+      .bentohost .hosthead { flex: 0 0 auto; }
+      .bentohost .hostbody { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 30px; min-height: 0; }
+      .bentohost.plain { background: var(--card); box-shadow: 0 18px 46px rgba(90,70,170,0.12); border: 1px solid rgba(120,90,210,0.08); }
+      .bentohost.tint { background: linear-gradient(155deg, rgba(124,58,237,0.075), rgba(124,58,237,0.015)); border: 1px solid rgba(124,58,237,0.12); }
+      .bentohost::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
       /* thanh tiến trình đáy (lấp đáy + nhịp pro) */
       #progress { position: absolute; left: 72px; right: 72px; bottom: 90px; height: 8px; border-radius: 999px;
@@ -217,27 +255,32 @@
       #topbar .tline { width: 60px; height: 4px; border-radius: 999px; background: rgba(124,58,237,0.25); }
 
       /* ── S_donut: vòng tròn % (to hơn cho đầy khung) ── */
-      .donutwrap { position: relative; width: 560px; height: 560px; align-self: center; }
+      .donutwrap { position: relative; width: 660px; height: 660px; align-self: center; }
       .donut { width: 100%; height: 100%; transform: rotate(-90deg); }
       .donut .dtrack { fill: none; stroke: rgba(124,58,237,0.12); stroke-width: 24; }
       .donut .dfill { fill: none; stroke: var(--accent); stroke-width: 24; stroke-linecap: round;
         stroke-dasharray: 578; stroke-dashoffset: 578; will-change: stroke-dashoffset; }
       .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
       .dcenter .dval { display: inline-flex; align-items: baseline; color: var(--accent); font-weight: 900;
-        font-size: 156px; font-variant-numeric: tabular-nums; line-height: 1; }
+        font-size: 188px; font-variant-numeric: tabular-nums; line-height: 1; }
       .dcenter .du { font-size: 0.5em; color: var(--accent2); margin-left: 4px; }
 
-      /* ── S_ba: before → after ── */
+      /* ── S_ba: before → after (3 hàng phân bố: nhãn trên · số giữa · thanh tỉ lệ dưới) ── */
       .bawrap { display: flex; align-items: stretch; gap: 26px; width: 100%; }
-      .baside { flex: 1; padding: 40px 24px; border-radius: 26px; text-align: center; display: flex; flex-direction: column;
-        justify-content: center; gap: 16px; will-change: transform, opacity; }
+      .baside { flex: 1; padding: 50px 30px; border-radius: 26px; text-align: center; display: flex; flex-direction: column;
+        justify-content: space-between; gap: 18px; will-change: transform, opacity; }
       .baside.l { background: var(--card); box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
       .baside.r { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 16px 40px var(--glow); }
-      .baside .bav { font-weight: 900; font-size: 104px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .baside .bahd { font-weight: 800; font-size: 32px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sub); }
+      .baside.r .bahd { color: rgba(255,255,255,0.9); }
+      .baside .bav { font-weight: 900; font-size: 132px; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; }
       .baside.r .bav { color: #fff; }
-      .baside .bav .bu { font-size: 0.42em; }
-      .baside .bal { margin-top: 14px; font-weight: 700; font-size: 32px; color: var(--sub); }
-      .baside.r .bal { color: rgba(255,255,255,0.88); }
+      .baside .bav .bu { font-size: 0.40em; }
+      .baside .babar { width: 100%; height: 16px; border-radius: 999px; overflow: hidden; background: rgba(124,58,237,0.14); }
+      .baside.r .babar { background: rgba(255,255,255,0.28); }
+      .baside .babar i { display: block; height: 100%; border-radius: 999px; transform-origin: left center; transform: scaleX(0);
+        will-change: transform; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+      .baside.r .babar i { background: #fff; }
       .baarrow { flex: 0 0 66px; width: 66px; height: 66px; color: var(--accent); align-self: center; }
 
       /* ── S_mini: lưới 2×2 mini-stat ── */
@@ -251,13 +294,16 @@
       .ministat .mv .mu { font-size: 0.46em; color: var(--accent2); }
       .ministat .ml { color: var(--sub); font-weight: 600; font-size: 29px; margin-top: 8px; line-height: 1.2; }
 
-      /* ── S_trend: đường tăng ── */
-      .trendwrap { position: relative; width: 100%; height: 440px; }
+      /* ── S_trend: đường tăng (CHART lấp hết thân thẻ + badge đỉnh) ── */
+      .trendwrap { position: relative; width: 100%; flex: 1 1 auto; height: auto; min-height: 460px; align-self: stretch; }
       .trendsvg { width: 100%; height: 100%; overflow: visible; }
       .trendsvg .tline { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; will-change: stroke-dashoffset; }
       .trendsvg .tarea { fill: rgba(124,58,237,0.10); stroke: none; }
       .tdot { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
         box-shadow: 0 0 0 9px rgba(124,58,237,0.18); transform: translate(-50%,-50%); will-change: transform, opacity; }
+      .tbadge { position: absolute; transform: translate(-50%,-150%); padding: 9px 20px; border-radius: 999px;
+        background: var(--accent); color: #fff; font-weight: 800; font-size: 36px; white-space: nowrap;
+        font-variant-numeric: tabular-nums; box-shadow: 0 10px 26px var(--glow); will-change: transform, opacity; }
 
       /* ── S1 hero (center) ── */
       #s1 .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; line-height: 0.98; letter-spacing: -1px; }
@@ -299,9 +345,13 @@
       <div id="s2" class="scene left bg-light clip" data-start="3.7" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
         <div class="stack">
-          <div class="eyebrow icon" id="s2eb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></span><span class="lbl" id="s2lbl"></span></div>
-          <div class="bignum" id="s2bnum"><span id="s2num">0</span><span class="bu" id="s2unit"></span></div>
-          <div class="blabel" id="s2label"></div>
+          <div class="bentohost tint">
+            <div class="hosthead"><div class="eyebrow icon" id="s2eb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></span><span class="lbl" id="s2lbl"></span></div></div>
+            <div class="hostbody">
+              <div class="bignum" id="s2bnum"><span id="s2num">0</span><span class="bu" id="s2unit"></span></div>
+              <div class="blabel" id="s2label"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -345,15 +395,19 @@
       <div id="s_donut" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
         <div class="stack">
-          <div class="eyebrow icon" id="dnEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2a10 10 0 0 1 10 10h-10z"/></svg></span><span class="lbl" id="dnLbl"></span></div>
-          <div class="donutwrap">
-            <svg class="donut" viewBox="0 0 220 220">
-              <circle class="dtrack" cx="110" cy="110" r="92"></circle>
-              <circle class="dfill" id="dnFill" cx="110" cy="110" r="92"></circle>
-            </svg>
-            <div class="dcenter"><span class="dval"><span id="dnNum">0</span><span class="du" id="dnUnit"></span></span></div>
+          <div class="bentohost plain">
+            <div class="hosthead"><div class="eyebrow icon" id="dnEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2a10 10 0 0 1 10 10h-10z"/></svg></span><span class="lbl" id="dnLbl"></span></div></div>
+            <div class="hostbody">
+              <div class="donutwrap">
+                <svg class="donut" viewBox="0 0 220 220">
+                  <circle class="dtrack" cx="110" cy="110" r="92"></circle>
+                  <circle class="dfill" id="dnFill" cx="110" cy="110" r="92"></circle>
+                </svg>
+                <div class="dcenter"><span class="dval"><span id="dnNum">0</span><span class="du" id="dnUnit"></span></span></div>
+              </div>
+              <div class="blabel" id="dnText"></div>
+            </div>
           </div>
-          <div class="blabel" id="dnText"></div>
         </div>
       </div>
 
@@ -363,9 +417,9 @@
         <div class="stack">
           <div class="eyebrow icon" id="baEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span><span class="lbl" id="baLbl"></span></div>
           <div class="bawrap">
-            <div class="baside l"><div class="bav" id="baFrom">0</div><div class="bal" id="baFromL"></div></div>
+            <div class="baside l"><div class="bahd" id="baFromL"></div><div class="bav" id="baFrom">0</div><div class="babar"><i id="baFromBar"></i></div></div>
             <svg class="baarrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-            <div class="baside r"><div class="bav hi" id="baTo">0</div><div class="bal" id="baToL"></div></div>
+            <div class="baside r"><div class="bahd" id="baToL"></div><div class="bav hi" id="baTo">0</div><div class="babar"><i id="baToBar"></i></div></div>
           </div>
         </div>
       </div>
@@ -383,15 +437,20 @@
       <div id="s_trend" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
         <div class="stack">
-          <div class="eyebrow icon" id="trEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M17 4h4v4"/></svg></span><span class="lbl" id="trLbl"></span></div>
-          <div class="trendwrap">
-            <svg class="trendsvg" viewBox="0 0 600 300" preserveAspectRatio="none">
-              <polyline class="tarea" id="trArea" points=""></polyline>
-              <polyline class="tline" id="trLine" points=""></polyline>
-            </svg>
-            <div class="tdot" id="trDot"></div>
+          <div class="bentohost plain">
+            <div class="hosthead"><div class="eyebrow icon" id="trEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M17 4h4v4"/></svg></span><span class="lbl" id="trLbl"></span></div></div>
+            <div class="hostbody">
+              <div class="trendwrap">
+                <svg class="trendsvg" viewBox="0 0 600 300" preserveAspectRatio="none">
+                  <polyline class="tarea" id="trArea" points=""></polyline>
+                  <polyline class="tline" id="trLine" points=""></polyline>
+                </svg>
+                <div class="tdot" id="trDot"></div>
+                <div class="tbadge" id="trBadge"></div>
+              </div>
+              <div class="blabel" id="trText"></div>
+            </div>
           </div>
-          <div class="blabel" id="trText"></div>
         </div>
       </div>
 
@@ -615,7 +674,10 @@
         const unit = baData.unit ? " " + String(baData.unit) : "";
         const fn = Number(String(baData.fromValue).replace(/[^\d.-]/g, ""));
         const tn = Number(String(baData.toValue).replace(/[^\d.-]/g, ""));
-        baInfo = { from: fn, to: tn, fromIsNum: Number.isFinite(fn), toIsNum: Number.isFinite(tn), unit };
+        const mx = Math.max(Math.abs(fn) || 0, Math.abs(tn) || 0, 1);
+        baInfo = { from: fn, to: tn, fromIsNum: Number.isFinite(fn), toIsNum: Number.isFinite(tn), unit,
+          fromR: Number.isFinite(fn) ? Math.max(0.08, Math.abs(fn) / mx) : 1,
+          toR: Number.isFinite(tn) ? Math.max(0.08, Math.abs(tn) / mx) : 1 };
         setText("baFrom", baInfo.fromIsNum ? "0" + unit : String(baData.fromValue));
         setText("baTo", baInfo.toIsNum ? "0" + unit : String(baData.toValue));
       }
@@ -665,11 +727,17 @@
         const last = coords[coords.length - 1];
         const dot = document.getElementById("trDot");
         if (dot) { dot.style.left = (last[0] / W * 100) + "%"; dot.style.top = (last[1] / H * 100) + "%"; }
+        const badge = document.getElementById("trBadge");
+        if (badge) {
+          const lastRaw = (trendData.points && trendData.points.length) ? String(trendData.points[trendData.points.length - 1]).trim() : String(trendPts[trendPts.length - 1]);
+          badge.textContent = lastRaw; badge.style.left = (last[0] / W * 100) + "%"; badge.style.top = (last[1] / H * 100) + "%";
+        }
         try { trendLen = line.getTotalLength(); } catch (e) { trendLen = 1400; }
         if (line) { line.style.strokeDasharray = trendLen; line.style.strokeDashoffset = trendLen; }
       }
 
-      // ── Point scenes: MỖI keyMessage = 1 CẢNH, LUÂN PHIÊN 3 BIẾN THỂ (phá đơn điệu) + kinetic ──
+      // ── Point scenes: MỖI keyMessage = 1 CẢNH = 2-tile bento (tile SỐ + tile NỘI DUNG) ──
+      //   Xen kẽ LAYOUT (dọc/ngang) + MÀU tile (gradient/tint) → đa dạng mà chỉ 2 tông (không over).
       const pointsData = parseJSON(v.points, []);
       const pointIds = [];
       if (Array.isArray(pointsData) && pointsData.length) {
@@ -678,39 +746,32 @@
           const txt = String(p.text || "").trim();
           if (!txt) return;
           const id = "spt" + i;
-          const variant = i % 3;
+          const layout = i % 2;                       // 0 = dọc (số trên), 1 = ngang (số trái)
+          const treat = (i % 2 === 0) ? "grad" : "tint"; // xen kẽ tông màu tile số
           const num = String(p.n || i + 1);
           const iconKey = ICON_CYCLE[i % ICON_CYCLE.length];
           const sc = document.createElement("div");
           sc.className = "scene left ptscene bg-light clip"; sc.id = id;
-          sc.setAttribute("data-variant", String(variant));
+          sc.setAttribute("data-variant", String(layout));
           sc.setAttribute("data-start", "0"); sc.setAttribute("data-duration", "3.7"); sc.setAttribute("data-track-index", "1");
           const dg = document.createElement("div"); dg.className = "dotgrid"; sc.appendChild(dg);
-          const wm = document.createElement("div"); wm.className = "pwm"; wm.textContent = num; sc.appendChild(wm); // số mờ lấp khung
           const stack = document.createElement("div"); stack.className = "stack";
-          const eb = document.createElement("div"); eb.className = "eyebrow icon";
-          const ico = document.createElement("span"); ico.className = "ico"; ico.appendChild(makeIconSVG(iconKey));
-          const lbl = document.createElement("span"); lbl.className = "lbl";
-          lbl.textContent = "Điểm " + num + "/" + (p.total || pointsData.length);
-          eb.appendChild(ico); eb.appendChild(lbl); stack.appendChild(eb);
+          const bento = document.createElement("div"); bento.className = "ptbento v" + layout;
+          // tile SỐ (eyebrow "Điểm n/total" · số lớn · icon)
+          const tnum = document.createElement("div"); tnum.className = "pttile pt-num " + treat;
+          const eb = document.createElement("div"); eb.className = "pteb";
+          const dot = document.createElement("span"); dot.className = "pdot"; eb.appendChild(dot);
+          const ebl = document.createElement("span"); ebl.textContent = "Điểm " + num + "/" + (p.total || pointsData.length); eb.appendChild(ebl);
+          const pn = document.createElement("div"); pn.className = "pnum"; pn.textContent = num;
+          const picr = document.createElement("div"); picr.className = "picr"; picr.appendChild(makeIconSVG(iconKey));
+          tnum.appendChild(eb); tnum.appendChild(pn); tnum.appendChild(picr);
+          // tile NỘI DUNG (kinetic)
+          const tbody = document.createElement("div"); tbody.className = "pttile pt-body";
           const tt = document.createElement("div"); tt.className = "ptt"; tt.id = id + "tt"; fillKinetic(tt, txt);
-          if (variant === 0) {
-            const big = document.createElement("div"); big.className = "pointbig";
-            const pn = document.createElement("div"); pn.className = "pnum"; pn.textContent = num;
-            const bd = document.createElement("div"); bd.className = "pbd"; bd.appendChild(tt);
-            big.appendChild(pn); big.appendChild(bd); stack.appendChild(big);
-          } else if (variant === 1) {
-            const card = document.createElement("div"); card.className = "pointcard";
-            const pic = document.createElement("div"); pic.className = "picbig"; pic.appendChild(makeIconSVG(iconKey));
-            card.appendChild(pic); card.appendChild(tt); stack.appendChild(card);
-          } else {
-            const q = document.createElement("div"); q.className = "pquote";
-            const bar = document.createElement("div"); bar.className = "qbar";
-            const bd = document.createElement("div"); bd.className = "qbd";
-            const qn = document.createElement("div"); qn.className = "qn"; qn.textContent = "0" + num;
-            bd.appendChild(qn); bd.appendChild(tt); q.appendChild(bar); q.appendChild(bd); stack.appendChild(q);
-          }
-          sc.appendChild(stack); root.appendChild(sc);
+          const glyph = document.createElement("div"); glyph.className = "ptglyph"; glyph.appendChild(makeIconSVG(iconKey));
+          tbody.appendChild(tt); tbody.appendChild(glyph);
+          bento.appendChild(tnum); bento.appendChild(tbody);
+          stack.appendChild(bento); sc.appendChild(stack); root.appendChild(sc);
           pointIds.push(id);
         });
       }
@@ -773,10 +834,10 @@
       const CF = String(v.compact || "") === "1" ? 0.82 : 1;
       const FT = (id, mx, mn, mh) => fitText(id, Math.round(mx * CF), mn, Math.round(mh * CF));
       FT("s1key", 150, 48, 320); FT("s1l1", 78, 40, 180); FT("s1l2", 78, 40, 180); FT("s1sub", 44, 24, 120);
-      FT("s2bnum", 280, 80, 340); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
+      FT("s2bnum", 450, 110, 680); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
 
-      // auto-fit nội dung point scene cho gọn khung
-      (pointIds || []).forEach((id) => FT(id + "tt", 76, 32, 620));
+      // auto-fit nội dung point scene cho gọn TILE nội dung (chiều rộng tile tự co theo layout)
+      (pointIds || []).forEach((id) => FT(id + "tt", 66, 28, 640));
 
       // ── Timing: scene_times (ĐỒNG BỘ giọng đọc qua Whisper) nếu có; nếu không → chia đều ──
       const total = parseFloat(v.duration) || 18.5;
@@ -852,6 +913,7 @@
       /* S2 big number */
       if (has("s2")) {
         const s = startOf.s2;
+        tl.from("#s2 .bentohost", { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
         if (document.getElementById("s2eb")) tl.from("#s2eb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         if (bigIsNum) {
           const cc = { v: 0 };
@@ -889,6 +951,7 @@
       /* S_donut: vòng tròn quét + số đếm */
       if (has("s_donut")) {
         const s = startOf.s_donut;
+        tl.from("#s_donut .bentohost", { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
         if (document.getElementById("dnEb")) tl.from("#dnEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         if (donutIsNum && donutNum != null) {
           const CIRC = 578, off = CIRC * (1 - Math.max(0, Math.min(100, donutNum)) / 100);
@@ -911,6 +974,11 @@
         tl.from("#s_ba .baside.r", { x: 30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.7);
         if (baInfo && baInfo.fromIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.from, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baFrom"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.45); }
         if (baInfo && baInfo.toIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.to, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baTo"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.85); }
+        // thanh tỉ lệ mọc (số to → thanh dài) — lấp đáy thẻ + tăng tính data
+        if (baInfo) {
+          tl.fromTo("#baFromBar", { scaleX: 0 }, { scaleX: baInfo.fromR, duration: 0.7, ease: "power3.out" }, s + 0.5);
+          tl.fromTo("#baToBar", { scaleX: 0 }, { scaleX: baInfo.toR, duration: 0.7, ease: "power3.out" }, s + 0.9);
+        }
       }
 
       /* S_mini: lưới mini-stat — vào lần lượt + số đếm */
@@ -921,13 +989,15 @@
         miniInfo.forEach((mi) => { if (!mi.isNum) return; const c = { v: 0 }; tl.to(c, { v: mi.num, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("mivn" + mi.i); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.5 + mi.i * 0.1); });
       }
 
-      /* S_trend: đường vẽ dần + chấm cuối */
+      /* S_trend: đường vẽ dần + chấm cuối + badge đỉnh */
       if (has("s_trend")) {
         const s = startOf.s_trend;
+        tl.from("#s_trend .bentohost", { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
         if (document.getElementById("trEb")) tl.from("#trEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
         if (trendLen) tl.fromTo("#trLine", { strokeDashoffset: trendLen }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, s + 0.3);
         if (document.getElementById("trArea")) tl.from("#trArea", { opacity: 0, duration: 0.8 }, s + 0.6);
         if (document.getElementById("trDot")) tl.from("#trDot", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.8)" }, s + 1.25);
+        if (document.getElementById("trBadge")) tl.from("#trBadge", { opacity: 0, duration: 0.45 }, s + 1.4); // chỉ opacity (giữ translate căn giữa của CSS)
         if (document.getElementById("trText")) tl.from("#trText", { y: 16, opacity: 0, duration: 0.4 }, s + 0.95);
       }
 
@@ -971,25 +1041,26 @@
         if (document.getElementById("s7e3")) tl.from("#s7e3", { y: 20, opacity: 0, duration: 0.4 }, s + 0.7);
       }
 
-      /* Point scenes — entrance KHÁC NHAU theo biến thể + KINETIC chữ hiện theo từ */
+      /* Point scenes — 2-tile bento: tile SỐ + tile NỘI DUNG vào ĐỐI HƯỚNG + KINETIC chữ */
       (pointIds || []).forEach((id) => {
         if (!has(id)) return;
         const s = startOf[id], w = winOf[id] || 3.7;
-        const variant = document.getElementById(id).getAttribute("data-variant") || "0";
-        tl.from("#" + id + " .eyebrow", { x: -30, opacity: 0, duration: 0.4 }, s + 0.1);
-        if (variant === "0") {
-          tl.fromTo("#" + id + " .pnum", { scale: 0.5, opacity: 0, filter: "blur(6px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "back.out(1.7)" }, s + 0.25);
-          tl.to("#" + id + " .pnum", { scale: 1.05, duration: Math.max(1, w / 2), yoyo: true, repeat: 1, ease: "sine.inOut", transformOrigin: "left center" }, s + 1.0);
-        } else if (variant === "1") {
-          tl.fromTo("#" + id + " .picbig", { scale: 0.4, opacity: 0, rotate: -12 }, { scale: 1, opacity: 1, rotate: 0, duration: 0.55, ease: "back.out(1.6)" }, s + 0.25);
-          tl.to("#" + id + " .picbig", { y: "-=12", duration: Math.max(1, w / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0);
-        } else {
-          tl.fromTo("#" + id + " .qbar", { scaleY: 0, transformOrigin: "top center" }, { scaleY: 1, duration: 0.5, ease: "power3.out" }, s + 0.2);
-          tl.from("#" + id + " .qn", { y: -18, opacity: 0, duration: 0.4 }, s + 0.35);
-        }
-        // KINETIC: chữ hiện theo TỪNG TỪ (hướng + easing đổi theo biến thể cho đa dạng).
-        const wEase = variant === "0" ? "power3.out" : variant === "1" ? "back.out(1.5)" : "expo.out";
-        tl.from("#" + id + " .ptt .word", { y: variant === "2" ? 0 : 26, x: variant === "2" ? -22 : 0, opacity: 0, duration: 0.5, stagger: 0.05, ease: wEase }, s + 0.5);
+        const layout = document.getElementById(id).getAttribute("data-variant") || "0";
+        // tile SỐ vào (dọc → từ trên xuống · ngang → từ trái sang)
+        tl.fromTo("#" + id + " .pt-num",
+          { y: layout === "1" ? 0 : -32, x: layout === "1" ? -38 : 0, opacity: 0, scale: 0.96 },
+          { y: 0, x: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.18);
+        tl.fromTo("#" + id + " .pnum", { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.7)" }, s + 0.3);
+        if (document.querySelector("#" + id + " .picr"))
+          tl.fromTo("#" + id + " .picr", { scale: 0, rotate: -14, opacity: 0 }, { scale: 1, rotate: 0, opacity: 1, duration: 0.45, ease: "back.out(1.7)" }, s + 0.55);
+        // tile NỘI DUNG vào (đối hướng tile số)
+        tl.fromTo("#" + id + " .pt-body",
+          { y: layout === "1" ? 0 : 32, x: layout === "1" ? 38 : 0, opacity: 0 },
+          { y: 0, x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, s + 0.34);
+        // KINETIC: chữ hiện theo TỪNG TỪ
+        tl.from("#" + id + " .ptt .word", { y: 24, opacity: 0, duration: 0.5, stagger: 0.05, ease: "power3.out" }, s + 0.6);
+        // mid-scene: số "thở" nhẹ (không tĩnh)
+        tl.to("#" + id + " .pnum", { scale: 1.05, duration: Math.max(1, w / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.3);
       });
 
       tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
