@@ -114,6 +114,7 @@ type SceneSpec = { id: string; weight: number };
 
 function buildAnimationVariables(
   s: ScriptResult,
+  durationSec: number,
   accentColor?: string
 ): { variables: Record<string, unknown>; sceneSpecs: SceneSpec[] } {
   const anim = s.variantPrompts.animation;
@@ -205,19 +206,51 @@ function buildAnimationVariables(
   const principle = String(anim.principle || "").trim();
   const callout = String(anim.callout || "").trim();
 
-  // ── Danh sách CẢNH (khớp thứ tự `order` trong animation.html) + trọng số CĂN THEO GIỌNG ĐỌC.
-  //    GIỌNG = read script (hook+body+cta). hero↔hook, cta↔cta. CÁC CẢNH BODY (stat/bars/point/
-  //    compare/emph) đều rơi trong phần BODY → CHIA ĐỀU thời lượng body (vì data là NON-READ,
-  //    không có lời riêng — chúng minh hoạ trong lúc giọng đọc body). → hết dồn/lỡ nhịp. ──
+  // ── v5 data-viz ĐA DẠNG (NON-READ, minh hoạ — "số chạy") ──
+  const donut = anim.donut && /\d/.test(String(anim.donut.value || "")) ? anim.donut : null;
+  const beforeAfter =
+    anim.beforeAfter && String(anim.beforeAfter.fromValue || "").trim() && String(anim.beforeAfter.toValue || "").trim()
+      ? anim.beforeAfter
+      : null;
+  const miniStats = Array.isArray(anim.miniStats)
+    ? anim.miniStats
+        .map((m) => ({ value: String(m.value || ""), unit: String(m.unit || ""), label: String(m.label || "") }))
+        .filter((m) => m.value && m.label)
+        .slice(0, 4)
+    : [];
+  const trendPts = anim.trend && Array.isArray(anim.trend.points)
+    ? anim.trend.points.map((p) => String(p)).filter((p) => /\d/.test(p)).slice(0, 6)
+    : [];
+  const trend = trendPts.length >= 2 ? { label: String(anim.trend!.label || "Xu hướng"), points: trendPts } : null;
+
+  // ── Danh sách CẢNH + NGÂN SÁCH cảnh (chống quá nhiều → nhanh) + trọng số CĂN THEO GIỌNG ĐỌC.
+  //    Luôn giữ hero + points + cta; cảnh DATA chọn theo ƯU TIÊN tới khi đủ budget (~durationSec/4.5).
   const wc = (t: string) => Math.max(1, String(t || "").trim().split(/\s+/).filter(Boolean).length);
   const hookW = wc(s.hook), bodyW = wc(s.body), ctaW = wc(s.cta);
+  const dataPriority: { id: string; ok: boolean }[] = [
+    { id: "s2", ok: !!bignumValue },
+    { id: "s4b", ok: finalBars.length >= 2 },
+    { id: "s_ba", ok: !!beforeAfter },
+    { id: "s_donut", ok: !!donut },
+    { id: "s_mini", ok: miniStats.length >= 2 },
+    { id: "s_cmp", ok: !!cmp },
+    { id: "s_trend", ok: !!trend },
+    { id: "s_emph", ok: !!(callout || principle) },
+    { id: "s6", ok: pills.length > 0 },
+  ];
+  const numPoints = pointScenes.length;
+  const budget = Math.max(5, Math.floor((durationSec || 40) / 4.5));
+  const dataBudget = Math.max(0, budget - 2 - numPoints); // trừ hero + cta + points
+  const keep = new Set<string>();
+  let usedBudget = 0;
+  for (const d of dataPriority) if (d.ok && usedBudget < dataBudget) { keep.add(d.id); usedBudget++; }
+  const kept = (id: string) => keep.has(id);
+
+  // ids THEO ĐÚNG THỨ TỰ composition: s1, [data trước], points, [data sau], s7
   const ids: string[] = ["s1"];
-  if (bignumValue) ids.push("s2");
-  if (finalBars.length >= 2) ids.push("s4b");
+  for (const id of ["s2", "s_donut", "s_ba", "s4b", "s_mini", "s_trend"]) if (kept(id)) ids.push(id);
   pointScenes.forEach((_p, i) => ids.push("spt" + i));
-  if (pills.length) ids.push("s6");
-  if (callout || principle) ids.push("s_emph");
-  if (cmp) ids.push("s_cmp");
+  for (const id of ["s6", "s_emph", "s_cmp"]) if (kept(id)) ids.push(id);
   ids.push("s7");
   const numBody = Math.max(1, ids.length - 2); // trừ hero (s1) + cta (s7)
   const bodyEach = bodyW / numBody;
@@ -234,24 +267,30 @@ function buildAnimationVariables(
     hook_sub: "",
     hook_eyebrow: "",
     hook_stat: hookStat,
-    // S2 big number (rỗng nếu không có số → scene tự ẩn)
-    bignum_value: bignumValue,
-    bignum_unit: bignumUnit,
-    bignum_label: bignumLabel,
-    // S3 progress bars (≥2 mục cùng đơn vị)
-    data_bars: JSON.stringify(finalBars),
-    bars_title: finalBars.length >= 2 ? "Những con số" : "",
-    // S4 pills 2×2 (CHỈ pills ngắn chuyên dụng) + levels (backward-compat, để rỗng)
-    pills: JSON.stringify(pills),
-    pills_title: pills.length ? "Điểm chính" : "",
+    // S2 big number — chỉ khi trong budget (gate theo `keep`)
+    bignum_value: kept("s2") ? bignumValue : "",
+    bignum_unit: kept("s2") ? bignumUnit : "",
+    bignum_label: kept("s2") ? bignumLabel : "",
+    // S3 progress bars
+    data_bars: kept("s4b") ? JSON.stringify(finalBars) : "[]",
+    bars_title: kept("s4b") ? "Những con số" : "",
+    // S4 pills 2×2
+    pills: kept("s6") ? JSON.stringify(pills) : "[]",
+    pills_title: kept("s6") ? "Điểm chính" : "",
     levels_title: "",
     levels: JSON.stringify(levels),
-    // Point scenes: mỗi keyMessage 1 cảnh riêng → nhiều cảnh hơn, nhịp nhanh hơn
+    // Point scenes: mỗi keyMessage 1 cảnh riêng
     points: JSON.stringify(pointScenes),
-    // S_cmp compare 2 cột / S_emph principle + callout (định tính, rỗng → ẩn)
-    compare: cmp ? JSON.stringify(cmp) : "",
-    principle: principle,
-    callout: callout,
+    // S_cmp compare / S_emph principle + callout
+    compare: kept("s_cmp") && cmp ? JSON.stringify(cmp) : "",
+    principle: kept("s_emph") ? principle : "",
+    callout: kept("s_emph") ? callout : "",
+    // v5 data-viz đa dạng (gate theo budget)
+    donut: kept("s_donut") && donut ? JSON.stringify(donut) : "",
+    before_after: kept("s_ba") && beforeAfter ? JSON.stringify(beforeAfter) : "",
+    mini_stats: kept("s_mini") ? JSON.stringify(miniStats) : "[]",
+    mini_title: "Chỉ số",
+    trend: kept("s_trend") && trend ? JSON.stringify(trend) : "",
     // S7 CTA
     cta_top: ctaTop,
     cta_keyword: ctaKeyword,
@@ -312,7 +351,7 @@ export async function buildAnimation(input: {
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 120);
-      const { variables: animVars, sceneSpecs } = buildAnimationVariables(script.script);
+      const { variables: animVars, sceneSpecs } = buildAnimationVariables(script.script, durationSec);
 
       // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
       // Chạy SONG SONG với sinh ảnh hero để tránh vượt Vercel 60s. Lỗi/thiếu key → words=null

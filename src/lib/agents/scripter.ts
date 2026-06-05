@@ -23,6 +23,11 @@ export type ScriptResult = {
       compare?: { leftTitle: string; leftItems: string[]; rightTitle: string; rightItems: string[] };
       principle?: string;
       callout?: string;
+      // C3 v5 — data-viz đa dạng (số chạy, NON-READ minh hoạ body). Tuỳ chọn → backward-compat.
+      donut?: { value: string; unit: string; label: string };
+      beforeAfter?: { fromValue: string; fromLabel: string; toValue: string; toLabel: string; unit: string };
+      miniStats?: { value: string; unit: string; label: string }[];
+      trend?: { label: string; points: string[] };
     };
   };
   estimatedDurationSec: number;
@@ -81,7 +86,11 @@ CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema s
       "pills": [{"text": ".."}, {"text": ".."}, {"text": ".."}, {"text": ".."}],
       "compare": {"leftTitle": "Cách cũ", "leftItems": ["..", ".."], "rightTitle": "Với AI", "rightItems": ["..", ".."]},
       "principle": "1 câu nguyên tắc cốt lõi đắt giá (≤12 từ)",
-      "callout": "1 insight nhấn mạnh (≤16 từ)"
+      "callout": "1 insight nhấn mạnh (≤16 từ)",
+      "donut": {"value": "70", "unit": "%", "label": "NHÃN NGẮN (số % KHÁC bigStat)"},
+      "beforeAfter": {"fromValue": "8", "fromLabel": "Cách cũ", "toValue": "1", "toLabel": "Với AI", "unit": "giờ"},
+      "miniStats": [{"value": "3", "unit": "x", "label": "Nhanh hơn"}, {"value": "60", "unit": "%", "label": "Tiết kiệm"}, {"value": "24", "unit": "/7", "label": "Hoạt động"}, {"value": "5", "unit": "phút", "label": "Cài đặt"}],
+      "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"]}
     }
   },
   "estimatedDurationSec": ${lengthSec}
@@ -96,6 +105,9 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
 - bars: 2-4 mục CÙNG ĐƠN VỊ để so sánh được (vd cùng "%"), giá trị KHÁC nhau.
 - compare: 2 cột cụ thể (cũ vs mới); pills: 4 điểm NGẮN (≤8 từ) khác nhau.
 - pills/compare/principle/callout RIÊNG BIỆT, không lặp keyMessages.
+- ĐA DẠNG data-viz (số chạy): điền donut (1 vòng % khác bigStat), beforeAfter (số trước→sau, vd '8 giờ→1 giờ'),
+  miniStats (3-4 chỉ số nhỏ khác nhau), trend (4-5 số tăng dần). TẤT CẢ là MINH HOẠ (ví dụ/ước tính), bám
+  CHỦ ĐỀ + các ý trong body, KHÔNG lạc đề, KHÔNG bịa trích dẫn. Cái nào không hợp chủ đề thì để rỗng/bỏ.
 - ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
 }
 
@@ -124,7 +136,7 @@ export async function generateScript(input: {
   const result = await llm.complete({
     system: SYSTEM,
     messages: [{ role: "user", content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec) }],
-    maxTokens: 5500, // đủ chỗ cho JSON giàu data (bars/dataPoints/keyMessages) — KHÔNG làm dài video, chỉ tránh cắt JSON
+    maxTokens: 6500, // đủ chỗ cho JSON giàu data-viz (donut/beforeAfter/miniStats/trend...) — KHÔNG làm dài video, chỉ tránh cắt JSON
     responseFormat: "json",
   });
 

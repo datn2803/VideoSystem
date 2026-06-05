@@ -30,7 +30,12 @@
     {"id":"theme","type":"string","label":"Theme index (0-2) — màu nền sáng","default":"0"},
     {"id":"compact","type":"string","label":"QC: compact=1 → co chữ mạnh hơn","default":""},
     {"id":"points","type":"string","label":"Point scenes JSON [{n,total,text}] — mỗi keyMessage 1 cảnh","default":"[]"},
-    {"id":"scene_times","type":"string","label":"Map id→{start,dur} đồng bộ giọng đọc (rỗng=chia đều)","default":""}
+    {"id":"scene_times","type":"string","label":"Map id→{start,dur} đồng bộ giọng đọc (rỗng=chia đều)","default":""},
+    {"id":"donut","type":"string","label":"S_donut JSON {value,unit,label}","default":""},
+    {"id":"before_after","type":"string","label":"S_ba JSON {fromValue,fromLabel,toValue,toLabel,unit}","default":""},
+    {"id":"mini_stats","type":"string","label":"S_mini JSON [{value,unit,label}]","default":"[]"},
+    {"id":"mini_title","type":"string","label":"S_mini eyebrow","default":"Chỉ số"},
+    {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""}
   ]'
 >
   <head>
@@ -56,8 +61,9 @@
       /* center (Hero, CTA) */
       .scene.center { flex-direction: column; justify-content: center; align-items: center; padding: 0 80px; text-align: center; }
       /* left (bố cục mẫu): bám lề trái, KHỐI căn GIỮA dọc (hết trống đáy) */
-      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 130px 72px; text-align: left; }
-      .scene.left .stack { display: flex; flex-direction: column; gap: 32px; width: 100%; }
+      /* canh giữa + nội dung TO (đầy khung); progress bar lo phần đáy, watermark lo cảnh point */
+      .scene.left { flex-direction: column; justify-content: center; align-items: stretch; padding: 150px 72px 170px; text-align: left; }
+      .scene.left .stack { display: flex; flex-direction: column; gap: 36px; width: 100%; }
 
       .bg-light {
         background:
@@ -173,6 +179,57 @@
       .pquote .qn { color: var(--accent2); font-weight: 900; font-size: 44px; font-variant-numeric: tabular-nums; }
       .pquote .ptt { color: var(--ink); font-weight: 800; font-size: 66px; line-height: 1.15; margin-top: 6px; }
 
+      /* watermark số khổng lồ mờ (lấp khoảng trống cảnh point) */
+      .pwm { position: absolute; right: -30px; bottom: 60px; font-weight: 900; font-size: 620px; line-height: 0.7;
+        color: var(--accent); opacity: 0.06; letter-spacing: -20px; pointer-events: none; font-variant-numeric: tabular-nums; }
+
+      /* thanh tiến trình đáy (lấp đáy + nhịp pro) */
+      #progress { position: absolute; left: 72px; right: 72px; bottom: 90px; height: 8px; border-radius: 999px;
+        background: rgba(124,58,237,0.12); overflow: hidden; z-index: 40; }
+      #progress .pfb { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+        border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); will-change: transform; }
+
+      /* ── S_donut: vòng tròn % ── */
+      .donutwrap { position: relative; width: 460px; height: 460px; align-self: flex-start; }
+      .donut { width: 100%; height: 100%; transform: rotate(-90deg); }
+      .donut .dtrack { fill: none; stroke: rgba(124,58,237,0.12); stroke-width: 22; }
+      .donut .dfill { fill: none; stroke: var(--accent); stroke-width: 22; stroke-linecap: round;
+        stroke-dasharray: 578; stroke-dashoffset: 578; will-change: stroke-dashoffset; }
+      .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        color: var(--accent); font-weight: 900; font-size: 138px; font-variant-numeric: tabular-nums; }
+      .dcenter .du { font-size: 0.46em; color: var(--accent2); align-self: flex-start; margin-top: 0.5em; }
+
+      /* ── S_ba: before → after ── */
+      .bawrap { display: flex; align-items: center; gap: 26px; width: 100%; }
+      .baside { flex: 1; padding: 104px 24px; border-radius: 24px; text-align: center; will-change: transform, opacity; }
+      .baside.l { background: var(--card); box-shadow: 0 12px 34px rgba(90,70,170,0.12); }
+      .baside.r { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: 0 16px 40px var(--glow); }
+      .baside .bav { font-weight: 900; font-size: 104px; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+      .baside.r .bav { color: #fff; }
+      .baside .bav .bu { font-size: 0.42em; }
+      .baside .bal { margin-top: 14px; font-weight: 700; font-size: 32px; color: var(--sub); }
+      .baside.r .bal { color: rgba(255,255,255,0.88); }
+      .baarrow { flex: 0 0 66px; width: 66px; height: 66px; color: var(--accent); }
+
+      /* ── S_mini: lưới 2×2 mini-stat ── */
+      .minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
+      .ministat { padding: 36px 32px; border-radius: 22px; background: var(--card); box-shadow: 0 12px 30px rgba(90,70,170,0.10);
+        display: flex; flex-direction: column; will-change: transform, opacity; }
+      .ministat .mi { width: 58px; height: 58px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
+        display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+      .ministat .mi svg { width: 32px; height: 32px; }
+      .ministat .mv { color: var(--accent); font-weight: 900; font-size: 70px; line-height: 1; font-variant-numeric: tabular-nums; }
+      .ministat .mv .mu { font-size: 0.46em; color: var(--accent2); }
+      .ministat .ml { color: var(--sub); font-weight: 600; font-size: 29px; margin-top: 8px; line-height: 1.2; }
+
+      /* ── S_trend: đường tăng ── */
+      .trendwrap { position: relative; width: 100%; height: 440px; }
+      .trendsvg { width: 100%; height: 100%; overflow: visible; }
+      .trendsvg .tline { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; will-change: stroke-dashoffset; }
+      .trendsvg .tarea { fill: rgba(124,58,237,0.10); stroke: none; }
+      .tdot { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
+        box-shadow: 0 0 0 9px rgba(124,58,237,0.18); transform: translate(-50%,-50%); will-change: transform, opacity; }
+
       /* ── S1 hero (center) ── */
       #s1 .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; line-height: 0.98; letter-spacing: -1px; }
       #s1 .l { display: block; color: var(--ink); font-weight: 900; font-size: 78px; line-height: 1.05; }
@@ -255,6 +312,60 @@
         </div>
       </div>
 
+      <!-- S_donut: vòng tròn % -->
+      <div id="s_donut" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="dnEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2a10 10 0 0 1 10 10h-10z"/></svg></span><span class="lbl" id="dnLbl"></span></div>
+          <div class="donutwrap">
+            <svg class="donut" viewBox="0 0 220 220">
+              <circle class="dtrack" cx="110" cy="110" r="92"></circle>
+              <circle class="dfill" id="dnFill" cx="110" cy="110" r="92"></circle>
+            </svg>
+            <div class="dcenter"><span id="dnNum">0</span><span class="du" id="dnUnit"></span></div>
+          </div>
+          <div class="blabel" id="dnText"></div>
+        </div>
+      </div>
+
+      <!-- S_ba: before → after -->
+      <div id="s_ba" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="baEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span><span class="lbl" id="baLbl"></span></div>
+          <div class="bawrap">
+            <div class="baside l"><div class="bav" id="baFrom">0</div><div class="bal" id="baFromL"></div></div>
+            <svg class="baarrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            <div class="baside r"><div class="bav hi" id="baTo">0</div><div class="bal" id="baToL"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- S_mini: lưới mini-stat 2×2 -->
+      <div id="s_mini" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="miEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="lbl" id="miLbl"></span></div>
+          <div class="minigrid" id="miGrid"></div>
+        </div>
+      </div>
+
+      <!-- S_trend: đường tăng -->
+      <div id="s_trend" class="scene left bg-light clip" data-start="0" data-duration="3.7" data-track-index="1">
+        <div class="dotgrid"></div>
+        <div class="stack">
+          <div class="eyebrow icon" id="trEb"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 9 11l4 4 8-8"/><path d="M17 4h4v4"/></svg></span><span class="lbl" id="trLbl"></span></div>
+          <div class="trendwrap">
+            <svg class="trendsvg" viewBox="0 0 600 300" preserveAspectRatio="none">
+              <polyline class="tarea" id="trArea" points=""></polyline>
+              <polyline class="tline" id="trLine" points=""></polyline>
+            </svg>
+            <div class="tdot" id="trDot"></div>
+          </div>
+          <div class="blabel" id="trText"></div>
+        </div>
+      </div>
+
       <!-- S5 CTA (center) -->
       <div id="s7" class="scene center bg-light clip" data-start="14.8" data-duration="3.7" data-track-index="1">
         <div class="dotgrid"></div>
@@ -262,6 +373,9 @@
         <div class="e2" id="s7e2"></div>
         <div class="e3" id="s7e3"><span id="s7e3text"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg></div>
       </div>
+
+      <!-- Thanh tiến trình chạy suốt clip (lấp đáy) -->
+      <div id="progress"><div class="pfb" id="progressFill"></div></div>
     </div>
 
     <script>
@@ -436,6 +550,86 @@
         });
       }
 
+      // ── S_donut: vòng tròn % ──
+      const donutData = parseJSON(v.donut, null);
+      let donutNum = null, donutIsNum = false;
+      if (!donutData || !String(donutData.value || "").trim()) { remove("s_donut"); }
+      else {
+        const lab = String(donutData.label || "").trim();
+        if (!lab) remove("dnEb"); else setText("dnLbl", lab);
+        setText("dnText", lab);
+        const n = Number(String(donutData.value).replace(/[^\d.-]/g, ""));
+        donutIsNum = Number.isFinite(n);
+        if (donutIsNum) { donutNum = n; setText("dnUnit", donutData.unit || "%"); }
+        else { setText("dnNum", String(donutData.value)); remove("dnUnit"); }
+      }
+
+      // ── S_ba: before → after ──
+      const baData = parseJSON(v.before_after, null);
+      let baInfo = null;
+      if (!baData || !String(baData.fromValue || "").trim() || !String(baData.toValue || "").trim()) { remove("s_ba"); }
+      else {
+        const lab = String(baData.label || "").trim();
+        if (!lab) remove("baLbl"); else setText("baLbl", lab);
+        setText("baFromL", baData.fromLabel || "Trước");
+        setText("baToL", baData.toLabel || "Sau");
+        const unit = baData.unit ? " " + String(baData.unit) : "";
+        const fn = Number(String(baData.fromValue).replace(/[^\d.-]/g, ""));
+        const tn = Number(String(baData.toValue).replace(/[^\d.-]/g, ""));
+        baInfo = { from: fn, to: tn, fromIsNum: Number.isFinite(fn), toIsNum: Number.isFinite(tn), unit };
+        setText("baFrom", baInfo.fromIsNum ? "0" + unit : String(baData.fromValue));
+        setText("baTo", baInfo.toIsNum ? "0" + unit : String(baData.toValue));
+      }
+
+      // ── S_mini: lưới mini-stat ──
+      const miniData = parseJSON(v.mini_stats, []);
+      const miniInfo = [];
+      if (!Array.isArray(miniData) || miniData.length < 2) { remove("s_mini"); }
+      else {
+        setText("miLbl", String(v.mini_title || "Chỉ số"));
+        const host = document.getElementById("miGrid");
+        miniData.slice(0, 4).forEach((m, i) => {
+          const card = document.createElement("div"); card.className = "ministat"; card.id = "mini" + i;
+          const ic = document.createElement("div"); ic.className = "mi"; ic.appendChild(makeIconSVG(ICON_CYCLE[i % ICON_CYCLE.length]));
+          const mv = document.createElement("div"); mv.className = "mv";
+          const unit = m.unit ? String(m.unit) : "";
+          const n = Number(String(m.value).replace(/[^\d.-]/g, ""));
+          const isNum = Number.isFinite(n) && /\d/.test(String(m.value || ""));
+          const mvn = document.createElement("span"); mvn.id = "mivn" + i; mvn.textContent = isNum ? "0" : String(m.value || "");
+          const mu = document.createElement("span"); mu.className = "mu"; mu.textContent = unit;
+          mv.appendChild(mvn); mv.appendChild(mu);
+          const ml = document.createElement("div"); ml.className = "ml"; ml.textContent = String(m.label || "");
+          card.appendChild(ic); card.appendChild(mv); card.appendChild(ml); host.appendChild(card);
+          miniInfo.push({ i, num: n, isNum });
+        });
+      }
+
+      // ── S_trend: đường tăng ──
+      const trendData = parseJSON(v.trend, null);
+      let trendLen = 0;
+      const trendPts = (trendData && Array.isArray(trendData.points))
+        ? trendData.points.map((p) => Number(String(p).replace(/[^\d.-]/g, ""))).filter((x) => Number.isFinite(x)) : [];
+      if (trendPts.length < 2) { remove("s_trend"); }
+      else {
+        const lab = String((trendData && trendData.label) || "Xu hướng").trim();
+        setText("trLbl", lab); setText("trText", lab);
+        const mn = Math.min.apply(null, trendPts), mx = Math.max.apply(null, trendPts), rng = (mx - mn) || 1;
+        const W = 600, H = 300, pad = 24;
+        const coords = trendPts.map((val, i) => [
+          pad + (i / (trendPts.length - 1)) * (W - 2 * pad),
+          H - pad - ((val - mn) / rng) * (H - 2 * pad),
+        ]);
+        const ptsStr = coords.map((c) => c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+        const line = document.getElementById("trLine"); if (line) line.setAttribute("points", ptsStr);
+        const area = document.getElementById("trArea");
+        if (area) area.setAttribute("points", ptsStr + " " + (W - pad) + "," + (H - pad) + " " + pad + "," + (H - pad));
+        const last = coords[coords.length - 1];
+        const dot = document.getElementById("trDot");
+        if (dot) { dot.style.left = (last[0] / W * 100) + "%"; dot.style.top = (last[1] / H * 100) + "%"; }
+        try { trendLen = line.getTotalLength(); } catch (e) { trendLen = 1400; }
+        if (line) { line.style.strokeDasharray = trendLen; line.style.strokeDashoffset = trendLen; }
+      }
+
       // ── Point scenes: MỖI keyMessage = 1 CẢNH, LUÂN PHIÊN 3 BIẾN THỂ (phá đơn điệu) + kinetic ──
       const pointsData = parseJSON(v.points, []);
       const pointIds = [];
@@ -453,6 +647,7 @@
           sc.setAttribute("data-variant", String(variant));
           sc.setAttribute("data-start", "0"); sc.setAttribute("data-duration", "3.7"); sc.setAttribute("data-track-index", "1");
           const dg = document.createElement("div"); dg.className = "dotgrid"; sc.appendChild(dg);
+          const wm = document.createElement("div"); wm.className = "pwm"; wm.textContent = num; sc.appendChild(wm); // số mờ lấp khung
           const stack = document.createElement("div"); stack.className = "stack";
           const eb = document.createElement("div"); eb.className = "eyebrow icon";
           const ico = document.createElement("span"); ico.className = "ico"; ico.appendChild(makeIconSVG(iconKey));
@@ -546,7 +741,7 @@
 
       // ── Timing: scene_times (ĐỒNG BỘ giọng đọc qua Whisper) nếu có; nếu không → chia đều ──
       const total = parseFloat(v.duration) || 18.5;
-      const order = ["s1", "s2", "s4b", ...pointIds, "s6", "s_emph", "s_cmp", "s7"];
+      const order = ["s1", "s2", "s_donut", "s_ba", "s4b", "s_mini", "s_trend", ...pointIds, "s6", "s_emph", "s_cmp", "s7"];
       let visible = order.filter((id) => document.getElementById(id));
       const N = Math.max(1, visible.length);
       const startOf = {}, winOf = {};
@@ -587,6 +782,10 @@
       if (document.getElementById("glowblob"))
         tl.fromTo("#glowblob", { x: -40, y: -20, scale: 0.92 },
           { x: 260, y: 200, scale: 1.18, duration: Math.max(2, total / 2), ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+
+      // Thanh tiến trình chạy suốt clip (lấp đáy).
+      if (document.getElementById("progressFill"))
+        tl.fromTo("#progressFill", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
 
       // Cross-fade scene (RẺ — chỉ opacity).
       visible.forEach((id, i) => {
@@ -643,6 +842,51 @@
           tl.to(cc, { v: bi.num, duration: 0.7, ease: "power2.out",
             onUpdate: () => { const e = document.getElementById("bval" + bi.i); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN") + bi.unit; } }, s + 0.4 + bi.i * 0.12);
         });
+      }
+
+      /* S_donut: vòng tròn quét + số đếm */
+      if (has("s_donut")) {
+        const s = startOf.s_donut;
+        if (document.getElementById("dnEb")) tl.from("#dnEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        if (donutIsNum && donutNum != null) {
+          const CIRC = 578, off = CIRC * (1 - Math.max(0, Math.min(100, donutNum)) / 100);
+          tl.fromTo("#dnFill", { strokeDashoffset: CIRC }, { strokeDashoffset: off, duration: 1.0, ease: "power2.out" }, s + 0.3);
+          const cc = { v: 0 };
+          tl.to(cc, { v: donutNum, duration: 1.0, ease: "power2.out",
+            onUpdate: () => { const e = document.getElementById("dnNum"); if (e) e.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.3);
+        } else {
+          tl.from(".dcenter", { scale: 0.7, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.3);
+        }
+        if (document.getElementById("dnText")) tl.from("#dnText", { y: 16, opacity: 0, duration: 0.4 }, s + 0.95);
+      }
+
+      /* S_ba: before → after */
+      if (has("s_ba")) {
+        const s = startOf.s_ba;
+        if (document.getElementById("baEb")) tl.from("#baEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.from("#s_ba .baside.l", { x: -30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.3);
+        tl.from("#s_ba .baarrow", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.7)" }, s + 0.55);
+        tl.from("#s_ba .baside.r", { x: 30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.7);
+        if (baInfo && baInfo.fromIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.from, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baFrom"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.45); }
+        if (baInfo && baInfo.toIsNum) { const c = { v: 0 }; tl.to(c, { v: baInfo.to, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("baTo"); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN") + baInfo.unit; } }, s + 0.85); }
+      }
+
+      /* S_mini: lưới mini-stat — vào lần lượt + số đếm */
+      if (has("s_mini")) {
+        const s = startOf.s_mini;
+        if (document.getElementById("miEb")) tl.from("#miEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        tl.from("#miGrid .ministat", { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
+        miniInfo.forEach((mi) => { if (!mi.isNum) return; const c = { v: 0 }; tl.to(c, { v: mi.num, duration: 0.7, ease: "power2.out", onUpdate: () => { const e = document.getElementById("mivn" + mi.i); if (e) e.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.5 + mi.i * 0.1); });
+      }
+
+      /* S_trend: đường vẽ dần + chấm cuối */
+      if (has("s_trend")) {
+        const s = startOf.s_trend;
+        if (document.getElementById("trEb")) tl.from("#trEb", { x: -30, opacity: 0, duration: 0.4 }, s + 0.12);
+        if (trendLen) tl.fromTo("#trLine", { strokeDashoffset: trendLen }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, s + 0.3);
+        if (document.getElementById("trArea")) tl.from("#trArea", { opacity: 0, duration: 0.8 }, s + 0.6);
+        if (document.getElementById("trDot")) tl.from("#trDot", { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.8)" }, s + 1.25);
+        if (document.getElementById("trText")) tl.from("#trText", { y: 16, opacity: 0, duration: 0.4 }, s + 0.95);
       }
 
       /* S4 pills */
