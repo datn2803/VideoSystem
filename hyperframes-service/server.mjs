@@ -242,9 +242,9 @@ async function renderTemplate({ template, variables, quality }) {
     // RAM 8GB dư) → capture song song ≈ nhanh ~1.5–2×. Mutex withRenderLock đã đảm bảo
     // chỉ 1 job render/lúc nên 2 worker không tranh tài nguyên với render khác.
     "--workers", "2",
-    // TỐI ƯU TỐC ĐỘ: 20fps (thay 24) → bớt ~17% frame nữa, motion-graphics mượt GSAP vẫn ổn.
-    // Render mềm no-GPU → ÍT FRAME = nhanh tuyến tính. Hạ tiếp 18/15 nếu cần nhanh hơn (chấp nhận hơi giật).
-    "--fps", "20",
+    // 24fps (cinematic) — GIỮ để KHÔNG giảm độ mượt/chất lượng (Tommy yêu cầu). Tăng tốc lấy từ
+    // tắt vision-QC (render 1 lần) + bỏ filter:blur, KHÔNG hạ fps. (Hạ 20/18 nếu sau này cần nhanh hơn.)
+    "--fps", "24",
     // VPS KHÔNG có GPU thật → auto-probe chọn "hardware" (SwiftShader) rồi CRASH khi
     // render cảnh nặng. Ép SOFTWARE (SwiftShader thuần) cho ỔN ĐỊNH.
     "--no-browser-gpu",
