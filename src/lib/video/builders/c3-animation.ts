@@ -3,6 +3,7 @@ import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
+import { getOpenAIKey, transcribeWords, alignByWeights } from "@/lib/audio/whisper";
 import type { ScriptResult } from "@/lib/agents/scripter";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
@@ -109,7 +110,12 @@ function shortUnit(unit: string): string {
   return u.slice(0, 8);
 }
 
-function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<string, unknown> {
+type SceneSpec = { id: string; weight: number };
+
+function buildAnimationVariables(
+  s: ScriptResult,
+  accentColor?: string
+): { variables: Record<string, unknown>; sceneSpecs: SceneSpec[] } {
   const anim = s.variantPrompts.animation;
   const [hookLine1, hookLine2] = splitTwoLines(s.hook || "");
   const keyword = shortKeyword(anim.keyMessages?.[0] || s.hook || "");
@@ -199,7 +205,21 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
   const principle = String(anim.principle || "").trim();
   const callout = String(anim.callout || "").trim();
 
-  return {
+  // ── Danh sách CẢNH ĐANG HIỂN THỊ + trọng số (số chữ) — KHỚP THỨ TỰ với `order` trong
+  //    animation.html: s1, s2, s4b, point scenes, s6, s_emph, s_cmp, s7. Dùng để Whisper
+  //    căn scene_times (cảnh nội dung nhiều → giữ lâu hơn). ──
+  const wc = (t: string) => Math.max(1, String(t || "").trim().split(/\s+/).filter(Boolean).length);
+  const sceneSpecs: SceneSpec[] = [];
+  sceneSpecs.push({ id: "s1", weight: wc(s.hook) + 2 });
+  if (bignumValue) sceneSpecs.push({ id: "s2", weight: 3 });
+  if (finalBars.length >= 2) sceneSpecs.push({ id: "s4b", weight: 4 });
+  pointScenes.forEach((p, i) => sceneSpecs.push({ id: "spt" + i, weight: wc(p.text) }));
+  if (pills.length) sceneSpecs.push({ id: "s6", weight: pills.reduce((a, p) => a + wc(p.label), 0) });
+  if (callout || principle) sceneSpecs.push({ id: "s_emph", weight: wc(callout) + wc(principle) });
+  if (cmp) sceneSpecs.push({ id: "s_cmp", weight: 6 });
+  sceneSpecs.push({ id: "s7", weight: wc(s.cta) });
+
+  const variables = {
     // S1 hook
     hook_line1: hookLine1,
     hook_line2: hookLine2,
@@ -235,6 +255,8 @@ function buildAnimationVariables(s: ScriptResult, accentColor?: string): Record<
     accent_color: accentColor || "#e11d2a",
     theme: String(themeFromSeed((s.hook || s.cta || "x").trim())),
   };
+
+  return { variables, sceneSpecs };
 }
 
 export async function buildAnimation(input: {
@@ -281,13 +303,27 @@ export async function buildAnimation(input: {
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 120);
-      const imgHeroUrl = await generateHeroImageUrl(input.scriptId, `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video`);
+      const { variables: animVars, sceneSpecs } = buildAnimationVariables(script.script);
+
+      // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
+      // Chạy SONG SONG với sinh ảnh hero để tránh vượt Vercel 60s. Lỗi/thiếu key → words=null
+      // → alignByWeights tự fallback chia theo tỉ lệ trọng số (vẫn tốt hơn chia đều cứng).
+      const openaiKey = await getOpenAIKey();
+      const [imgHeroUrl, words] = await Promise.all([
+        generateHeroImageUrl(input.scriptId, `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video`),
+        voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
+      ]);
+      const times = alignByWeights(sceneSpecs.map((sp) => sp.weight), words, durationSec);
+      const sceneTimes: Record<string, { start: number; dur: number }> = {};
+      sceneSpecs.forEach((sp, i) => { sceneTimes[sp.id] = times[i]; });
+
       const variables = {
-        ...buildAnimationVariables(script.script),
+        ...animVars,
         voice_url: voiceUrl,
         duration: String(durationSec),
         img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
         visionQC: true, // VPS chỉ chấm QC (bỏ imagePrompts — không sinh ảnh trên VPS nữa)
+        scene_times: JSON.stringify(sceneTimes), // đồng bộ cảnh với giọng đọc
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {
