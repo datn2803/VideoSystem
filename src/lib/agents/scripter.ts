@@ -77,7 +77,10 @@ KHUNG KỊCH BẢN BẮT BUỘC: HOOK (3-5s, số sốc/câu hỏi/phản trực
 
 Hãy viết script chi tiết cho video này, đồng thời cung cấp prompt cho 3 phong cách dựng video khác nhau.
 
-CHỈ trả về JSON object hợp lệ (không markdown wrapper), theo schema sau:
+⚠ ĐỊNH DẠNG ĐẦU RA (BẮT BUỘC — sai là HỎNG cả hệ thống):
+- Trả về DUY NHẤT 1 JSON object hợp lệ. KHÔNG kèm bất kỳ chữ nào trước/sau, KHÔNG markdown, KHÔNG giải thích, KHÔNG ghi suy nghĩ.
+- Trong MỌI giá trị chuỗi: TUYỆT ĐỐI KHÔNG dùng dấu ngoặc kép " (sẽ làm vỡ JSON). Cần nhấn mạnh thì dùng nháy đơn 'như vầy' hoặc viết thường.
+Schema:
 {
   "hook": "câu mở 3-5s (≤25 từ, phải gây stop scroll)",
   "body": "nội dung chính, dạng đoạn văn, ${Math.round(lengthSec * 0.7)} giây",
@@ -169,6 +172,26 @@ export function wordBudgetFor(lengthSec: number): number {
   return Math.max(60, Math.round(lengthSec * 2.5));
 }
 
+// Parse JSON script CHẮC TAY: bóc markdown fence, cắt phần thừa TRƯỚC `{` / SAU `}` (thinking/prose
+// rò ra), thử vá trailing comma. Trả null nếu bất lực → caller retry / báo lỗi (KHÔNG đổ raw vào body).
+export function parseScriptJson(text: string): Partial<ScriptResult> | null {
+  if (!text) return null;
+  let s = text.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first < 0 || last <= first) return null;
+  s = s.slice(first, last + 1);
+  for (const cand of [s, s.replace(/,\s*([}\]])/g, "$1")]) {
+    try {
+      const obj = JSON.parse(cand);
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) return obj as Partial<ScriptResult>;
+    } catch {
+      /* thử bản kế */
+    }
+  }
+  return null;
+}
+
 export async function generateScript(input: {
   profile: ProfileRecord;
   topic: string;
@@ -185,50 +208,43 @@ export async function generateScript(input: {
 
   // Tầng 2: Script Writer (JSON, no-grounding) — dùng fact brief + khoá word-budget.
   const llm = await hub.llm();
-  const result = await llm.complete({
-    system: SYSTEM,
-    messages: [
-      {
-        role: "user",
-        content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec, wordBudget, fact.brief),
-      },
-    ],
-    maxTokens: 6500, // đủ chỗ cho JSON giàu data-viz (donut/beforeAfter/miniStats/trend...) — KHÔNG làm dài video, chỉ tránh cắt JSON
-    responseFormat: "json",
-  });
+  const runWriter = () =>
+    llm.complete({
+      system: SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec, wordBudget, fact.brief),
+        },
+      ],
+      maxTokens: 6500, // đủ chỗ cho JSON giàu data-viz (donut/beforeAfter/miniStats/trend...) — KHÔNG làm dài video, chỉ tránh cắt JSON
+      responseFormat: "json",
+    });
 
+  // Retry 1 lần khi parse hỏng (giống planner/strategist). Model yếu (flash-lite) hay trả prose/JSON-vỡ ở lần đầu.
+  let result = await runWriter();
   await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
+  let parsed = parseScriptJson(result.text);
+  let writerCost = result.costUsd;
+  if (!parsed) {
+    console.error("[scripter] Writer parse JSON hỏng, raw:", result.text?.slice(0, 800));
+    result = await runWriter();
+    await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
+    writerCost += result.costUsd;
+    parsed = parseScriptJson(result.text);
+    if (!parsed) console.error("[scripter] retry vẫn hỏng:", result.text?.slice(0, 800));
+  }
 
   // Nguồn số liệu = citations THẬT từ Fact Researcher (không nhờ Writer tự đẻ URL → tránh bịa link).
   const sources = fact.sources.map((s) => ({ claim: s.title, url: s.url }));
-  const totalCost = fact.costUsd + result.costUsd;
+  const totalCost = fact.costUsd + writerCost;
 
-  let parsed: Partial<ScriptResult> = {};
-  try {
-    const cleaned = result.text.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned);
-    }
-  } catch {
-    // Fallback: trả raw text
-    return {
-      hook: "",
-      body: result.text,
-      cta: "",
-      caption: "",
-      hashtags: [],
-      variantPrompts: {
-        talking: result.text,
-        broll: { shotList: [], voiceOver: result.text },
-        animation: { keyMessages: [], dataPoints: [], visualCues: [], voiceOver: result.text },
-      },
-      estimatedDurationSec: lengthSec,
-      sources: sources.length ? sources : undefined,
-      raw: result.text,
-      costUsd: totalCost,
-    };
+  // KHÔNG đổ raw text vào body (sẽ ra script rác: vỡ word-budget, rỗng C3, audit pass nhầm).
+  // Thà báo lỗi rõ để người dùng tạo lại / đổi model — caller (generateScriptAction) đã bắt & hiện message.
+  if (!parsed) {
+    throw new Error(
+      "Writer không trả JSON hợp lệ sau 2 lần thử (model yếu với JSON phức tạp). Thử lại, hoặc đổi model LLM sang gemini-2.5-flash cho ổn định."
+    );
   }
 
   return {

@@ -57,14 +57,16 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
       }
       const data = (await res.json()) as {
         candidates?: {
-          content?: { parts?: { text: string }[] };
+          content?: { parts?: { text: string; thought?: boolean }[] };
           finishReason?: string;
           groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
         }[];
         usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
       };
       const cand = data.candidates?.[0];
-      const text = cand?.content?.parts?.map((p) => p.text).join("") || "";
+      // Bỏ "thinking part" (p.thought=true): với flash-lite, dù thinkingBudget:0 vẫn có thể rò 1 part
+      // suy nghĩ ra trước JSON → "thought{...}" làm parse vỡ. Chỉ lấy part trả lời thật.
+      const text = (cand?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text).join("") || "";
       if (!text) {
         throw new Error(
           `Gemini trả về rỗng (finishReason=${cand?.finishReason ?? "unknown"}). Thử tăng maxTokens hoặc kiểm tra thinking budget.`
