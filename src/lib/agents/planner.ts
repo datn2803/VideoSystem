@@ -48,7 +48,19 @@ KHÔNG trả JSON. Nếu không tìm được dữ liệu mới, nói rõ và li
       maxTokens: 2048,
     });
     await recordLLMUsage(r.costUsd, r.tokensIn, r.tokensOut);
-    return { brief: r.text || "", citations: r.citations ?? [], costUsd: r.costUsd };
+    const citations = r.citations ?? [];
+    let brief = r.text || "";
+    // Minh bạch: nếu KHÔNG có nguồn grounding thật → cảnh báo (đừng ngầm tưởng là dữ liệu real-time).
+    if (citations.length === 0 && brief) {
+      const gm = (r.raw as { candidates?: { groundingMetadata?: { webSearchQueries?: string[] } }[] })
+        ?.candidates?.[0]?.groundingMetadata;
+      const queries = gm?.webSearchQueries ?? [];
+      const reason = queries.length
+        ? `model có search (${queries.length} truy vấn) nhưng không trả nguồn`
+        : `model KHÔNG gọi Google Search (thường do Gemini key chưa bật billing — grounding cần tier trả phí)`;
+      brief = `⚠ KHÔNG có nguồn real-time: ${reason}. Nội dung dưới đây có thể từ trí nhớ model — hãy tự kiểm chứng số liệu.\n\n${brief}`;
+    }
+    return { brief, citations, costUsd: r.costUsd };
   } catch (e) {
     console.error("[planner] Trend Researcher lỗi (bỏ qua, dùng brief rỗng):", e);
     return { brief: "", citations: [], costUsd: 0 };

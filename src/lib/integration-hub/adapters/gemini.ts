@@ -29,8 +29,10 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
           : (input.maxTokens ?? (grounded ? 4096 : 2048)),
         responseMimeType: isJson ? "application/json" : undefined,
       };
-      // Gemini 2.5 bật "thinking" mặc định → ăn hết token budget, JSON trả về rỗng/cụt. Tắt đi.
-      if (model.startsWith("gemini-2.5")) {
+      // Gemini 2.5 bật "thinking" mặc định → ăn hết token budget, JSON trả về rỗng/cụt → tắt đi.
+      // NHƯNG khi grounded: thinking là thứ giúp model QUYẾT ĐỊNH gọi google_search; tắt nó →
+      // model trả lời từ trí nhớ, groundingMetadata rỗng (không search thật). Nên grounded thì GIỮ thinking.
+      if (model.startsWith("gemini-2.5") && !grounded) {
         generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
       const body: Record<string, unknown> = {
