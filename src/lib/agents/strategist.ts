@@ -1,6 +1,7 @@
 import { hub } from "@/lib/integration-hub/hub";
-import { store, type ProfileRecord, type ContentPillar, type ProfileStrategy } from "@/lib/integration-hub/storage";
+import { store, type ProfileRecord, type ProfileStrategy } from "@/lib/integration-hub/storage";
 import { recordLLMUsage } from "@/lib/agents/usage";
+import { extractStrategy } from "@/lib/agents/strategist-parse";
 
 // ── Strategy Agent ──────────────────────────────────────────────────────────
 // Profile → brandAngle + channelGoal + 3-5 PILLARS.
@@ -27,7 +28,7 @@ function buildPrompt(profile: ProfileRecord): string {
 Từ profile trên, hãy rút ra CHIẾN LƯỢC kênh:
 1) brandAngle: 1 câu định vị riêng — vì sao khán giả nên theo dõi CHÍNH chuyên gia này (góc nhìn khác biệt, không chung chung).
 2) channelGoal: 1 trong "uy tín" | "lead" | "bán" (mục tiêu chính của kênh).
-3) pillars: 3-5 TRỤ nội dung, mỗi trụ là một mảng chủ đề lặp lại của kênh. Mỗi trụ gồm:
+3) pillars: 4 TRỤ nội dung (chỉ ra 3 nếu lĩnh vực thật sự hẹp, hoặc 5 nếu thật sự rộng — mặc định 4), mỗi trụ là một mảng chủ đề lặp lại của kênh. Mỗi trụ gồm:
    - name: tên trụ ≤6 từ, dễ hiểu
    - description: 1 câu mô tả trụ này nói về gì
    - painPoints: 1-3 nỗi đau khách mà trụ giải quyết
@@ -42,55 +43,6 @@ Ràng buộc:
 CHỈ trả về JSON hợp lệ, KHÔNG markdown wrapper, KHÔNG giải thích.
 Format:
 {"brandAngle":"...","channelGoal":"uy tín","pillars":[{"name":"...","description":"...","painPoints":["..."],"sampleAngles":["...","..."]}]}`;
-}
-
-type RawStrategy = {
-  brandAngle?: unknown;
-  channelGoal?: unknown;
-  pillars?: unknown;
-};
-
-function asStringArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v.map((x) => (typeof x === "string" ? x.trim() : String(x ?? "").trim())).filter(Boolean);
-}
-
-function normalizePillar(raw: unknown): ContentPillar | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const name = typeof r.name === "string" ? r.name.trim() : "";
-  if (!name) return null;
-  return {
-    name,
-    description: typeof r.description === "string" ? r.description.trim() : "",
-    painPoints: asStringArray(r.painPoints),
-    sampleAngles: asStringArray(r.sampleAngles),
-  };
-}
-
-// Parse robust: bóc markdown fence, thử JSON.parse, fallback regex object {...}.
-function extractStrategy(text: string): Omit<ProfileStrategy, "generatedAt"> | null {
-  if (!text) return null;
-  const cleaned = text.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
-  const tryParse = (s: string): Omit<ProfileStrategy, "generatedAt"> | null => {
-    if (!s) return null;
-    let obj: RawStrategy;
-    try {
-      obj = JSON.parse(s) as RawStrategy;
-    } catch {
-      return null;
-    }
-    const pillars = Array.isArray(obj.pillars)
-      ? obj.pillars.map(normalizePillar).filter((p): p is ContentPillar => p !== null)
-      : [];
-    if (pillars.length === 0) return null;
-    return {
-      brandAngle: typeof obj.brandAngle === "string" ? obj.brandAngle.trim() : "",
-      channelGoal: typeof obj.channelGoal === "string" ? obj.channelGoal.trim() : "uy tín",
-      pillars,
-    };
-  };
-  return tryParse(cleaned) ?? tryParse(cleaned.match(/\{[\s\S]*\}/)?.[0] ?? "");
 }
 
 /**
