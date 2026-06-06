@@ -19,20 +19,28 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       }));
-      const isJson = input.responseFormat === "json";
+      // ⚠ Gemini 2.5: grounding (google_search) KHÔNG đi chung responseMimeType JSON → khi grounded thì
+      // bỏ JSON, trả TEXT có citations (kiến trúc Researcher[grounded→TEXT] → Writer[JSON]).
+      const grounded = input.grounded === true;
+      const isJson = input.responseFormat === "json" && !grounded;
       const generationConfig: Record<string, unknown> = {
-        maxOutputTokens: isJson ? Math.max(input.maxTokens ?? 0, 8192) : (input.maxTokens ?? 2048),
+        maxOutputTokens: isJson
+          ? Math.max(input.maxTokens ?? 0, 8192)
+          : (input.maxTokens ?? (grounded ? 4096 : 2048)),
         responseMimeType: isJson ? "application/json" : undefined,
       };
       // Gemini 2.5 bật "thinking" mặc định → ăn hết token budget, JSON trả về rỗng/cụt. Tắt đi.
       if (model.startsWith("gemini-2.5")) {
         generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
-      const body = {
+      const body: Record<string, unknown> = {
         contents,
         systemInstruction: input.system ? { parts: [{ text: input.system }] } : undefined,
         generationConfig,
       };
+      if (grounded) {
+        body.tools = [{ google_search: {} }];
+      }
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${opts.apiKey}`,
         {
@@ -46,7 +54,11 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         throw new Error(`Gemini API error ${res.status}: ${text}`);
       }
       const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text: string }[] }; finishReason?: string }[];
+        candidates?: {
+          content?: { parts?: { text: string }[] };
+          finishReason?: string;
+          groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
+        }[];
         usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
       };
       const cand = data.candidates?.[0];
@@ -55,6 +67,19 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         throw new Error(
           `Gemini trả về rỗng (finishReason=${cand?.finishReason ?? "unknown"}). Thử tăng maxTokens hoặc kiểm tra thinking budget.`
         );
+      }
+      // Trích nguồn từ grounding (dedup theo url). Chỉ có khi grounded=true.
+      let citations: { title: string; url: string }[] | undefined;
+      if (grounded) {
+        const seen = new Set<string>();
+        const list: { title: string; url: string }[] = [];
+        for (const chunk of cand?.groundingMetadata?.groundingChunks ?? []) {
+          const web = chunk.web;
+          if (!web?.uri || seen.has(web.uri)) continue;
+          seen.add(web.uri);
+          list.push({ title: web.title || web.uri, url: web.uri });
+        }
+        citations = list.length ? list : undefined;
       }
       const usage = data.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0 };
       const price = PRICING[model] || PRICING["gemini-2.0-flash"];
@@ -66,6 +91,7 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         tokensIn: usage.promptTokenCount,
         tokensOut: usage.candidatesTokenCount,
         costUsd,
+        citations,
         raw: data,
       };
       return result;

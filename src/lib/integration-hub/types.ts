@@ -48,6 +48,8 @@ export interface LLMResult {
   tokensIn: number;
   tokensOut: number;
   costUsd: number;
+  // Nguồn trích dẫn khi gọi grounded (Google Search). Chỉ Gemini grounded mới set.
+  citations?: { title: string; url: string }[];
   raw?: unknown;
 }
 
@@ -77,6 +79,9 @@ export interface LLMProvider {
     model?: string;
     maxTokens?: number;
     responseFormat?: "text" | "json";
+    // grounded=true → bật Google Search grounding (chỉ Gemini hỗ trợ). Trả TEXT + citations.
+    // ⚠ Gemini 2.5: grounding KHÔNG đi chung responseMimeType JSON → grounded sẽ bỏ qua responseFormat=json.
+    grounded?: boolean;
   }): Promise<LLMResult>;
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }
