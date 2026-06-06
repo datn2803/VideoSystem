@@ -34,7 +34,6 @@ export type ScriptResult = {
   };
   estimatedDurationSec: number;
   sources?: { claim: string; url: string; year?: string }[]; // nguồn số liệu thật (từ Fact Researcher grounded)
-  raw?: string;
   costUsd: number;
 };
 
