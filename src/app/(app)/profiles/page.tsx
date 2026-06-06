@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { store } from "@/lib/integration-hub/storage";
 import { CreateProfileDialog } from "@/components/profiles/create-profile-dialog";
 import { CreatePlanButton, DeleteProfileButton } from "@/components/profiles/profile-actions";
+import { ProfileStrategyPanel } from "@/components/profiles/profile-strategy";
 import { UserCircle2, Briefcase, Target, Mic, Award, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,8 @@ export default async function ProfilesPage() {
                       </div>
                     )}
                   </div>
+
+                  <ProfileStrategyPanel profileId={p.id} strategy={p.strategy} />
 
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <DeleteProfileButton profileId={p.id} name={p.name} />

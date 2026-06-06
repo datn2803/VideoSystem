@@ -15,6 +15,22 @@ type DB = {
   profiles: ProfileRecord[];
 };
 
+// Một "trụ nội dung" (content pillar) — chủ đề chiến lược lặp lại của kênh.
+export type ContentPillar = {
+  name: string; // ≤6 từ, vd "Vay mua nhà thông minh"
+  description: string; // 1 câu
+  painPoints: string[]; // nỗi đau trụ giải quyết
+  sampleAngles: string[]; // 2-3 góc khai thác gợi ý
+};
+
+// Chiến lược kênh suy ra từ profile (Strategy Agent sinh, Tommy sửa được).
+export type ProfileStrategy = {
+  brandAngle: string; // định vị riêng ("vì sao là bạn")
+  channelGoal: string; // "uy tín" | "lead" | "bán" | tự do
+  pillars: ContentPillar[];
+  generatedAt: string;
+};
+
 export type ProfileRecord = {
   id: string;
   ownerId: string;
@@ -40,6 +56,7 @@ export type ProfileRecord = {
   };
   usp?: string;
   voiceSampleUrl?: string;
+  strategy?: ProfileStrategy; // brandAngle + channelGoal + pillars (tự sinh, override được)
   createdAt: string;
 };
 

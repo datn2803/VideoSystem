@@ -1,8 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
-import { store, type ProfileRecord } from "@/lib/integration-hub/storage";
+import { store, type ProfileRecord, type ProfileStrategy } from "@/lib/integration-hub/storage";
 import { generateSampleScript } from "@/lib/agents/planner";
+import { generateStrategy, generateAndSaveStrategy } from "@/lib/agents/strategist";
 
 const DEFAULT_OWNER = "demo-user";
 
@@ -41,8 +42,40 @@ export async function createProfileAction(input: {
     createdAt: new Date().toISOString(),
   };
   await store.upsertProfile(profile);
+
+  // Tự sinh chiến lược (pillars) ngay sau khi tạo — best-effort, KHÔNG để lỗi LLM phá việc tạo profile.
+  // Hỏng/quota → profile vẫn tạo, Tommy bấm "Tạo lại trụ" sau.
+  try {
+    const out = await generateStrategy(profile);
+    if (out) {
+      profile.strategy = out.strategy;
+      await store.upsertProfile(profile);
+    }
+  } catch (e) {
+    console.error("[createProfile] sinh strategy lỗi (bỏ qua):", e);
+  }
+
   revalidatePath("/profiles");
   return { id, ok: true };
+}
+
+// Tạo lại 4 trụ từ profile (Tommy bấm nút "Tạo lại trụ").
+export async function regenerateStrategyAction(profileId: string) {
+  const strategy = await generateAndSaveStrategy(profileId);
+  revalidatePath("/profiles");
+  return { ok: !!strategy, strategy };
+}
+
+// Lưu strategy do Tommy sửa tay (override). generatedAt cập nhật = thời điểm sửa.
+export async function updateStrategyAction(profileId: string, strategy: ProfileStrategy) {
+  const profile = await store.getProfile(profileId);
+  if (!profile) throw new Error("Profile not found");
+  await store.upsertProfile({
+    ...profile,
+    strategy: { ...strategy, generatedAt: new Date().toISOString() },
+  });
+  revalidatePath("/profiles");
+  return { ok: true };
 }
 
 export async function deleteProfileAction(id: string) {
