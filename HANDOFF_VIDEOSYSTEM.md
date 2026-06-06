@@ -29,9 +29,11 @@ Theo đúng thứ tự Blueprint, đã ship lên `main`:
 **Quyết định đã chốt (vẫn hiệu lực):** grounding=Gemini Google Search · kiến trúc 2 bước Researcher(grounded→TEXT)→Writer(JSON) · 4 trụ tự suy (sửa được) · 70/30 evergreen/trend · chấm điểm · script ≤90s khoá word-budget · chống bịa + lưu nguồn.
 
 ## B. BUG ĐÃ TÌM + FIX phiên này — Scripter parse JSON vỡ (commit `70d2eb0`)
-**Triệu chứng** (tự test headless trên production): cả 3 script đã gen đều RÁC — hook/cta rỗng, body =
-JSON thô (`thought{...}`) hoặc prose dump, 373–1080 từ (budget 150), **C3 schema rỗng**, NHƯNG audit
-vẫn PASS 100/100 (chấm nhầm rác → người dùng tưởng script ngon).
+**Triệu chứng** (tự test headless trên production): bug **INTERMITTENT** — trong 3 script pre-fix, **1 cái
+(972b9fb8) bị RÁC**: hook/cta rỗng, body = JSON thô (`thought{...}`) 1020 từ, **C3 schema rỗng**, NHƯNG audit
+vẫn PASS 100/100 (chấm nhầm rác). 2 cái kia (2b7eb4ca, 32cc49ca) thực ra parse OK. (Đã re-verify bằng đọc DOM
+chính xác — probe đọc-text đầu tiên của tôi từng báo nhầm 2 cái kia thành rỗng; bài học: extract `innerText`
+split-theo-label không đáng tin, phải đọc đúng `.whitespace-pre-wrap` của từng Section.)
 **Gốc rễ:** model `gemini-2.5-flash-lite` (1) rò "thinking part" ra TRƯỚC JSON, (2) chèn dấu `"`
 không-escape trong chuỗi tiếng Việt → `JSON.parse` vỡ → `generateScript` rơi fallback **ĐỔ RAW vào body**.
 Scripter lại KHÔNG có retry (trong khi planner/strategist đều có).
@@ -43,6 +45,7 @@ Scripter lại KHÔNG có retry (trong khi planner/strategist đều có).
 **✅ ĐÃ VERIFY LIVE** (deploy `16b08e7`): gen 2 script mới (e8da57c3, 91bfeef1) đều SẠCH — body văn xuôi (không JSON thô),
 hook/cta có nội dung, C3 keyMessages 4–10 + dataPoints (ghi rõ "Ví dụ" — anti-fab), audit PASS 90; READ 151–193 từ.
 Writer dùng nháy đơn `'..'` đúng prompt mới. (Script thứ 3 bị Gemini 429 chặn — quota, không phải bug.)
+Re-verify TOÀN project (đọc DOM chính xác): **4/5 script SẠCH**; chỉ `972b9fb8` (pre-fix) còn rác → nên xoá/gen lại. Đã gỡ dead-code field `raw` của ScriptResult.
 **Cải thiện TÙY CHỌN còn lại:** (1) flash-lite thi thoảng vẫn có thể yếu → cân nhắc đổi model LLM sang **`gemini-2.5-flash`**
 (Settings→Integrations; Blueprint khuyến nghị cho khâu script). (2) Word-budget có lúc 193>150 (vẫn ≤90s) — siết prompt nếu muốn sát 60s.
 
