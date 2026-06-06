@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Target, Flame, ShieldCheck, Loader2, FileText } from "lucide-react";
+import { Target, Flame, ShieldCheck, Loader2, FileText, Layers, Sprout, BarChart3, Link2, Zap } from "lucide-react";
 import { generateScriptAction } from "@/lib/scripts/actions";
 import type { ContentTopic } from "@/lib/agents/planner";
 
@@ -71,22 +71,44 @@ export function ProjectTopics({
       <div className="grid grid-cols-2 gap-4">
         {topics.map((t, i) => {
           const done = doneByTopic[t.topic];
+          const sc = t.scores;
+          const flames = t.priority || (sc ? Math.min(5, Math.max(1, Math.round(sc.total / 3))) : 3);
           return (
             <Card key={i} className="hover:shadow-md transition-shadow">
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold shrink-0">
                       {i + 1}
                     </div>
                     <Badge variant="outline">{t.format_hint || "educate"}</Badge>
+                    {t.contentType === "trend" ? (
+                      <Badge className="border-transparent bg-amber-100 text-amber-700">
+                        <Flame className="h-3 w-3" /> Trend
+                      </Badge>
+                    ) : t.contentType === "evergreen" ? (
+                      <Badge className="border-transparent bg-emerald-100 text-emerald-700">
+                        <Sprout className="h-3 w-3" /> Evergreen
+                      </Badge>
+                    ) : null}
                   </div>
-                  <div className="flex items-center gap-0.5">
-                    {Array.from({ length: t.priority || 3 }).map((_, k) => (
+                  <div
+                    className="flex items-center gap-0.5 shrink-0"
+                    title={sc ? `Demand ${sc.demand} · Virality ${sc.virality} · Relevance ${sc.relevance} = ${sc.total}/15` : undefined}
+                  >
+                    {Array.from({ length: flames }).map((_, k) => (
                       <Flame key={k} className="h-3 w-3 text-amber-500 fill-amber-500" />
                     ))}
+                    {sc && <span className="ml-1 text-[11px] font-medium text-muted-foreground tabular-nums">{sc.total}</span>}
                   </div>
                 </div>
+
+                {t.pillar && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-accent">
+                    <Layers className="h-3 w-3 shrink-0" />
+                    <span className="font-medium">{t.pillar}</span>
+                  </div>
+                )}
 
                 <h4 className="font-semibold leading-snug">{t.topic}</h4>
 
@@ -103,6 +125,38 @@ export function ProjectTopics({
                   <div className="text-muted-foreground">
                     👤 <span className="text-foreground">{t.target_persona}</span>
                   </div>
+                  {t.whyNow && (
+                    <div className="flex items-start gap-2">
+                      <Zap className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                      <span className="text-muted-foreground shrink-0">Vì sao giờ:</span>
+                      <span>{t.whyNow}</span>
+                    </div>
+                  )}
+                  {t.dataHook && (
+                    <div className="flex items-start gap-2">
+                      <BarChart3 className="h-3 w-3 text-indigo-500 mt-0.5 shrink-0" />
+                      <span className="text-muted-foreground shrink-0">Data:</span>
+                      <span>{t.dataHook}</span>
+                    </div>
+                  )}
+                  {t.sources && t.sources.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <Link2 className="h-3 w-3 text-muted-foreground mt-0.5 shrink-0" />
+                      <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+                        {t.sources.slice(0, 3).map((s, k) => (
+                          <a
+                            key={k}
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-accent underline-offset-2 hover:underline line-clamp-1"
+                          >
+                            {s.title}
+                          </a>
+                        ))}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 pt-2 border-t border-border">
