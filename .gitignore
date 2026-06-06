@@ -32,3 +32,6 @@ tsconfig.tsbuildinfo
 CLAUDE_CODE_*.md
 MANUS_SUPER_PROMPT.md
 hyperframes-demo/
+
+# Script test/scratch tạm (E2E headless, sanity test) — local-only, không commit
+_*.mjs

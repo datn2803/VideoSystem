@@ -4,56 +4,92 @@
 
 ---
 
-# 🔄 PHIÊN MỚI NHẤT (Jun 2026) — ĐỌC ĐẦU TIÊN
+# 🔄 TRẠNG THÁI HIỆN TẠI — ĐỌC ĐẦU TIÊN (cập nhật: phiên fix scripter, Jun 2026)
 
-## A. ĐÃ SHIP phiên này (C3 animation + audio) — đã lên `main`
-Commits trên main: `da7005f → 39f0f74 → ae0642a → de8c74a → 097ce44`.
-- **C3 đại tu GU + chiều sâu (LIVE trên VPS, video xác nhận đẹp):** thẻ bento có **depth** (hệ elevation 2 lớp `--elev-1/2` + sheen kính thẻ gradient); **donut/trend gradient** (accent2→accent, set stop bằng JS); **bỏ lặp nhãn** (eyebrow = tag ngắn "TỈ LỆ/XU HƯỚNG/SỐ LIỆU", caption đầy đủ ở dưới); **bignum/donut/trend bọc trong bento-host** (lấp khung, hết trôi nền trơ); **point = 2-tile bento** (tile số gradient/tint + tile chữ + glyph); **before→after** thẻ cao 3 hàng (nhãn·số·thanh tỉ lệ), đơn vị `.bu` nhỏ; **mini/pills** lưới 1fr lấp đều; **fix số tràn** (FT đo GIÁ TRỊ CUỐI + re-fit `document.fonts.ready`); **s_emph** thẻ nguyên tắc hero lớn; **s_cmp** divider + khối căn giữa. File: `hyperframes-service/compositions/animation.html`. → **ĐÃ scp + rebuild VPS → LIVE.**
-- **Fix audio voice méo/rè đoạn cuối (0:51→hết):** gốc = ElevenLabs đọc 1 LẦN text dài (~1200 ký tự) bị xuống chất nửa sau. Fix: **chunk câu ≤400 ký tự + `previous_text`/`next_text` giữ ngữ điệu + nối** trong `src/lib/integration-hub/adapters/elevenlabs.ts` (có fallback đọc-1-lần nếu chunk lỗi). Commit `097ce44`, push main → Vercel auto-deploy. ⏳ **CHƯA verify** — Tommy re-gen 1 video mới để nghe lại đoạn cuối.
+> ⚠ FILE NÀY LÀ TÀI LIỆU TIẾN ĐỘ **SỐNG** — luôn cập nhật phần "ĐANG LÀM ĐẾN ĐÂU" mỗi khi xong 1 mốc,
+> để nếu phiên chat bị ngắt thì phiên sau resume được NGAY (xem GIAO THỨC RESUME cuối phần này).
 
-## B. ĐANG PHÂN TÍCH (CHƯA CODE) — VIỆC TIẾP THEO CHÍNH
-Nâng cấp **"bộ não nội dung" Profile → Plan → Script** để chủ đề + số liệu **THẬT, real-time, chuyên nghiệp** (hiện Gemini KHÔNG grounding → chủ đề/số chỉ từ trí nhớ model, không real-time).
-👉 **Đã viết BLUEPRINT đầy đủ: `BLUEPRINT_CONTENT_ENGINE.md` (đọc file đó).**
-**Quyết định ĐÃ CHỐT với Tommy:**
-- Research engine = **Gemini Google Search grounding** (1500 lượt/ngày free). Model = **Gemini 2.5 Flash**.
-- ⚠ Gemini 2.5: **grounding KHÔNG đi chung JSON** → mỗi tầng tách **Researcher (grounded → TEXT có nguồn) → Writer (JSON)**.
-- **Content pillars**: Agent tự suy ra **4 trụ** từ profile + Tommy sửa được (automation + override).
-- Chủ đề: bám **nỗi đau khách + trend**, **~70% evergreen / 30% trend** (bền vững > viral nhanh), dễ tiếp cận mọi tệp, **chấm điểm** demand×virality×relevance.
-- Script: khung **Hook→Vấn đề→Giải pháp→Bằng chứng(số thật)→CTA**, **≤90s** (khoá **word-budget ~200-230 từ**), chống bịa (chỉ dùng số trong brief + lưu `sources`).
-**Thứ tự code (làm lần lượt, nghiệm thu từng phần):**
-1. **Adapter Gemini thêm grounding** (`google_search` tool; grounded→TEXT+citations, không set JSON) — nền tảng.
-2. **Part 1 — Profile + Strategy Agent** (sinh pillars) — `createProfileAction` + `ProfileRecord.strategy` + UI sửa pillars.
-3. **Part 2 — Planner**: Trend Researcher (grounded) + Topic Strategist (chấm điểm) — nâng `planner.ts` + `ContentTopic`.
-4. **Part 3 — Scripter**: Fact Researcher (grounded) + Writer (word-budget) + Editor — nâng `scripter.ts` + `auditor.ts`.
+## ⚡ TL;DR — ĐANG LÀM ĐẾN ĐÂU (checklist sống)
+- ✅ **Bộ não nội dung (Profile→Plan→Script)**: ĐÃ CODE XONG cả 4 phần, trên `main` (7 commit `59e7412…3cbc901`). Đã tự test headless trên production → CHẠY THẬT (xem mục A).
+- ✅ **Bug scripter (parse JSON vỡ → script rác)**: ĐÃ FIX, commit `70d2eb0` (mục B). ⏳ **CÒN: verify LIVE** sau deploy (gen 1 script mới xem sạch + đúng word-budget).
+- ❌ **Billing Gemini CHƯA bật** → grounding no-op (brief 0 nguồn, data từ trí nhớ model). Engine vẫn chạy + cảnh báo no-source minh bạch. Muốn số THẬT real-time → Tommy bật billing (mục C).
+- ⏳ **Audio méo cuối** (commit `097ce44`): vẫn CHƯA verify nghe lại.
+- ⚠ **Bảo mật**: key DeepSeek/ElevenLabs/HeyGen từng lộ public trên GitHub → Tommy cần **revoke + đổi key** (xem memory `leaked-keys-to-revoke.md`).
 
-## C. GIT / ĐƯỜNG DẪN — ⚠ LÀM ĐÚNG KẺO TOANG
+## A. Bộ não nội dung — ĐÃ XONG (7 commit trên `main`, KHÔNG còn là "việc tiếp theo")
+> ⚠ Bản HANDOFF cũ ghi đây là "ĐANG PHÂN TÍCH (CHƯA CODE)" — ĐÓ LÀ CŨ/SAI. Phiên trước đã code xong
+> hết RỒI mới bị ngắt trước khi kịp cập nhật. ĐỪNG làm lại. Thiết kế gốc: `BLUEPRINT_CONTENT_ENGINE.md`.
+Theo đúng thứ tự Blueprint, đã ship lên `main`:
+1. `59e7412` — Adapter Gemini + Google Search **grounding** (grounded→TEXT+citations; KHÔNG set JSON; grounded thì GIỮ thinking).
+2. `72547ca`+`ae0345b` — **Part 1 Strategy Agent**: profile → brandAngle+channelGoal+**4 pillars** (sửa/regenerate được). `strategist.ts` + `strategist-parse.ts` + `profile-strategy.tsx`.
+3. `e7ad03b`+`3142435` — **Part 2 Planner**: Trend Researcher (grounded) + Topic Strategist (**chấm điểm** demand×virality×relevance, **70/30** evergreen/trend), lưu+hiện trend brief & nguồn. `planner.ts` + `planner-parse.ts`.
+4. `3bb7b24` — vá grounding: `thinkingBudget:0` chặn google_search nên grounded GIỮ thinking + thêm **cảnh báo no-source** (anti-fab).
+5. `3cbc901` — **Part 3 Scripter**: Fact Researcher (grounded) + Writer (word-budget) + Editor (`auditor.ts` chấm hook/data/độ dài). `scripter.ts`.
+**Quyết định đã chốt (vẫn hiệu lực):** grounding=Gemini Google Search · kiến trúc 2 bước Researcher(grounded→TEXT)→Writer(JSON) · 4 trụ tự suy (sửa được) · 70/30 evergreen/trend · chấm điểm · script ≤90s khoá word-budget · chống bịa + lưu nguồn.
+
+## B. BUG ĐÃ TÌM + FIX phiên này — Scripter parse JSON vỡ (commit `70d2eb0`)
+**Triệu chứng** (tự test headless trên production): cả 3 script đã gen đều RÁC — hook/cta rỗng, body =
+JSON thô (`thought{...}`) hoặc prose dump, 373–1080 từ (budget 150), **C3 schema rỗng**, NHƯNG audit
+vẫn PASS 100/100 (chấm nhầm rác → người dùng tưởng script ngon).
+**Gốc rễ:** model `gemini-2.5-flash-lite` (1) rò "thinking part" ra TRƯỚC JSON, (2) chèn dấu `"`
+không-escape trong chuỗi tiếng Việt → `JSON.parse` vỡ → `generateScript` rơi fallback **ĐỔ RAW vào body**.
+Scripter lại KHÔNG có retry (trong khi planner/strategist đều có).
+**Fix (`70d2eb0`):**
+- `gemini.ts`: bỏ part `thought:true` khi ghép text (model-agnostic, an toàn cả nhánh grounded).
+- `scripter.ts`: thêm `parseScriptJson` (bóc fence + cắt thừa trước `{`/sau `}` + vá trailing comma) +
+  **RETRY 1 lần** + fallback **AN TOÀN** (throw lỗi rõ, KHÔNG đổ raw vào body) + prompt cấm dùng `"` trong chuỗi.
+- Đã `tsc` + `npm run build` PASS + sanity-test `parseScriptJson` (9 case logic chuẩn).
+**⏳ CÒN PHẢI LÀM (mốc kế tiếp):** verify LIVE — gen 1 script mới trên production, kiểm: body văn xuôi sạch (không JSON thô),
+hook/cta có nội dung, đếm từ gần budget, C3 keyMessages/dataPoints có data. **Nếu flash-lite vẫn yếu** →
+khuyến nghị Tommy đổi model LLM sang **`gemini-2.5-flash`** (Settings→Integrations; Blueprint cũng khuyến nghị cho khâu script).
+
+## C. BILLING GEMINI — CHƯA BẬT (đã xác nhận BẰNG THỰC NGHIỆM) ⚠
+Grounding (`google_search`) là **no-op âm thầm** trên free tier → Trend/Fact Researcher trả **0 nguồn**,
+nội dung từ trí nhớ model (KHÔNG real-time). Production hiện cho thấy "Nghiên cứu xu hướng (grounded) — 0 nguồn"
++ dòng cảnh báo "⚠ KHÔNG có nguồn real-time…" hiện ĐÚNG (anti-fab OK, không lừa người dùng). Engine chạy graceful.
+👉 **Muốn số liệu THẬT real-time như mục tiêu Blueprint: Tommy phải BẬT BILLING trả phí cho Gemini key**
+(sau khi bật có 1500 lượt grounding/ngày free). **Code đã đúng — bật billing là chạy ngay, không cần sửa code.**
+
+## C2. (lịch sử) ĐÃ SHIP phiên TRƯỚC — C3 animation + audio (trên `main`)
+- **C3 đại tu GU + chiều sâu** (LIVE trên VPS): bento depth (elevation 2 lớp + sheen), donut/trend gradient, bỏ lặp nhãn, bento-host lấp khung, before→after, fix số tràn, s_emph/s_cmp. File `hyperframes-service/compositions/animation.html` → đã scp + rebuild VPS.
+- **Fix audio méo cuối** (`097ce44`): chunk câu ≤400 ký tự + `previous_text`/`next_text` trong `elevenlabs.ts`. ⏳ CHƯA verify nghe lại.
+
+## D. GIT / ĐƯỜNG DẪN — ⚠ LÀM ĐÚNG KẺO TOANG
 - Repo chính: `/Users/tommy/Desktop/VideoSystem-claude-video-content-automation-PYlvQ/VideoSystem-claude-video-content-automation-PYlvQ/`.
-- **NGUỒN CHÂN LÝ DUY NHẤT = GitHub branch `main`** (đủ mọi commit phiên này tới `bd5cde5`).
-- 🔴 **CỰC KỲ QUAN TRỌNG — làm ĐẦU TIÊN:** thư mục chính đang ở branch `Tommy` **TỤT NHIỀU commit (≥17)** sau `origin/main` → THIẾU file (vd `src/lib/audio/whisper.ts`, mà `c2-broll.ts` import) → **`npm run build` sẽ VỠ** nếu code trên trạng thái này. Phải đồng bộ trước:
+- **NGUỒN CHÂN LÝ DUY NHẤT = GitHub branch `main`** (mới nhất tới `70d2eb0` — fix scripter).
+- Phiên này làm trong git worktree `.claude/worktrees/cool-dirac-ecb529` (đã fast-forward lên origin/main + commit fix `70d2eb0`). Phiên sau có thể làm thẳng repo chính.
+- 🔴 **LÀM ĐẦU TIÊN — đồng bộ về main** (repo chính/branch `Tommy` thường tụt sau origin/main → thiếu file → `npm run build` vỡ):
   ```bash
-  cd "<repo chính>"
+  cd "<repo chính HOẶC worktree đang dùng>"
   git fetch origin
-  git reset --hard origin/main      # working copy = main mới nhất (bỏ thay đổi rác cũ; an toàn vì mọi thứ quan trọng đã ở main)
-  # nếu git báo untracked sẽ bị ghi đè (vd HANDOFF/BLUEPRINT): xoá file đó rồi reset lại — nội dung y hệt đã có trên main.
-  npm install                        # deps khớp
-  npx tsc --noEmit                   # PHẢI pass rồi mới code tiếp
+  git merge --ff-only origin/main   # AN TOÀN nếu working tree sạch + chưa có commit riêng; không mất gì
+  # nếu KHÔNG ff được (lỡ có commit rác local) → cân nhắc `git reset --hard origin/main`
+  #   (CHỈ khi chắc mọi thứ quan trọng đã ở main — sẽ xoá thay đổi local chưa push)
+  npm install && npx tsc --noEmit   # PHẢI pass rồi mới code tiếp
   ```
-- **Push (mọi branch đều dùng được):** `git push origin HEAD:main`. (Các chỗ ghi `Tommy:main` bên dưới là tương đương SAU khi đã reset về main.)
-- ⚠ `animation.html` (file render C3) từng nằm 3 nơi: worktree cũ · repo chính · mirror `~/Desktop/hyperframes-service`. **Tommy scp từ REPO CHÍNH.** → Mỗi khi sửa file dùng để render, sau khi push main, **đảm bảo file ở repo chính = bản mới** (sau `git reset --hard origin/main` là khớp) RỒI mới nhắc Tommy scp. **Bug đã gặp:** scp nhầm file CŨ → render ra design cũ.
-- (Git worktree `.claude/worktrees/epic-ride-dab9d7` là của phiên cũ — phiên mới KHÔNG cần, cứ làm thẳng repo chính sau khi reset về main.)
+- **Push = deploy app:** `git push origin HEAD:main` → Vercel auto-build. (Tommy đã đồng ý workflow push thẳng main, test trực tiếp production. ⚠ Classifier auto-mode có thể chặn push main như bước an toàn — cần Tommy xác nhận/đồng ý trong chat hoặc thêm permission rule.)
+- ⚠ `animation.html` (file render C3) chạy trên VPS, KHÔNG tự lên khi push. Sửa file render → sau push, đảm bảo repo chính = bản mới (sau ff/sync) RỒI scp + rebuild VPS (mục hạ tầng bên dưới). Bug đã gặp: scp nhầm file CŨ → render ra design cũ.
+- Worktree cũ `epic-ride-dab9d7` / `affectionate-gates-c5ea9e` là của phiên trước — không cần.
 
-## D. FILE MAP cho VIỆC TIẾP THEO (content engine) + cách verify
-**File sẽ đụng khi làm bộ não nội dung (đều có thật trên `main`):**
-- `src/lib/integration-hub/adapters/gemini.ts` — adapter LLM; **thêm grounding `google_search` ở đây** (grounded→TEXT, KHÔNG set responseMimeType JSON; nhớ giữ `thinkingConfig.thinkingBudget:0` cho 2.5).
-- `src/lib/integration-hub/storage.ts` — type `ProfileRecord` (thêm `strategy`/pillars) + `recordUsage`.
-- `src/lib/profiles/actions.ts` — `createProfileAction` (móc Strategy Agent sinh pillars).
-- `src/lib/agents/planner.ts` — `generateContentPlan` + type `ContentTopic` (nâng: Trend Researcher grounded + Topic Strategist chấm điểm).
-- `src/lib/projects/{storage,actions}.ts` — ProjectRecord (topics + scriptIds), `createProjectWithPlanAction`.
-- `src/lib/agents/scripter.ts` — `generateScript` (tách Fact Researcher grounded + Writer word-budget).
-- `src/lib/agents/auditor.ts` — `auditScript` (nâng thành Editor: chấm hook/data/độ dài).
-- UI: `src/components/profiles/create-profile-dialog.tsx`, `src/components/projects/*`, `src/components/projects/project-topics.tsx` (chọn chủ đề → sinh script).
+## E. FILE MAP bộ não nội dung (đã làm — tham khảo khi sửa tiếp) + cách verify
+**File của bộ não nội dung (đều đã có + hoạt động trên `main`):**
+- `src/lib/integration-hub/adapters/gemini.ts` — adapter LLM; ĐÃ có grounding `google_search` (grounded→TEXT+citations) + lọc thinking-part. ⚠ grounded thì KHÔNG set JSON & GIỮ thinking.
+- `src/lib/integration-hub/storage.ts` — type `ProfileRecord.strategy` (brandAngle+channelGoal+pillars). DB = KV-blob (key `db` trong Supabase `kv_store`) → KHÔNG cần migration cho field mới.
+- `src/lib/profiles/actions.ts` — `createProfileAction` tự sinh strategy; `regenerateStrategyAction`/`updateStrategyAction`.
+- `src/lib/agents/strategist.ts`(+`strategist-parse.ts`) — Part 1. `src/lib/agents/planner.ts`(+`planner-parse.ts`) — Part 2 (Trend Researcher + Topic Strategist chấm điểm).
+- `src/lib/projects/{storage,actions}.ts` — ProjectRecord (topics + trendBrief + trendSources + scriptIds), `createProjectWithPlanAction`/`regeneratePlanAction`.
+- `src/lib/agents/scripter.ts` — `generateScript` (Fact Researcher + Writer + `parseScriptJson` + retry). `src/lib/agents/auditor.ts` — Editor (hook/data/độ dài).
+- `src/lib/scripts/actions.ts` — `generateScriptAction` (bắt lỗi 429/quota + lỗi parse → trả `{error}` cho UI).
+- UI: `src/components/profiles/profile-strategy.tsx` (pillars), `src/components/projects/project-topics.tsx` (chủ đề chấm điểm → nút "Script + Audit"), `src/components/scripts/script-detail.tsx` (script + audit + nguồn + tab C1/C2/C3).
 
-**Model thực tế:** model LLM do **config Integration Hub (Supabase) quyết định** — hiện có thể là `gemini-2.5-flash-lite`. Blueprint khuyến nghị đổi khâu script sang `gemini-2.5-flash` (đổi qua config provider, không hardcode).
+**Model thực tế:** LLM do config Integration Hub (Supabase) quyết định — **hiện production = `gemini-2.5-flash-lite`** (đã xác nhận: grep RSC `/settings/integrations`). Flash-lite YẾU với JSON phức tạp (gây bug mục B) → khuyến nghị đổi sang `gemini-2.5-flash` cho khâu script (đổi qua Settings→Integrations, không hardcode).
+
+**Cách VERIFY content engine LIVE (headless, KHÔNG cần creds local) — kỹ thuật đã dùng phiên này:**
+- Máy KHÔNG có `.env` creds → KHÔNG chạy agent local được. Test = headless browser trên production `video-system-five.vercel.app` (app không có auth thật).
+- Cài: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i -D playwright` (dùng Chrome hệ thống qua `channel:"chrome"`).
+- Recon đọc trạng thái: mở `/profiles` (pillars), `/projects/<id>` (topics chấm điểm + trend brief — nhớ `details.open=true` vì brief thu gọn), `/scripts/<id>` (body/hook/cta + audit + tab C3). Tín hiệu billing: brief "0 nguồn" + dòng "⚠ KHÔNG có nguồn real-time" = billing TẮT.
+- Gen script mới: click nút "Script + Audit" trên 1 topic chưa có script → chờ điều hướng `/scripts/<id>` → đọc body có sạch không, đếm từ, C3 keyMessages/dataPoints.
+- (Script test tạm `_e2e_*.mjs` ở gốc worktree — gitignored kiểu `_*`, không commit.)
 
 **Cách VERIFY C3 nhanh (KHÔNG cần render VPS 10 phút) — kỹ thuật đã dùng hiệu quả phiên này:**
 - Có Chrome trên máy: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
@@ -76,32 +112,30 @@ Tôi đang tiếp tục dự án VideoSystem (Next.js — app tự sinh video sh
 cho TikTok/Reels; 3 concept C1 HeyGen / C2 b-roll / C3 animation; render qua HyperFrames trên VPS).
 
 BƯỚC ĐẦU TIÊN BẮT BUỘC (làm trước khi code bất cứ gì):
-0) ĐỒNG BỘ GIT (repo chính đang tụt sau main, thiếu file → build vỡ nếu bỏ qua):
+0) ĐỒNG BỘ GIT (repo/worktree thường tụt sau main, thiếu file → build vỡ nếu bỏ qua):
    cd "/Users/tommy/Desktop/VideoSystem-claude-video-content-automation-PYlvQ/VideoSystem-claude-video-content-automation-PYlvQ"
-   git fetch origin && git reset --hard origin/main && npm install && npx tsc --noEmit
-1) Đọc HẾT 2 file ở gốc repo: HANDOFF_VIDEOSYSTEM.md và BLUEPRINT_CONTENT_ENGINE.md
+   git fetch origin && git merge --ff-only origin/main && npm install && npx tsc --noEmit
+   (nếu KHÔNG ff được mới cân nhắc `git reset --hard origin/main` — sẽ xoá thay đổi local chưa push)
+1) Đọc HẾT HANDOFF_VIDEOSYSTEM.md (đặc biệt mục "⚡ TL;DR — ĐANG LÀM ĐẾN ĐÂU") + BLUEPRINT_CONTENT_ENGINE.md
 2) Đọc memory tại:
    /Users/tommy/.claude/projects/-Users-tommy-Desktop-VideoSystem-claude-video-content-automation-PYlvQ-VideoSystem-claude-video-content-automation-PYlvQ/memory/
-   (MEMORY.md + hyperframes-render-service.md)
+   (MEMORY.md + các file con)
 3) Tóm tắt lại cho tôi: (a) trạng thái hiện tại, (b) việc tiếp theo, (c) các quyết định đã chốt
    — để tôi xác nhận bạn đã hiểu đúng TRƯỚC khi bắt tay.
 
 QUY TẮC CỨNG:
-- Trả lời tiếng Việt. Web search/research BẮT BUỘC dùng exa MCP (nếu tài khoản/máy mới chưa cài exa MCP → cài trước, hoặc tạm dùng web search built-in).
-- KHÔNG bịa số liệu. Đọc code trên đĩa để verify (không tin báo cáo suông). tsc + build phải pass trước khi push.
-- Deploy app: git push origin HEAD:main (Vercel auto-build). File VPS (hyperframes-service/*): phải scp +
-  'docker compose up -d --build' (tôi chạy SSH; trước khi scp nhớ đồng bộ file về repo chính).
-- Làm TỪNG PHẦN, nghiệm thu từng phần; đổi lớn thì hỏi tôi trước.
+- Trả lời tiếng Việt. Web search/research BẮT BUỘC dùng exa MCP (chưa cài → cài trước, hoặc tạm web search built-in).
+- KHÔNG bịa số liệu, KHÔNG báo cáo suông — đọc code trên đĩa + TỰ TEST (headless trên production: app không auth thật). tsc + build PHẢI pass trước khi push.
+- Deploy app: git push origin HEAD:main (Vercel auto-build) — XIN PHÉP tôi trước khi push (classifier hay chặn; tôi đồng ý workflow này). File VPS (hyperframes-service/*): scp + 'docker compose up -d --build' (tôi chạy SSH; trước scp nhớ đồng bộ file về repo chính).
+- Làm TỪNG PHẦN, nghiệm thu từng phần; đổi lớn hỏi tôi trước. **LUÔN cập nhật HANDOFF (mục TL;DR) khi xong 1 mốc** để không mất tiến độ nếu bị ngắt.
 
-VIỆC TIẾP THEO (đã chốt hướng — chi tiết trong BLUEPRINT_CONTENT_ENGINE.md):
-Nâng cấp bộ não nội dung Profile→Plan→Script. Research engine = Gemini Google Search grounding;
-model Gemini 2.5 Flash; kiến trúc 2 bước Researcher(grounded→TEXT)→Writer(JSON) (vì 2.5 không gộp
-grounding+JSON); content pillars Agent tự suy 4 trụ (tôi sửa được); 70/30 evergreen/trend; chủ đề
-chấm điểm; script ≤90s (word-budget ~200-230 từ); chống bịa + lưu nguồn.
-Code theo thứ tự: (1) adapter Gemini thêm grounding → (2) Part1 Profile+Strategy Agent →
-(3) Part2 Planner(Trend Researcher+Topic Strategist) → (4) Part3 Scripter(Fact Researcher+Writer+Editor).
+TRẠNG THÁI + VIỆC TIẾP THEO (chi tiết trong HANDOFF mục A–C):
+- Bộ não nội dung Profile→Plan→Script ĐÃ CODE XONG + trên main (7 commit 59e7412…3cbc901). Đã tự test → chạy thật.
+- Bug scripter parse JSON (script ra rác) ĐÃ FIX (70d2eb0). VIỆC NGAY: verify LIVE — gen 1 script mới, kiểm body văn xuôi sạch + word-budget + C3 có data. Nếu flash-lite vẫn yếu → đổi model LLM sang gemini-2.5-flash (Settings→Integrations).
+- Billing Gemini CHƯA bật → grounding 0 nguồn (data từ trí nhớ model, KHÔNG real-time). Muốn số THẬT → tôi bật billing.
+- Treo: verify audio méo cuối (097ce44); revoke key đã lộ (bảo mật).
 
-Hãy đọc 2 file + memory, tóm tắt + xác nhận hiểu, rồi đề xuất bắt đầu (1) adapter grounding + Part1.
+Hãy đọc HANDOFF + memory, tóm tắt + xác nhận hiểu, rồi đề xuất bước tiếp.
 ```
 
 ---
