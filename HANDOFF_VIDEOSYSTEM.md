@@ -11,7 +11,8 @@
 
 ## ⚡ TL;DR — ĐANG LÀM ĐẾN ĐÂU (checklist sống)
 - ✅ **Bộ não nội dung (Profile→Plan→Script)**: ĐÃ CODE XONG cả 4 phần, trên `main` (7 commit `59e7412…3cbc901`). Đã tự test headless trên production → CHẠY THẬT (xem mục A).
-- ✅ **Bug scripter (parse JSON vỡ → script rác)**: ĐÃ FIX, commit `70d2eb0` (mục B). ⏳ **CÒN: verify LIVE** sau deploy (gen 1 script mới xem sạch + đúng word-budget).
+- ✅ **Bug scripter (parse JSON vỡ → script rác)**: ĐÃ FIX (`70d2eb0`) + **ĐÃ VERIFY LIVE** (deploy `16b08e7` READY): gen 2 script mới đều SẠCH (hook/body/cta + C3 keyMessages/dataPoints đầy đủ; Writer dùng nháy đơn `'..'` đúng prompt → hết vỡ JSON). Word-budget ~151–193 từ (≤90s OK; auditor flag nếu quá). Mục B.
+- ⚠ **Gemini 429 hết quota free-tier** (gen nhiều lần test → cạn): lỗi được xử lý graceful (message rõ, không tạo rác). Reset theo phút/ngày — HOẶC bật billing (mục C) để hết lo quota + có grounding.
 - ❌ **Billing Gemini CHƯA bật** → grounding no-op (brief 0 nguồn, data từ trí nhớ model). Engine vẫn chạy + cảnh báo no-source minh bạch. Muốn số THẬT real-time → Tommy bật billing (mục C).
 - ⏳ **Audio méo cuối** (commit `097ce44`): vẫn CHƯA verify nghe lại.
 - ⚠ **Bảo mật**: key DeepSeek/ElevenLabs/HeyGen từng lộ public trên GitHub → Tommy cần **revoke + đổi key** (xem memory `leaked-keys-to-revoke.md`).
@@ -39,9 +40,11 @@ Scripter lại KHÔNG có retry (trong khi planner/strategist đều có).
 - `scripter.ts`: thêm `parseScriptJson` (bóc fence + cắt thừa trước `{`/sau `}` + vá trailing comma) +
   **RETRY 1 lần** + fallback **AN TOÀN** (throw lỗi rõ, KHÔNG đổ raw vào body) + prompt cấm dùng `"` trong chuỗi.
 - Đã `tsc` + `npm run build` PASS + sanity-test `parseScriptJson` (9 case logic chuẩn).
-**⏳ CÒN PHẢI LÀM (mốc kế tiếp):** verify LIVE — gen 1 script mới trên production, kiểm: body văn xuôi sạch (không JSON thô),
-hook/cta có nội dung, đếm từ gần budget, C3 keyMessages/dataPoints có data. **Nếu flash-lite vẫn yếu** →
-khuyến nghị Tommy đổi model LLM sang **`gemini-2.5-flash`** (Settings→Integrations; Blueprint cũng khuyến nghị cho khâu script).
+**✅ ĐÃ VERIFY LIVE** (deploy `16b08e7`): gen 2 script mới (e8da57c3, 91bfeef1) đều SẠCH — body văn xuôi (không JSON thô),
+hook/cta có nội dung, C3 keyMessages 4–10 + dataPoints (ghi rõ "Ví dụ" — anti-fab), audit PASS 90; READ 151–193 từ.
+Writer dùng nháy đơn `'..'` đúng prompt mới. (Script thứ 3 bị Gemini 429 chặn — quota, không phải bug.)
+**Cải thiện TÙY CHỌN còn lại:** (1) flash-lite thi thoảng vẫn có thể yếu → cân nhắc đổi model LLM sang **`gemini-2.5-flash`**
+(Settings→Integrations; Blueprint khuyến nghị cho khâu script). (2) Word-budget có lúc 193>150 (vẫn ≤90s) — siết prompt nếu muốn sát 60s.
 
 ## C. BILLING GEMINI — CHƯA BẬT (đã xác nhận BẰNG THỰC NGHIỆM) ⚠
 Grounding (`google_search`) là **no-op âm thầm** trên free tier → Trend/Fact Researcher trả **0 nguồn**,
