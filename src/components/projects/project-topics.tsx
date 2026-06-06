@@ -41,6 +41,7 @@ export function ProjectTopics({
           targetPersona: t.target_persona,
           formatHint: t.format_hint,
           priority: t.priority,
+          dataHook: t.dataHook,
         });
         if (result.error || !result.id) {
           setError(result.error || "Tạo script không thành công, thử lại sau.");

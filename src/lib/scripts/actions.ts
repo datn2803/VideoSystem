@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { store } from "@/lib/integration-hub/storage";
-import { generateScript } from "@/lib/agents/scripter";
+import { generateScript, wordBudgetFor } from "@/lib/agents/scripter";
 import { auditScript } from "@/lib/agents/auditor";
 import { projectStore } from "@/lib/projects/storage";
 import { scriptStore } from "./storage";
@@ -14,6 +14,7 @@ export async function generateScriptAction(input: {
   targetPersona: string;
   formatHint?: string;
   priority?: number;
+  dataHook?: string; // góc data từ ContentTopic → Fact Researcher (Part 4)
   lengthSec?: number;
   skipAudit?: boolean;
 }) {
@@ -30,10 +31,13 @@ export async function generateScriptAction(input: {
       topic: input.topic,
       painPoint: input.painPoint,
       targetPersona: input.targetPersona,
+      dataHook: input.dataHook,
       lengthSec: input.lengthSec,
     });
     const scriptText = `${script.hook}\n\n${script.body}\n\n${script.cta}`;
-    audit = input.skipAudit ? undefined : await auditScript(scriptText);
+    audit = input.skipAudit
+      ? undefined
+      : await auditScript(scriptText, { wordBudget: wordBudgetFor(input.lengthSec || 60) });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/\b429\b|quota|prepayment|rate.?limit|RESOURCE_EXHAUSTED|exhausted/i.test(msg)) {
@@ -72,7 +76,7 @@ export async function reAuditScriptAction(id: string) {
   const rec = await scriptStore.get(id);
   if (!rec) throw new Error("Script not found");
   const text = `${rec.script.hook}\n\n${rec.script.body}\n\n${rec.script.cta}`;
-  const audit = await auditScript(text);
+  const audit = await auditScript(text, { wordBudget: wordBudgetFor(rec.script.estimatedDurationSec || 60) });
   await scriptStore.update(id, { audit });
   revalidatePath(`/scripts/${id}`);
   return { audit };

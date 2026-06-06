@@ -73,6 +73,21 @@ export function ScriptDetail({ record }: { record: ScriptRecord }) {
                 ))}
               </div>
             )}
+
+            {audit.editorial && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60 text-xs">
+                <span className="font-medium text-muted-foreground">Biên tập:</span>
+                <Badge variant="outline" className="text-[10px]">Hook {audit.editorial.hookScore}/5</Badge>
+                <Badge variant="outline" className="text-[10px]">Data {audit.editorial.dataScore}/5</Badge>
+                <Badge variant={audit.editorial.lengthOk ? "success" : "warning"} className="text-[10px]">
+                  {audit.editorial.wordCount}
+                  {audit.editorial.wordBudget ? `/${audit.editorial.wordBudget}` : ""} từ
+                </Badge>
+                {audit.editorial.notes && (
+                  <span className="text-muted-foreground italic">— {audit.editorial.notes}</span>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -126,6 +141,28 @@ export function ScriptDetail({ record }: { record: ScriptRecord }) {
                   ))}
                 </div>
               </div>
+              {record.script.sources && record.script.sources.length > 0 && (
+                <div className="pt-2 border-t border-border">
+                  <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-2">
+                    Nguồn số liệu (real-time)
+                  </p>
+                  <ul className="space-y-1">
+                    {record.script.sources.map((s, i) => (
+                      <li key={i} className="text-xs">
+                        <a
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-accent hover:underline line-clamp-1"
+                        >
+                          {i + 1}. {s.claim}
+                          {s.year ? ` (${s.year})` : ""}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="pt-2 border-t border-border space-y-1 text-xs text-muted-foreground">
                 <div>⏱️ Độ dài ước tính: {record.script.estimatedDurationSec}s</div>
                 <div>💰 Cost generation: ${record.script.costUsd.toFixed(4)}</div>

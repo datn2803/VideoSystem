@@ -1,5 +1,7 @@
 import { hub } from "@/lib/integration-hub/hub";
-import { store, type ProfileRecord } from "@/lib/integration-hub/storage";
+import { type ProfileRecord } from "@/lib/integration-hub/storage";
+import { recordLLMUsage } from "@/lib/agents/usage";
+import { groundedNoSourceWarning } from "@/lib/agents/grounding-util";
 
 export type ScriptResult = {
   hook: string;
@@ -31,6 +33,7 @@ export type ScriptResult = {
     };
   };
   estimatedDurationSec: number;
+  sources?: { claim: string; url: string; year?: string }[]; // nguồn số liệu thật (từ Fact Researcher grounded)
   raw?: string;
   costUsd: number;
 };
@@ -44,7 +47,18 @@ const SYSTEM = `Bạn là content writer chuyên ngành tài chính ngân hàng 
 - Tone: chuyên nghiệp + đáng tin + tôn trọng người xem
 - TUYỆT ĐỐI không hứa lợi nhuận cụ thể, không nói "an toàn 100%", không so sánh tiêu cực với ngân hàng khác`;
 
-function buildPrompt(profile: ProfileRecord, topic: string, pain: string, persona: string, lengthSec: number): string {
+function buildPrompt(
+  profile: ProfileRecord,
+  topic: string,
+  pain: string,
+  persona: string,
+  lengthSec: number,
+  wordBudget: number,
+  factBrief: string
+): string {
+  const factSection = factBrief.trim()
+    ? `\nFACT BRIEF (số liệu nghiên cứu — ƯU TIÊN dùng các số trong đây; số nào KHÔNG có trong brief mà tự suy thì PHẢI ghi "ước tính"/"ví dụ"):\n"""\n${factBrief.trim()}\n"""\n`
+    : `\n(Không có fact brief số liệu thật — số nào đưa ra phải gắn nhãn "ước tính"/"ví dụ", TUYỆT ĐỐI không bịa trích dẫn nghiên cứu.)\n`;
   return `Profile chuyên gia:
 - Tên: ${profile.name}
 - Vị trí: ${profile.role || "Personal Banker"}
@@ -57,6 +71,9 @@ Chủ đề video: ${topic}
 Pain point cần giải quyết: ${pain}
 Target persona: ${persona}
 Độ dài mục tiêu: ${lengthSec} giây
+${factSection}
+KHUNG KỊCH BẢN BẮT BUỘC: HOOK (3-5s, số sốc/câu hỏi/phản trực giác) → VẤN ĐỀ (nỗi đau) → GIẢI PHÁP → BẰNG CHỨNG (số THẬT từ fact brief) → CTA loop.
+⚠ RÀNG BUỘC ĐỘ DÀI (đòn bẩy chính): tổng read script "hook + body + cta" ≤ ${wordBudget} TỪ (≈${lengthSec}s đọc). Viết SÚC TÍCH, cắt chữ thừa — KHÔNG vượt ngân sách từ.
 
 Hãy viết script chi tiết cho video này, đồng thời cung cấp prompt cho 3 phong cách dựng video khác nhau.
 
@@ -111,17 +128,45 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
 - ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
 }
 
-async function recordLLMUsage(costUsd: number, tokensIn: number, tokensOut: number) {
-  const providers = (await store.listProviders()).filter((p) => p.kind === "llm" && p.enabled);
-  const def = providers.find((p) => p.isDefault) || providers[0];
-  if (!def) return;
-  await store.recordUsage({
-    providerId: def.id,
-    date: new Date().toISOString().slice(0, 10),
-    unitsUsed: tokensIn + tokensOut,
-    costEstimateUsd: costUsd,
-    requestCount: 1,
-  });
+// ── Fact Researcher (GROUNDED → TEXT có nguồn) ──
+// Tìm số liệu THẬT cho chủ đề. Best-effort: hỏng/không-grounding → brief rỗng/cảnh báo, KHÔNG phá việc viết script.
+async function runFactResearcher(
+  profile: ProfileRecord,
+  topic: string,
+  dataHook: string | undefined,
+  pain: string
+): Promise<{ brief: string; sources: { title: string; url: string }[]; costUsd: number }> {
+  const llm = await hub.llm();
+  const system = `Bạn là nhà nghiên cứu số liệu ngành ${profile.industry} tại Việt Nam.
+CHỈ nêu số liệu TÌM ĐƯỢC qua tìm kiếm thực tế (kèm năm + nguồn). TUYỆT ĐỐI không bịa số hay trích dẫn nghiên cứu.`;
+  const user = `Chủ đề video: "${topic}"
+Góc dữ liệu cần làm rõ: ${dataHook || pain || topic}
+Audience: ${profile.audience?.segment || "N/A"}
+
+Tìm 5-8 SỐ LIỆU/VÍ DỤ THẬT, mới, ưu tiên nguồn Việt Nam (mỗi ý kèm năm + nguồn). Nêu rõ 1-2 con số gây sốc có thể dùng làm hook.
+Trả về TEXT gạch đầu dòng, mỗi ý kèm nguồn. Nếu KHÔNG tìm được số thật, nói rõ (đừng bịa).`;
+  try {
+    const r = await llm.complete({
+      system,
+      messages: [{ role: "user", content: user }],
+      grounded: true,
+      maxTokens: 1536,
+    });
+    await recordLLMUsage(r.costUsd, r.tokensIn, r.tokensOut);
+    const sources = r.citations ?? [];
+    let brief = r.text || "";
+    const warning = brief ? groundedNoSourceWarning(r) : "";
+    if (warning) brief = `${warning}\n\n${brief}`;
+    return { brief, sources, costUsd: r.costUsd };
+  } catch (e) {
+    console.error("[scripter] Fact Researcher lỗi (bỏ qua, viết script không có brief):", e);
+    return { brief: "", sources: [], costUsd: 0 };
+  }
+}
+
+// ~2.5 từ/giây đọc TV → 60s≈150, 90s≈225, 30s≈75 từ (khớp blueprint).
+export function wordBudgetFor(lengthSec: number): number {
+  return Math.max(60, Math.round(lengthSec * 2.5));
 }
 
 export async function generateScript(input: {
@@ -130,17 +175,33 @@ export async function generateScript(input: {
   painPoint: string;
   targetPersona: string;
   lengthSec?: number;
+  dataHook?: string; // góc data từ ContentTopic (Part 3) → định hướng Fact Researcher
 }): Promise<ScriptResult> {
   const lengthSec = input.lengthSec || 60;
+  const wordBudget = wordBudgetFor(lengthSec);
+
+  // Tầng 1: Fact Researcher (grounded → số liệu thật + nguồn). Best-effort.
+  const fact = await runFactResearcher(input.profile, input.topic, input.dataHook, input.painPoint);
+
+  // Tầng 2: Script Writer (JSON, no-grounding) — dùng fact brief + khoá word-budget.
   const llm = await hub.llm();
   const result = await llm.complete({
     system: SYSTEM,
-    messages: [{ role: "user", content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec) }],
+    messages: [
+      {
+        role: "user",
+        content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec, wordBudget, fact.brief),
+      },
+    ],
     maxTokens: 6500, // đủ chỗ cho JSON giàu data-viz (donut/beforeAfter/miniStats/trend...) — KHÔNG làm dài video, chỉ tránh cắt JSON
     responseFormat: "json",
   });
 
   await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
+
+  // Nguồn số liệu = citations THẬT từ Fact Researcher (không nhờ Writer tự đẻ URL → tránh bịa link).
+  const sources = fact.sources.map((s) => ({ claim: s.title, url: s.url }));
+  const totalCost = fact.costUsd + result.costUsd;
 
   let parsed: Partial<ScriptResult> = {};
   try {
@@ -164,8 +225,9 @@ export async function generateScript(input: {
         animation: { keyMessages: [], dataPoints: [], visualCues: [], voiceOver: result.text },
       },
       estimatedDurationSec: lengthSec,
+      sources: sources.length ? sources : undefined,
       raw: result.text,
-      costUsd: result.costUsd,
+      costUsd: totalCost,
     };
   }
 
@@ -181,6 +243,7 @@ export async function generateScript(input: {
       animation: { keyMessages: [], dataPoints: [], visualCues: [], voiceOver: "" },
     },
     estimatedDurationSec: parsed.estimatedDurationSec || lengthSec,
-    costUsd: result.costUsd,
+    sources: sources.length ? sources : undefined,
+    costUsd: totalCost,
   };
 }
