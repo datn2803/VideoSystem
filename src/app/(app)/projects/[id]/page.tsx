@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, ArrowRight, UserCircle2, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight, UserCircle2, FileText, Search } from "lucide-react";
 import { store } from "@/lib/integration-hub/storage";
 import { projectStore } from "@/lib/projects/storage";
 import { scriptStore } from "@/lib/scripts/storage";
@@ -61,6 +61,40 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <span className="text-xs text-muted-foreground">Plan cost ${project.planCostUsd.toFixed(4)}</span>
           </CardContent>
         </Card>
+
+        {(project.trendBrief || (project.trendSources && project.trendSources.length > 0)) && (
+          <details className="rounded-md border border-border bg-muted/20 p-4">
+            <summary className="cursor-pointer text-sm font-medium flex items-center gap-2 select-none">
+              <Search className="h-4 w-4 text-indigo-500" />
+              Nghiên cứu xu hướng (grounded)
+              <Badge variant={project.trendSources && project.trendSources.length > 0 ? "success" : "outline"}>
+                {project.trendSources?.length || 0} nguồn
+              </Badge>
+            </summary>
+            <div className="mt-3 space-y-3">
+              {project.trendSources && project.trendSources.length > 0 && (
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {project.trendSources.map((s, i) => (
+                    <a
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-accent hover:underline line-clamp-1 max-w-xs"
+                    >
+                      {i + 1}. {s.title}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {project.trendBrief && (
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-72 overflow-y-auto font-sans leading-relaxed">
+                  {project.trendBrief}
+                </pre>
+              )}
+            </div>
+          </details>
+        )}
 
         <div>
           <h3 className="text-sm font-semibold mb-3">Chủ đề trong plan</h3>

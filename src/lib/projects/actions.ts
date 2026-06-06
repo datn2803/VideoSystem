@@ -17,13 +17,15 @@ export async function createProjectWithPlanAction(profileId: string, n: number =
   const profile = await store.getProfile(profileId);
   if (!profile) throw new Error("Profile not found");
 
-  const { topics, costUsd } = await generateContentPlan(profile, n);
+  const { topics, costUsd, trendBrief, citations } = await generateContentPlan(profile, n);
 
   const project = await projectStore.create({
     ownerId: DEFAULT_OWNER,
     profileId,
     name: name?.trim() || defaultName(profile.name),
     topics,
+    trendBrief,
+    trendSources: citations,
     planCostUsd: costUsd,
   });
 
@@ -52,8 +54,13 @@ export async function regeneratePlanAction(projectId: string, n: number = 12) {
   const profile = await store.getProfile(project.profileId);
   if (!profile) throw new Error("Profile not found");
 
-  const { topics, costUsd } = await generateContentPlan(profile, n);
-  await projectStore.update(projectId, { topics, planCostUsd: costUsd });
+  const { topics, costUsd, trendBrief, citations } = await generateContentPlan(profile, n);
+  await projectStore.update(projectId, {
+    topics,
+    trendBrief: trendBrief ?? "",
+    trendSources: citations ?? [],
+    planCostUsd: costUsd,
+  });
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");

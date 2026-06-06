@@ -7,6 +7,8 @@ export type ProjectRecord = {
   profileId: string;
   name: string; // mặc định = tên profile + ngày; user sửa được
   topics: ContentTopic[]; // content plan ĐƯỢC LƯU (persist)
+  trendBrief?: string; // bản tin xu hướng (grounded) sinh plan — minh bạch nguồn
+  trendSources?: { title: string; url: string }[]; // citations từ grounding
   planCostUsd: number;
   scriptIds: string[]; // id các script đã sinh từ project này
   createdAt: string;
