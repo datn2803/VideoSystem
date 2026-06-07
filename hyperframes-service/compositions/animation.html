@@ -258,25 +258,26 @@
       .pt-num.grad .picr { background: rgba(255,255,255,0.18); color: #fff; }
 
       /* ── POINT v2: thẻ HƯỚNG DẪN giàu data (tiêu đề + cách làm + số liệu) — 2 thẻ xếp lớp, chiều sâu ── */
-      .ptwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 36px; margin-top: 30px; position: relative; z-index: 1; }
+      .ptwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 46px; margin-top: 40px; position: relative; z-index: 1; }
       /* thẻ DẠY (tiêu đề + cách làm) — elevation-1 + gáy gradient bên trái = chiều sâu lớp 1 */
       .pttop { position: relative; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--card-border);
-        border-radius: 32px; padding: 52px 50px 56px 60px; box-shadow: var(--elev-1); overflow: hidden; }
+        border-radius: 34px; padding: 60px 54px 64px 66px; box-shadow: var(--elev-1); overflow: hidden; }
       .pttop::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 10px;
         background: linear-gradient(180deg, var(--accent), var(--accent2)); }
-      .pttitle { color: var(--ink); font-weight: 900; font-size: 76px; line-height: 1.08; letter-spacing: -1px; }
+      .pttitle { color: var(--ink); font-weight: 900; font-size: 80px; line-height: 1.08; letter-spacing: -1px; }
       .pttitle .ac { color: var(--accent); }
       .pttitle .word { display: inline-block; will-change: transform, opacity; }
-      .ptdetail { color: var(--sub); font-weight: 600; font-size: 41px; line-height: 1.36; margin-top: 22px; max-width: 97%; }
+      .ptdetail { color: var(--sub); font-weight: 600; font-size: 43px; line-height: 1.38; margin-top: 26px; max-width: 97%; }
       /* thẻ SỐ LIỆU — gradient elevation-2 = chiều sâu lớp 2 */
-      .ptstat { border-radius: 28px; padding: 50px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+      .ptstat { border-radius: 30px; padding: 60px 50px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
       .ptstat .psval { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-      .ptstat .psv { color: #fff; font-weight: 900; font-size: 122px; line-height: 0.86; letter-spacing: -3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .ptstat .psv { color: #fff; font-weight: 900; font-size: 130px; line-height: 0.86; letter-spacing: -3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
       .ptstat .psu { color: rgba(255,255,255,0.92); font-weight: 800; font-size: 50px; }
       .ptstat .pslbl { color: rgba(255,255,255,0.95); font-weight: 800; font-size: 34px; letter-spacing: 0.5px; text-align: right; line-height: 1.2; max-width: 46%; text-transform: uppercase; }
-      /* watermark số KHỔNG LỒ phía sau → chiều sâu + nhận diện điểm (ló ở lề trên/dưới quanh 2 thẻ) */
-      .ptwm { position: absolute; right: -76px; top: 196px; z-index: 0; font-weight: 900; font-size: 760px; line-height: 0.72;
-        color: var(--accent); opacity: 0.07; pointer-events: none; font-variant-numeric: tabular-nums; }
+      /* watermark số KHỔNG LỒ — NỀN phía sau cụm 2 thẻ (top cố định ~giữa khung; KHÔNG dùng transform vì
+         GSAP animate x/scale lên phần tử này) → chiều sâu, cân bố cục, ló mép phải */
+      .ptwm { position: absolute; right: -64px; top: 690px; z-index: 0; font-weight: 900; font-size: 720px;
+        line-height: 0.72; color: var(--accent); opacity: 0.07; pointer-events: none; font-variant-numeric: tabular-nums; }
       /* treatment TINT — tile số nền tím nhạt (chữ accent) */
       .pt-num.tint { background: linear-gradient(150deg, rgba(124,58,237,0.12), rgba(124,58,237,0.03)); border: 1px solid rgba(124,58,237,0.14); color: var(--accent); }
       .pt-num.tint .pnum { color: var(--accent); } .pt-num.tint .pteb { color: var(--accent); }
@@ -309,6 +310,8 @@
       #capbox .cw.cur { color: var(--accent); }                            /* đang đọc → highlight */
       /* Có caption → chừa chỗ đáy để KHÔNG đè nội dung cảnh */
       [data-caps="1"] .scene.left { padding-bottom: 296px; }
+      /* Point scene: cụm 2 thẻ căn giữa KHÔNG chạm đáy → bỏ reserve caption to → căn giữa theo TOÀN khung (cân hơn) */
+      [data-caps="1"] .scene.left.ptscene { padding-bottom: 172px; }
       [data-caps="1"] .scene.center { padding-bottom: 220px; }
 
       /* header trên (brand/topic) — đóng khung phần đỉnh ở mọi cảnh, hết trống đầu */
