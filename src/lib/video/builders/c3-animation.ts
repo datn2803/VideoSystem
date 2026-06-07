@@ -198,10 +198,27 @@ function buildAnimationVariables(
     unit: oneToken(p.unit).slice(0, 8),
   }));
 
-  // MỖI keyMessage = 1 CẢNH riêng (point scene) → tăng số cảnh, nhịp nhanh hơn,
-  // thay vì gộp hết vào 1 ô pills tĩnh 18s. Cắt ≤120 ký tự cho gọn.
-  const points = (anim.keyMessages || []).map((m) => (m || "").trim()).filter(Boolean).slice(0, 4);
-  const pointScenes = points.map((m, i) => ({ n: i + 1, total: points.length, text: m.slice(0, 120) }));
+  // MỖI point = 1 CẢNH thẻ HƯỚNG DẪN giàu data (tiêu đề bước + cách làm + số liệu hỗ trợ) → tăng số cảnh + DẠY
+  // kiến thức. Ưu tiên anim.points (bản giàu); thiếu → fallback keyMessages (chỉ title) cho backward-compat.
+  const richPoints = Array.isArray(anim.points) ? anim.points : [];
+  const rawPoints: { title: string; detail?: string; stat?: { value: string; unit: string; label: string } }[] =
+    richPoints.length ? richPoints : (anim.keyMessages || []).map((m) => ({ title: m }));
+  const pointScenes = rawPoints
+    .map((p) => {
+      const title = String((p && p.title) || "").trim();
+      if (!title) return null;
+      const detail = String((p && p.detail) || "").trim();
+      const sv = p && p.stat ? String(p.stat.value || "").trim() : "";
+      const stat = sv
+        ? { value: sv.slice(0, 7), unit: oneToken(String(p.stat!.unit || "")).slice(0, 6), label: String(p.stat!.label || "").trim().slice(0, 34) }
+        : undefined;
+      return { title: title.slice(0, 64), detail: detail.slice(0, 150), stat };
+    })
+    .filter((p): p is { title: string; detail: string; stat: { value: string; unit: string; label: string } | undefined } => p !== null)
+    .slice(0, 4)
+    // text = title: tương thích NGƯỢC composition CŨ trên VPS (đọc p.text) → KHÔNG vỡ point scene khi
+    // builder mới deploy trước lúc Tommy scp composition mới (composition mới đọc p.title||p.text).
+    .map((p, i, arr) => ({ n: i + 1, total: arr.length, text: p.title, title: p.title, detail: p.detail, stat: p.stat }));
   // Không dùng keyMessages làm fallback pills nữa (đã có pointScenes) → tránh trùng nội dung.
   const levels: { n: string; label: string; active: boolean }[] = [];
 

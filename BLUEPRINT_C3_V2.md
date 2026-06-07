@@ -74,7 +74,30 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
 - ✅ dark theme · ✅ icon glow · ✅ caption karaoke · ✅ bỏ 3D · ✅ theme-theo-industry — TẤT CẢ chạy thật trên video VPS.
 - ⏳ flow: không xuất hiện ở render test (script cũ không có data flow) — sẽ hiện với chủ đề CÓ quy trình (scripter mới sinh field flow).
 - ⏳ B7 số thật: plumbing đã deploy, kích hoạt khi Tommy bật billing Gemini.
-- (nhỏ, để sau) vài cảnh thưa khi ít mục (bars 2 thanh, bignum) — pre-existing, không gấp.
+- ✅ (đã xử ở Round 2) vài cảnh thưa/hở giữa (bars 2 thanh, mini-stat, point) — xem mục 8.
+
+## 8. ĐỢT LÀM GIÀU DATA + CHIỀU SÂU (Round 2 — feedback Tommy sau clip regen)
+> Feedback: (a) bố cục chưa có chiều sâu, (b) 2 bản số liệu chia ra → khúc giữa trống, (c) CTA icon tay → mũi tên,
+> (d) QUAN TRỌNG: point scenes 1-2-3-4 mơ hồ, không ra "bảng hướng dẫn" → LÀM GIÀU số liệu cụ thể (AI hiệu quả tới đâu,
+> tiết kiệm thời gian thế nào), mang kiến thức bổ ích. "Chọn option xịn nhất, thẩm mỹ nhất, làm hết."
+
+- [x] R2.1 **Point scene = THẺ HƯỚNG DẪN giàu data** (option đã chọn = xịn nhất): mỗi điểm gồm **tiêu đề bước** (kinetic, lớn)
+  + **cách làm/giải thích** (detail — DẠY kiến thức) + **thẻ số liệu** (gradient: value+unit+label). 2 THẺ XẾP LỚP (thẻ dạy
+  elevation-1 + gáy gradient bên trái · thẻ số gradient elevation-2) + **watermark số khổng lồ** phía sau → CHIỀU SÂU. Căn
+  giữa dọc → hết hở giữa. Composition: CSS `.ptwrap/.pttop/.ptstat/.ptwm` + JS dựng {title,detail,stat} + timeline thẻ-vào-rồi-chữ-chạy.
+- [x] R2.2 **Mini-stat grid hết hở giữa**: `.ministat justify-content: space-between→center` (grid 1fr kéo cao → icon top/value bottom hở giữa) → cụm icon+value+label căn giữa thẻ. Bars đã `justify-content:center` (đợt trước).
+- [x] R2.3 **CTA mũi tên**: bỏ emoji 👇, dùng SVG mũi tên xuống `#s7 .e3 svg` 54px (chuyên nghiệp hơn).
+- [x] R2.4 **Wiring scripter**: thêm field `animation.points: [{title,detail,stat:{value,unit,label}}]` + prompt (point i ↔ keyMessages[i],
+  detail DẠY cụ thể ≤22 từ, stat ƯU TIÊN số thật fact-brief / không có → "ví dụ", mỗi stat KHÁC nhau). keyMessages vẫn giữ (đồng bộ).
+- [x] R2.5 **Wiring builder**: `c3-animation.ts` map `anim.points` (giàu) → pointScenes {n,total,title,detail,stat}; thiếu → fallback
+  keyMessages (chỉ title, backward-compat). Cắt giới hạn an toàn. **Test 6 ca biên PASS** (rich/fallback/thiếu field/tràn/rỗng).
+- [x] R2.6 **Self-test**: render-test theme 3 (dark) + theme 0 (bright) — point 2 thẻ xếp lớp đẹp, mini-stat đều, bars/CTA OK. tsc + build PASS.
+- [ ] R2.7 **Deploy + verify thật**: push builder/scripter (Vercel) + Tommy scp composition VPS → gen 1 video tài chính → xem point cards giàu data + chiều sâu.
+
+### Trạng thái deploy Round 2
+- **Composition (animation.html)**: point cards + mini-stat fix + CTA arrow — Ở GIT, **CẦN Tommy scp + rebuild VPS** (lệnh như mục 5 trên).
+- **Scripter + builder**: push `git push origin HEAD:main` → Vercel (field points + mapping).
+- ⚠ Như cũ: scp composition + push GẦN nhau để point cards giàu hiện ngay (composition cũ + builder mới vẫn KHÔNG vỡ — point chỉ có title).
 
 ## 6. Cách test (đã có công cụ)
 - Render LOCAL offline: `node _c3_render.mjs` (Playwright + Chrome hệ thống, inject biến mẫu, step-frame count-up) → ảnh `/tmp/c3frames/`. So sánh ref `/tmp/vidframes/`.

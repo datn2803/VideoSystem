@@ -178,7 +178,7 @@
       .ccard.r { box-shadow: var(--elev-2); position: relative; z-index: 2; }
 
       /* progress bars */
-      .pbars { display: flex; flex-direction: column; gap: 36px; justify-content: space-between; }
+      .pbars { display: flex; flex-direction: column; gap: 40px; justify-content: center; }
       .pbar { will-change: transform, opacity; padding: 38px 34px; }
       .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
       .pbar .pn { color: var(--ink); font-weight: 800; font-size: 42px; }
@@ -256,6 +256,27 @@
       .pt-num.grad { background: linear-gradient(150deg, var(--accent), var(--accent2)); box-shadow: var(--elev-2); color: #fff; }
       .pt-num.grad .pnum { color: #fff; } .pt-num.grad .pteb { color: rgba(255,255,255,0.85); }
       .pt-num.grad .picr { background: rgba(255,255,255,0.18); color: #fff; }
+
+      /* ── POINT v2: thẻ HƯỚNG DẪN giàu data (tiêu đề + cách làm + số liệu) — 2 thẻ xếp lớp, chiều sâu ── */
+      .ptwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 36px; margin-top: 30px; position: relative; z-index: 1; }
+      /* thẻ DẠY (tiêu đề + cách làm) — elevation-1 + gáy gradient bên trái = chiều sâu lớp 1 */
+      .pttop { position: relative; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--card-border);
+        border-radius: 32px; padding: 52px 50px 56px 60px; box-shadow: var(--elev-1); overflow: hidden; }
+      .pttop::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 10px;
+        background: linear-gradient(180deg, var(--accent), var(--accent2)); }
+      .pttitle { color: var(--ink); font-weight: 900; font-size: 76px; line-height: 1.08; letter-spacing: -1px; }
+      .pttitle .ac { color: var(--accent); }
+      .pttitle .word { display: inline-block; will-change: transform, opacity; }
+      .ptdetail { color: var(--sub); font-weight: 600; font-size: 41px; line-height: 1.36; margin-top: 22px; max-width: 97%; }
+      /* thẻ SỐ LIỆU — gradient elevation-2 = chiều sâu lớp 2 */
+      .ptstat { border-radius: 28px; padding: 50px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+      .ptstat .psval { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+      .ptstat .psv { color: #fff; font-weight: 900; font-size: 122px; line-height: 0.86; letter-spacing: -3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .ptstat .psu { color: rgba(255,255,255,0.92); font-weight: 800; font-size: 50px; }
+      .ptstat .pslbl { color: rgba(255,255,255,0.95); font-weight: 800; font-size: 34px; letter-spacing: 0.5px; text-align: right; line-height: 1.2; max-width: 46%; text-transform: uppercase; }
+      /* watermark số KHỔNG LỒ phía sau → chiều sâu + nhận diện điểm (ló ở lề trên/dưới quanh 2 thẻ) */
+      .ptwm { position: absolute; right: -76px; top: 196px; z-index: 0; font-weight: 900; font-size: 760px; line-height: 0.72;
+        color: var(--accent); opacity: 0.07; pointer-events: none; font-variant-numeric: tabular-nums; }
       /* treatment TINT — tile số nền tím nhạt (chữ accent) */
       .pt-num.tint { background: linear-gradient(150deg, rgba(124,58,237,0.12), rgba(124,58,237,0.03)); border: 1px solid rgba(124,58,237,0.14); color: var(--accent); }
       .pt-num.tint .pnum { color: var(--accent); } .pt-num.tint .pteb { color: var(--accent); }
@@ -330,14 +351,14 @@
 
       /* ── S_mini: lưới 2×2 mini-stat (hàng dãn ĐỀU 1fr → thẻ cao đều, hết hở giữa) ── */
       .minigrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 24px; width: 100%; }
-      .ministat { padding: 40px 34px; border-radius: 22px; background: var(--card); box-shadow: var(--elev-1);
-        border: 1px solid rgba(120,90,210,0.06); display: flex; flex-direction: column; justify-content: space-between; will-change: transform, opacity; }
-      .ministat .mi { width: 58px; height: 58px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
-        display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
-      .ministat .mi svg { width: 32px; height: 32px; }
-      .ministat .mv { color: var(--accent); font-weight: 900; font-size: 70px; line-height: 1; font-variant-numeric: tabular-nums; }
+      .ministat { padding: 44px 36px; border-radius: 22px; background: var(--card); box-shadow: var(--elev-1);
+        border: 1px solid rgba(120,90,210,0.06); display: flex; flex-direction: column; justify-content: center; will-change: transform, opacity; }
+      .ministat .mi { width: 60px; height: 60px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
+        display: flex; align-items: center; justify-content: center; margin-bottom: 26px; }
+      .ministat .mi svg { width: 33px; height: 33px; }
+      .ministat .mv { color: var(--accent); font-weight: 900; font-size: 78px; line-height: 1; font-variant-numeric: tabular-nums; }
       .ministat .mv .mu { font-size: 0.46em; color: var(--accent2); }
-      .ministat .ml { color: var(--sub); font-weight: 600; font-size: 29px; margin-top: 8px; line-height: 1.2; }
+      .ministat .ml { color: var(--sub); font-weight: 600; font-size: 30px; margin-top: 14px; line-height: 1.25; }
 
       /* ── S_trend: đường tăng (CHART lấp hết thân thẻ + badge đỉnh) ── */
       .trendwrap { position: relative; width: 100%; flex: 1 1 auto; height: auto; min-height: 460px; align-self: stretch; }
@@ -362,7 +383,7 @@
       #s7 .e2 { color: var(--accent); font-weight: 900; font-size: 150px; line-height: 1.12; letter-spacing: -1px; margin-top: 18px; will-change: transform; }
       #s7 .e2 .e2hl { color: var(--accent2); }
       #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
-      #s7 .e3 .emo { font-size: 56px; line-height: 1; }
+      #s7 .e3 svg { width: 54px; height: 54px; }
     </style>
   </head>
 
@@ -819,42 +840,48 @@
         if (line) { line.style.strokeDasharray = trendLen; line.style.strokeDashoffset = trendLen; }
       }
 
-      // ── Point scenes: MỖI keyMessage = 1 CẢNH = 2-tile bento (tile SỐ + tile NỘI DUNG) ──
-      //   Xen kẽ LAYOUT (dọc/ngang) + MÀU tile (gradient/tint) → đa dạng mà chỉ 2 tông (không over).
+      // ── Point scenes v2: MỖI điểm = THẺ HƯỚNG DẪN giàu data (tiêu đề bước + cách làm + số liệu). ──
+      //   p = {n,total, title|text, detail, stat:{value,unit,label}}. Lấp khung + DẠY kiến thức + chiều sâu.
       const pointsData = parseJSON(v.points, []);
       const pointIds = [];
       if (Array.isArray(pointsData) && pointsData.length) {
         const root = document.getElementById("root");
-        pointsData.slice(0, 4).forEach((p, i) => {
-          const txt = String(p.text || "").trim();
-          if (!txt) return;
+        pointsData.slice(0, 5).forEach((p, i) => {
+          const title = String((p && (p.title || p.text)) || "").trim();
+          if (!title) return;
+          const detail = String((p && p.detail) || "").trim();
+          const stat = (p && p.stat && String(p.stat.value || "").trim())
+            ? { value: String(p.stat.value).trim(), unit: String(p.stat.unit || "").trim(), label: String(p.stat.label || "").trim() } : null;
           const id = "spt" + i;
-          const layout = i % 2;                       // 0 = dọc (số trên), 1 = ngang (số trái)
-          const treat = (i % 2 === 0) ? "grad" : "tint"; // xen kẽ tông màu tile số
-          const num = String(p.n || i + 1);
+          const num = String((p && p.n) || i + 1);
+          const total = (p && p.total) || pointsData.length;
           const iconKey = ICON_CYCLE[i % ICON_CYCLE.length];
           const sc = document.createElement("div");
           sc.className = "scene left ptscene bg-light clip"; sc.id = id;
-          sc.setAttribute("data-variant", String(layout));
           sc.setAttribute("data-start", "0"); sc.setAttribute("data-duration", "3.7"); sc.setAttribute("data-track-index", "1");
           const dg = document.createElement("div"); dg.className = "dotgrid"; sc.appendChild(dg);
-          const stack = document.createElement("div"); stack.className = "stack";
-          const bento = document.createElement("div"); bento.className = "ptbento v" + layout;
-          // tile SỐ (eyebrow "Điểm n/total" · số lớn · icon)
-          const tnum = document.createElement("div"); tnum.className = "pttile pt-num " + treat;
-          const eb = document.createElement("div"); eb.className = "pteb";
-          const dot = document.createElement("span"); dot.className = "pdot"; eb.appendChild(dot);
-          const ebl = document.createElement("span"); ebl.textContent = "Điểm " + num + "/" + (p.total || pointsData.length); eb.appendChild(ebl);
-          const pn = document.createElement("div"); pn.className = "pnum"; pn.textContent = num;
-          const picr = document.createElement("div"); picr.className = "picr"; picr.appendChild(makeIconSVG(iconKey));
-          tnum.appendChild(eb); tnum.appendChild(pn); tnum.appendChild(picr);
-          // tile NỘI DUNG (kinetic)
-          const tbody = document.createElement("div"); tbody.className = "pttile pt-body";
-          const tt = document.createElement("div"); tt.className = "ptt"; tt.id = id + "tt"; fillKinetic(tt, txt);
-          const glyph = document.createElement("div"); glyph.className = "ptglyph"; glyph.appendChild(makeIconSVG(iconKey));
-          tbody.appendChild(tt); tbody.appendChild(glyph);
-          bento.appendChild(tnum); bento.appendChild(tbody);
-          stack.appendChild(bento); sc.appendChild(stack); root.appendChild(sc);
+          const wm = document.createElement("div"); wm.className = "ptwm"; wm.textContent = num; sc.appendChild(wm); // watermark số → chiều sâu
+          const eb = document.createElement("div"); eb.className = "eyebrow icon";
+          const ico = document.createElement("span"); ico.className = "ico"; ico.appendChild(makeIconSVG(iconKey));
+          const ebl = document.createElement("span"); ebl.className = "lbl"; ebl.textContent = "ĐIỂM " + num + "/" + total;
+          eb.appendChild(ico); eb.appendChild(ebl); sc.appendChild(eb);
+          const wrap = document.createElement("div"); wrap.className = "ptwrap";
+          const top = document.createElement("div"); top.className = "pttop";
+          const tt = document.createElement("div"); tt.className = "pttitle"; tt.id = id + "tt"; fillKinetic(tt, title);
+          top.appendChild(tt);
+          if (detail) { const dt = document.createElement("div"); dt.className = "ptdetail"; dt.id = id + "det"; dt.textContent = detail; top.appendChild(dt); }
+          wrap.appendChild(top);
+          if (stat) {
+            const scd = document.createElement("div"); scd.className = "ptstat bento-accent"; scd.id = id + "stat";
+            const sval = document.createElement("div"); sval.className = "psval";
+            const sv = document.createElement("span"); sv.className = "psv"; sv.id = id + "sv"; sv.textContent = stat.value;
+            sval.appendChild(sv);
+            if (stat.unit) { const su = document.createElement("span"); su.className = "psu"; su.textContent = stat.unit; sval.appendChild(su); }
+            scd.appendChild(sval);
+            if (stat.label) { const sl = document.createElement("div"); sl.className = "pslbl"; sl.textContent = stat.label; scd.appendChild(sl); }
+            wrap.appendChild(scd);
+          }
+          sc.appendChild(wrap); root.appendChild(sc);
           pointIds.push(id);
         });
       }
@@ -933,7 +960,7 @@
       })();
       (function () {
         const e3 = document.getElementById("s7e3"); if (!e3) return;
-        const emo = document.createElement("span"); emo.className = "emo"; emo.textContent = "👇"; e3.insertBefore(emo, e3.firstChild);
+        // C3 v2: bỏ emoji tay 👇 → dùng mũi tên SVG (chuyên nghiệp hơn, đã có sẵn trong HTML #s7e3).
         setText("s7e3text", v.cta_sub || "");
       })();
 
@@ -958,7 +985,7 @@
         if (s2n && bigRaw !== "") s2n.textContent = bigIsNum ? bigNum.toLocaleString("vi-VN") : bigRaw; // đo theo giá trị CUỐI
         FT("s1key", 150, 48, 320); FT("s1l1", 78, 40, 180); FT("s1l2", 78, 40, 180); FT("s1sub", 44, 24, 120);
         FT("s2bnum", 450, 110, 680); FT("s7e1", 80, 36, 200); FT("s7e2", 150, 44, 520); FT("s7e3text", 44, 24, 120);
-        (pointIds || []).forEach((id) => FT(id + "tt", 66, 28, 640));
+        (pointIds || []).forEach((id) => FT(id + "tt", 80, 38, 330)); // tiêu đề bước (chừa chỗ cách làm + thẻ số)
         if (s2n && bigIsNum) s2n.textContent = "0"; // reset → count-up chạy từ 0
       }
       doFit();
@@ -1167,26 +1194,22 @@
         if (document.getElementById("s7e3")) tl.from("#s7e3", { y: 20, opacity: 0, duration: 0.4 }, s + 0.7);
       }
 
-      /* Point scenes — 2-tile bento: tile SỐ + tile NỘI DUNG vào ĐỐI HƯỚNG + KINETIC chữ */
+      /* Point scenes v2 — thẻ hướng dẫn: watermark số + eyebrow + tiêu đề KINETIC + cách làm + thẻ số liệu POP */
       (pointIds || []).forEach((id) => {
         if (!has(id)) return;
-        const s = startOf[id], w = winOf[id] || 3.7;
-        const layout = document.getElementById(id).getAttribute("data-variant") || "0";
-        // tile SỐ vào (dọc → từ trên xuống · ngang → từ trái sang)
-        tl.fromTo("#" + id + " .pt-num",
-          { y: layout === "1" ? 0 : -32, x: layout === "1" ? -38 : 0, opacity: 0, scale: 0.96 },
-          { y: 0, x: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.18);
-        tl.fromTo("#" + id + " .pnum", { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.7)" }, s + 0.3);
-        if (document.querySelector("#" + id + " .picr"))
-          tl.fromTo("#" + id + " .picr", { scale: 0, rotate: -14, opacity: 0 }, { scale: 1, rotate: 0, opacity: 1, duration: 0.45, ease: "back.out(1.7)" }, s + 0.55);
-        // tile NỘI DUNG vào (đối hướng tile số)
-        tl.fromTo("#" + id + " .pt-body",
-          { y: layout === "1" ? 0 : 32, x: layout === "1" ? 38 : 0, opacity: 0 },
-          { y: 0, x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, s + 0.34);
-        // KINETIC: chữ hiện theo TỪNG TỪ
-        tl.from("#" + id + " .ptt .word", { y: 24, opacity: 0, duration: 0.5, stagger: 0.05, ease: "power3.out" }, s + 0.6);
-        // mid-scene: số "thở" nhẹ (không tĩnh)
-        tl.to("#" + id + " .pnum", { scale: 1.05, duration: Math.max(1, w / 2), yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.3);
+        const s = startOf[id];
+        if (document.querySelector("#" + id + " .ptwm"))
+          tl.fromTo("#" + id + " .ptwm", { opacity: 0, scale: 0.82, x: 36 }, { opacity: 0.07, scale: 1, x: 0, duration: 0.7, ease: "power2.out" }, s + 0.1);
+        tl.from("#" + id + " .eyebrow", { y: 18, opacity: 0, duration: 0.4 }, s + 0.12);
+        if (document.querySelector("#" + id + " .pttop")) // thẻ DẠY hiện như 1 khối → rồi chữ chạy lên trên
+          tl.fromTo("#" + id + " .pttop", { y: 34, opacity: 0, scale: 0.97 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, s + 0.2);
+        tl.from("#" + id + " .pttitle .word", { yPercent: 80, opacity: 0, duration: 0.5, stagger: 0.06, ease: "power3.out" }, s + 0.34);
+        if (document.querySelector("#" + id + " .ptdetail"))
+          tl.from("#" + id + " .ptdetail", { y: 22, opacity: 0, duration: 0.5, ease: "power2.out" }, s + 0.66);
+        if (document.querySelector("#" + id + " .ptstat")) {
+          tl.fromTo("#" + id + " .ptstat", { y: 42, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.5)" }, s + 0.82);
+          tl.fromTo("#" + id + " .psv", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.7)" }, s + 1.0);
+        }
       });
 
       tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));

@@ -32,6 +32,9 @@ export type ScriptResult = {
       trend?: { label: string; points: string[] };
       // C3 v2 — sơ đồ QUY TRÌNH (pills dọc + mũi tên). 2-4 bước NGẮN. Tuỳ chọn → backward-compat.
       flow?: { title?: string; steps: string[] };
+      // C3 v2 — POINT SCENES giàu data: mỗi điểm = thẻ HƯỚNG DẪN (tiêu đề bước + cách làm + số liệu hỗ trợ).
+      // = bản giàu của keyMessages (point i ↔ ý i của body). Tuỳ chọn → builder fallback keyMessages khi thiếu.
+      points?: { title: string; detail?: string; stat?: { value: string; unit: string; label: string } }[];
     };
   };
   estimatedDurationSec: number;
@@ -112,7 +115,8 @@ Schema:
       "beforeAfter": {"fromValue": "8", "fromLabel": "Cách cũ", "toValue": "1", "toLabel": "Với AI", "unit": "giờ"},
       "miniStats": [{"value": "3", "unit": "x", "label": "Nhanh hơn"}, {"value": "60", "unit": "%", "label": "Tiết kiệm"}, {"value": "24", "unit": "/7", "label": "Hoạt động"}, {"value": "5", "unit": "phút", "label": "Cài đặt"}],
       "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"]},
-      "flow": {"title": "QUY TRÌNH", "steps": ["Bước 1 ngắn", "Bước 2 ngắn", "Bước 3 (đích)"]}
+      "flow": {"title": "QUY TRÌNH", "steps": ["Bước 1 ngắn", "Bước 2 ngắn", "Bước 3 (đích)"]},
+      "points": [{"title": "Tên bước NGẮN (≤7 từ)", "detail": "Cách làm/giải thích cụ thể DẠY người xem (≤22 từ)", "stat": {"value": "60", "unit": "%", "label": "nhãn ngắn (ví dụ)"}}]
     }
   },
   "estimatedDurationSec": ${lengthSec}
@@ -134,6 +138,15 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
   CHỦ ĐỀ + các ý trong body, KHÔNG lạc đề, KHÔNG bịa trích dẫn. Cái nào không hợp chủ đề thì để rỗng/bỏ.
 - flow: CHỈ điền khi chủ đề có QUY TRÌNH/CÁC BƯỚC rõ (how-to, lộ trình, cách làm). 2-4 bước NGẮN (≤6 từ/bước),
   bước CUỐI = kết quả/đích. Chủ đề không có quy trình → BỎ TRỐNG (đừng gượng ép).
+- ⭐ points (QUAN TRỌNG — đây là phần DẠY KIẾN THỨC chính, mỗi point = 1 CẢNH thẻ hướng dẫn): điền 3-4 thẻ,
+  point i ↔ keyMessages[i] (CÙNG ý, CÙNG thứ tự giọng đọc body). Mỗi thẻ gồm:
+    • title: tên bước/ý NGẮN (≤7 từ) — chính là ý đó của body.
+    • detail: CÁCH làm hoặc giải thích CỤ THỂ, dạy người xem điều hữu ích THẬT (≤22 từ). KHÔNG chung chung,
+      KHÔNG lặp lại y nguyên title — phải thêm thông tin (cách làm, lý do, con số, hệ quả).
+    • stat: 1 số HỖ TRỢ cho bước đó (value+unit+label NGẮN). ƯU TIÊN số THẬT từ FACT BRIEF; không có → số minh hoạ
+      hợp lý + nhãn ghi "ví dụ"/"ước tính". MỖI stat phải KHÁC nhau và bám đúng bước (vd bước tiết kiệm thời gian →
+      số giờ; bước chi phí → %/tiền). TUYỆT ĐỐI không bịa trích dẫn nghiên cứu.
+  → points giàu thông tin = video DẠY được kiến thức (đúng mục tiêu). Vẫn PHẢI điền keyMessages (đồng bộ với points).
 - ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
 }
 
