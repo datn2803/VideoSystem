@@ -30,6 +30,8 @@ export type ScriptResult = {
       beforeAfter?: { fromValue: string; fromLabel: string; toValue: string; toLabel: string; unit: string };
       miniStats?: { value: string; unit: string; label: string }[];
       trend?: { label: string; points: string[] };
+      // C3 v2 — sơ đồ QUY TRÌNH (pills dọc + mũi tên). 2-4 bước NGẮN. Tuỳ chọn → backward-compat.
+      flow?: { title?: string; steps: string[] };
     };
   };
   estimatedDurationSec: number;
@@ -109,7 +111,8 @@ Schema:
       "donut": {"value": "70", "unit": "%", "label": "NHÃN NGẮN (số % KHÁC bigStat)"},
       "beforeAfter": {"fromValue": "8", "fromLabel": "Cách cũ", "toValue": "1", "toLabel": "Với AI", "unit": "giờ"},
       "miniStats": [{"value": "3", "unit": "x", "label": "Nhanh hơn"}, {"value": "60", "unit": "%", "label": "Tiết kiệm"}, {"value": "24", "unit": "/7", "label": "Hoạt động"}, {"value": "5", "unit": "phút", "label": "Cài đặt"}],
-      "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"]}
+      "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"]},
+      "flow": {"title": "QUY TRÌNH", "steps": ["Bước 1 ngắn", "Bước 2 ngắn", "Bước 3 (đích)"]}
     }
   },
   "estimatedDurationSec": ${lengthSec}
@@ -120,13 +123,17 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
   ĐÚNG THỨ TỰ giọng đọc (keyMessage i hiện đúng lúc giọng đọc tới ý đó). dataPoints/bars MINH HOẠ
   cho chính các ý đó — KHÔNG lạc đề, không thêm ý không có trong lời đọc.
 - keyMessages: 4-5 ý RIÊNG BIỆT (mỗi ý thành 1 cảnh) → đủ cảnh, video không bị ít cảnh.
-- bigStat + bars + dataPoints: LUÔN ĐIỀN bằng số liệu MINH HOẠ HỢP LÝ theo chủ đề (đây là phần "data motion" chạy số). Ghi rõ tính ví dụ/ước tính ở nhãn/dataPoints. TUYỆT ĐỐI KHÔNG bịa trích dẫn nghiên cứu (không "theo Gartner/McKinsey...").
+- bigStat + bars + donut + trend + dataPoints (phần "data motion" chạy số): ƯU TIÊN số THẬT từ FACT BRIEF nếu có
+  (số thật → KHÔNG ghi "ví dụ", dùng đúng con số + ngữ cảnh trong brief). CHỈ khi fact brief KHÔNG có/không hợp →
+  điền số MINH HOẠ hợp lý theo chủ đề + GHI RÕ "ví dụ"/"ước tính" ở nhãn. TUYỆT ĐỐI KHÔNG bịa trích dẫn nghiên cứu (không "theo Gartner/McKinsey...").
 - bars: 2-4 mục CÙNG ĐƠN VỊ để so sánh được (vd cùng "%"), giá trị KHÁC nhau.
 - compare: 2 cột cụ thể (cũ vs mới); pills: 4 điểm NGẮN (≤8 từ) khác nhau.
 - pills/compare/principle/callout RIÊNG BIỆT, không lặp keyMessages.
 - ĐA DẠNG data-viz (số chạy): điền donut (1 vòng % khác bigStat), beforeAfter (số trước→sau, vd '8 giờ→1 giờ'),
   miniStats (3-4 chỉ số nhỏ khác nhau), trend (4-5 số tăng dần). TẤT CẢ là MINH HOẠ (ví dụ/ước tính), bám
   CHỦ ĐỀ + các ý trong body, KHÔNG lạc đề, KHÔNG bịa trích dẫn. Cái nào không hợp chủ đề thì để rỗng/bỏ.
+- flow: CHỈ điền khi chủ đề có QUY TRÌNH/CÁC BƯỚC rõ (how-to, lộ trình, cách làm). 2-4 bước NGẮN (≤6 từ/bước),
+  bước CUỐI = kết quả/đích. Chủ đề không có quy trình → BỎ TRỐNG (đừng gượng ép).
 - ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
 }
 

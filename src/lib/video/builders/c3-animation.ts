@@ -260,6 +260,9 @@ function buildAnimationVariables(
     ? anim.trend.points.map((p) => String(p)).filter((p) => /\d/.test(p)).slice(0, 6)
     : [];
   const trend = trendPts.length >= 2 ? { label: String(anim.trend!.label || "Xu hướng"), points: trendPts } : null;
+  const flowSteps = anim.flow && Array.isArray(anim.flow.steps)
+    ? anim.flow.steps.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4) : [];
+  const flow = flowSteps.length >= 2 ? { title: String(anim.flow!.title || "Quy trình"), steps: flowSteps } : null;
 
   // ── Danh sách CẢNH + NGÂN SÁCH cảnh (chống quá nhiều → nhanh) + trọng số CĂN THEO GIỌNG ĐỌC.
   //    Luôn giữ hero + points + cta; cảnh DATA chọn theo ƯU TIÊN tới khi đủ budget (~durationSec/4.5).
@@ -270,6 +273,7 @@ function buildAnimationVariables(
     { id: "s4b", ok: finalBars.length >= 2 },
     { id: "s_ba", ok: !!beforeAfter },
     { id: "s_donut", ok: !!donut },
+    { id: "s_flow", ok: !!flow },
     { id: "s_mini", ok: miniStats.length >= 2 },
     { id: "s_cmp", ok: !!cmp },
     { id: "s_trend", ok: !!trend },
@@ -286,7 +290,7 @@ function buildAnimationVariables(
 
   // ids THEO ĐÚNG THỨ TỰ composition: s1, [data trước], points, [data sau], s7
   const ids: string[] = ["s1"];
-  for (const id of ["s2", "s_donut", "s_ba", "s4b", "s_mini", "s_trend"]) if (kept(id)) ids.push(id);
+  for (const id of ["s2", "s_donut", "s_flow", "s_ba", "s4b", "s_mini", "s_trend"]) if (kept(id)) ids.push(id);
   pointScenes.forEach((_p, i) => ids.push("spt" + i));
   for (const id of ["s6", "s_emph", "s_cmp"]) if (kept(id)) ids.push(id);
   ids.push("s7");
@@ -329,6 +333,7 @@ function buildAnimationVariables(
     mini_stats: kept("s_mini") ? JSON.stringify(miniStats) : "[]",
     mini_title: "Chỉ số",
     trend: kept("s_trend") && trend ? JSON.stringify(trend) : "",
+    flow: kept("s_flow") && flow ? JSON.stringify(flow) : "",
     // S7 CTA
     cta_top: ctaTop,
     cta_keyword: ctaKeyword,

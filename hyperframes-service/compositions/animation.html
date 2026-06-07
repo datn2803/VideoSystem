@@ -37,7 +37,8 @@
     {"id":"mini_title","type":"string","label":"S_mini eyebrow","default":"Chỉ số"},
     {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""},
     {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""},
-    {"id":"captions","type":"string","label":"Phụ đề SYNC read-script JSON [{s,e,w:[{t,x}]}] — rỗng=ẩn","default":""}
+    {"id":"captions","type":"string","label":"Phụ đề SYNC read-script JSON [{s,e,w:[{t,x}]}] — rỗng=ẩn","default":""},
+    {"id":"flow","type":"string","label":"S_flow JSON {title,steps:[2-4]} — sơ đồ quy trình, rỗng=ẩn","default":""}
   ]'
 >
   <head>
@@ -109,6 +110,18 @@
         display: flex; align-items: center; justify-content: center; }
       .eyebrow.icon .ico svg { width: 30px; height: 30px; }
       .eyebrow.icon .lbl { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
+
+      /* ── S_flow: sơ đồ quy trình (pills dọc + mũi tên ↓) — học ref. Pill cuối highlight (đích). ── */
+      .flowwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; margin-top: 44px; }
+      .flowpill { display: flex; align-items: center; gap: 28px; padding: 34px 38px; }
+      .flowpill .fpn { flex: 0 0 64px; width: 64px; height: 64px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; font-weight: 900; font-size: 32px; box-shadow: 0 6px 18px var(--glow); }
+      .flowpill .fpt { color: var(--ink); font-weight: 700; font-size: 46px; line-height: 1.22; }
+      .flowpill.last { color: #fff; }
+      .flowpill.last .fpt { color: #fff; }
+      .flowpill.last .fpn { background: rgba(255,255,255,0.22); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3); }
+      .flowarrow { display: flex; justify-content: center; align-items: center; height: 50px; color: var(--accent); opacity: 0.85; }
+      .flowarrow svg { width: 38px; height: 38px; }
 
       /* ── Headline ── */
       .h-title { color: var(--ink); font-weight: 900; font-size: 76px; line-height: 1.08; letter-spacing: -0.5px; }
@@ -846,6 +859,39 @@
         });
       }
 
+      // ── S_flow: sơ đồ quy trình (pills dọc + mũi tên ↓) — học ref. Tạo ĐỘNG, ẩn nếu <2 bước. ──
+      const flowData = parseJSON(v.flow, null);
+      const flowSteps = flowData && Array.isArray(flowData.steps)
+        ? flowData.steps.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4) : [];
+      if (flowSteps.length >= 2) {
+        const froot = document.getElementById("root");
+        const sc = document.createElement("div");
+        sc.className = "scene left bg-light clip"; sc.id = "s_flow";
+        sc.setAttribute("data-start", "0"); sc.setAttribute("data-duration", "3.7"); sc.setAttribute("data-track-index", "1");
+        const dg = document.createElement("div"); dg.className = "dotgrid"; sc.appendChild(dg);
+        const eb = document.createElement("div"); eb.className = "eyebrow icon";
+        const ico = document.createElement("span"); ico.className = "ico";
+        ico.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/><path d="M18 6.5a3 3 0 0 1-3 3H9"/></svg>';
+        const ebl = document.createElement("span"); ebl.className = "lbl";
+        ebl.textContent = String((flowData && flowData.title) || "Quy trình").toUpperCase().slice(0, 22);
+        eb.appendChild(ico); eb.appendChild(ebl);
+        const wrap = document.createElement("div"); wrap.className = "flowwrap";
+        flowSteps.forEach((st, i) => {
+          const last = i === flowSteps.length - 1;
+          const pill = document.createElement("div");
+          pill.className = "flowpill " + (last ? "bento-accent last" : "bento");
+          const n = document.createElement("span"); n.className = "fpn"; n.textContent = String(i + 1);
+          const t = document.createElement("span"); t.className = "fpt"; t.textContent = st;
+          pill.appendChild(n); pill.appendChild(t); wrap.appendChild(pill);
+          if (!last) {
+            const ar = document.createElement("div"); ar.className = "flowarrow";
+            ar.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg>';
+            wrap.appendChild(ar);
+          }
+        });
+        sc.appendChild(eb); sc.appendChild(wrap); froot.appendChild(sc);
+      }
+
       // ── S_emph: callout bar + nguyên tắc (gradient) — ẩn cả scene nếu cả 2 rỗng ──
       const calloutTxt = String(v.callout || "").trim();
       const principleTxt = String(v.principle || "").trim();
@@ -920,7 +966,7 @@
 
       // ── Timing: scene_times (ĐỒNG BỘ giọng đọc qua Whisper) nếu có; nếu không → chia đều ──
       const total = parseFloat(v.duration) || 18.5;
-      const order = ["s1", "s2", "s_donut", "s_ba", "s4b", "s_mini", "s_trend", ...pointIds, "s6", "s_emph", "s_cmp", "s7"];
+      const order = ["s1", "s2", "s_donut", "s_flow", "s_ba", "s4b", "s_mini", "s_trend", ...pointIds, "s6", "s_emph", "s_cmp", "s7"];
       let visible = order.filter((id) => document.getElementById(id));
       const N = Math.max(1, visible.length);
       const startOf = {}, winOf = {};
