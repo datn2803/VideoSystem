@@ -93,7 +93,14 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
   keyMessages (chỉ title, backward-compat). Cắt giới hạn an toàn. **Test 6 ca biên PASS** (rich/fallback/thiếu field/tràn/rỗng).
 - [x] R2.6 **Self-test**: render-test theme 3 (dark) + theme 0 (bright) — point 2 thẻ xếp lớp đẹp, mini-stat đều, bars/CTA OK. tsc + build PASS.
 - [x] R2.7a **Deploy Vercel + VERIFY SCRIPTER THẬT**: ✅ pushed `916352d` (deploy READY production). Gen 1 script MỚI live (id `f9ed585c`, chủ đề AI lộ trình) → scripter sinh ĐÚNG `animation.points` giàu (3 thẻ: title+detail DẠY cụ thể+stat). 🔥 **GROUNDING NAY CHẠY**: fact researcher trả **8 nguồn THẬT** (vneconomy/tuoitre/vietnamnet… grounding-api-redirect) + số 2024 cụ thể → số liệu point là GROUNDED không phải bịa (billing hình như đã bật — xem memory). Render LOCAL data thật trong composition mới: 3 point card đẹp + flow 4 bước + bars 2 thanh căn giữa (đúng cái Tommy than "2 bản chia ra"). Builder map: edge-test 6 ca PASS.
-- [ ] R2.7b **Verify VIDEO THẬT trên VPS**: ⏳ CẦN Tommy scp composition mới + rebuild → gen/re-render 1 video → xem point cards giàu + chiều sâu trên video render thật (như lần verify caption). Backward-compat: builder gửi `text=title` nên dù chưa scp, point KHÔNG vỡ (chỉ hiện title-only tới khi scp).
+- [x] R2.7b **Verify VIDEO THẬT trên VPS**: ✅ Tommy scp + rebuild (smoke test ra mp4 OK). Re-render script `f9ed585c` →
+  video thật 60s: **3 point cards GIÀU + chiều sâu hiện đúng** (ĐIỂM 1/3 Hiểu nguyên lý AI · 2/3 Chọn công cụ AI ·
+  3/3 Prompt Engineering — mỗi thẻ title+detail+stat, 2 thẻ xếp lớp + số mờ nền). Theme dark (profile tài chính). CTA mũi tên OK.
+- [x] R2.8 **Polish bố cục point card** (commit `eb3ef6c`, feedback Tommy: cụm hơi cao/trống đáy): thẻ to/đậm hơn
+  (title 80, psv 130, padding rộng) + bỏ reserve caption thừa point scene (pb 296→172) → căn giữa TOÀN khung +
+  số mờ khổng lồ thành NỀN sau thẻ (top:690 cố định, không transform vì GSAP animate x/scale). Re-render video thật:
+  ĐÃ verify before/after — thẻ to + căn giữa + cân hơn. Lint build (vo no-src / overlapping-clips / file-large) =
+  PRE-EXISTING, non-blocking (smoke test luôn ra mp4 hợp lệ).
 
 ### Trạng thái deploy Round 2
 - ✅ **Scripter + builder**: ĐÃ push `916352d` → Vercel READY. Verify live: rich points + grounded. KHÔNG vỡ với composition cũ (text=title).
