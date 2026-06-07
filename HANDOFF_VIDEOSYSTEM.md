@@ -4,12 +4,13 @@
 
 ---
 
-# 🔄 TRẠNG THÁI HIỆN TẠI — ĐỌC ĐẦU TIÊN (cập nhật: phiên fix scripter, Jun 2026)
+# 🔄 TRẠNG THÁI HIỆN TẠI — ĐỌC ĐẦU TIÊN (cập nhật: phiên C3 v2 dark/caption/flow, Jun 2026)
 
 > ⚠ FILE NÀY LÀ TÀI LIỆU TIẾN ĐỘ **SỐNG** — luôn cập nhật phần "ĐANG LÀM ĐẾN ĐÂU" mỗi khi xong 1 mốc,
 > để nếu phiên chat bị ngắt thì phiên sau resume được NGAY (xem GIAO THỨC RESUME cuối phần này).
 
 ## ⚡ TL;DR — ĐANG LÀM ĐẾN ĐÂU (checklist sống)
+- ✅ **C3 v2 — đại tu thẩm mỹ animation** (commit `7882035`·`2eae374`·`a9766c7` trên `main`, deploy READY; composition đã scp VPS): **theme dark/bright theo industry** (tài chính→dark), **icon glow**, **caption karaoke sync read-script**, **sơ đồ flow** (pills+mũi tên), **bỏ nhân vật 3D** (tiết kiệm gpt-image+nhanh), **ưu tiên số thật vào viz** (khi bật billing). Render-test LOCAL dark+bright OK. ⏳ đang verify RENDER THẬT trên VPS. **Thiết kế: `BLUEPRINT_C3_V2.md`.**
 - ✅ **Bộ não nội dung (Profile→Plan→Script)**: ĐÃ CODE XONG cả 4 phần, trên `main` (7 commit `59e7412…3cbc901`). Đã tự test headless trên production → CHẠY THẬT (xem mục A).
 - ✅ **Bug scripter (parse JSON vỡ → script rác)**: ĐÃ FIX (`70d2eb0`) + **ĐÃ VERIFY LIVE** (deploy `16b08e7` READY): gen 2 script mới đều SẠCH (hook/body/cta + C3 keyMessages/dataPoints đầy đủ; Writer dùng nháy đơn `'..'` đúng prompt → hết vỡ JSON). Word-budget ~151–193 từ (≤90s OK; auditor flag nếu quá). Mục B.
 - ⚠ **Gemini 429 hết quota free-tier** (gen nhiều lần test → cạn): lỗi được xử lý graceful (message rõ, không tạo rác). Reset theo phút/ngày — HOẶC bật billing (mục C) để hết lo quota + có grounding.
