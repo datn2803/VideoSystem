@@ -36,7 +36,8 @@
     {"id":"mini_stats","type":"string","label":"S_mini JSON [{value,unit,label}]","default":"[]"},
     {"id":"mini_title","type":"string","label":"S_mini eyebrow","default":"Chỉ số"},
     {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""},
-    {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""}
+    {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""},
+    {"id":"captions","type":"string","label":"Phụ đề SYNC read-script JSON [{s,e,w:[{t,x}]}] — rỗng=ẩn","default":""}
   ]'
 >
   <head>
@@ -263,6 +264,18 @@
         background: rgba(124,58,237,0.12); overflow: hidden; z-index: 40; }
       #progress .pfb { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
         border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); will-change: transform; }
+
+      /* ── Caption SYNC (karaoke) — học ref @escbase. Ẩn nếu không có biến captions. ── */
+      #capbox { position: absolute; left: 64px; right: 64px; bottom: 138px; z-index: 35;
+        display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-end; gap: 4px 0.34em;
+        text-align: center; font-weight: 800; font-size: 47px; line-height: 1.22; letter-spacing: -0.2px;
+        opacity: 0; text-shadow: 0 2px 16px rgba(0,0,0,0.45); }
+      #capbox .cw { color: var(--sub); transition: color 0.12s linear; }   /* chưa đọc tới → mờ */
+      #capbox .cw.said { color: var(--ink); }                              /* đã đọc → rõ */
+      #capbox .cw.cur { color: var(--accent); }                            /* đang đọc → highlight */
+      /* Có caption → chừa chỗ đáy để KHÔNG đè nội dung cảnh */
+      [data-caps="1"] .scene.left { padding-bottom: 296px; }
+      [data-caps="1"] .scene.center { padding-bottom: 220px; }
 
       /* header trên (brand/topic) — đóng khung phần đỉnh ở mọi cảnh, hết trống đầu */
       #topbar { position: absolute; left: 72px; top: 76px; display: inline-flex; align-items: center; gap: 16px; z-index: 40; }
@@ -494,6 +507,7 @@
       </div>
 
       <!-- Thanh tiến trình chạy suốt clip (lấp đáy) -->
+      <div id="capbox"></div>
       <div id="progress"><div class="pfb" id="progressFill"></div></div>
     </div>
 
@@ -1130,6 +1144,34 @@
       });
 
       tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
+      // ── Caption SYNC (karaoke): render phụ đề theo thời gian timeline (chạy cả khi seek từng frame) ──
+      let CAPS = [];
+      try { CAPS = JSON.parse(v.captions || "[]"); } catch (e) { CAPS = []; }
+      if (Array.isArray(CAPS) && CAPS.length) {
+        document.documentElement.setAttribute("data-caps", "1");
+        const capbox = document.getElementById("capbox");
+        const escc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+        const renderCap = (t) => {
+          let p = null;
+          for (let i = 0; i < CAPS.length; i++) { if (t >= CAPS[i].s && t < CAPS[i].e) { p = CAPS[i]; break; } }
+          if (!p && CAPS.length && t >= CAPS[CAPS.length - 1].s) p = CAPS[CAPS.length - 1];
+          if (!p) { capbox.style.opacity = "0"; return; }
+          capbox.style.opacity = "1";
+          const key = String(p.s);
+          if (capbox.dataset.k !== key) {
+            capbox.dataset.k = key;
+            capbox.innerHTML = (p.w || []).map((wd) => '<span class="cw" data-t="' + wd.t + '">' + escc(wd.x) + "</span>").join("");
+          }
+          let curIdx = -1;
+          const ws = p.w || [];
+          for (let i = 0; i < ws.length; i++) { if (t >= ws[i].t) curIdx = i; }
+          const sp = capbox.children;
+          for (let i = 0; i < sp.length; i++) sp[i].className = "cw" + (i < curIdx ? " said" : i === curIdx ? " cur" : "");
+        };
+        const prevCb = tl.eventCallback("onUpdate");
+        tl.eventCallback("onUpdate", () => { if (prevCb) prevCb(); renderCap(tl.time()); });
+        renderCap(0);
+      }
       window.__timelines["main"] = tl;
     </script>
   </body>

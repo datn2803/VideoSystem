@@ -47,7 +47,7 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
 - [x] B1. Theme dark + tokenize + mode CSS (animation.html) → render-test dark vs bright. ✅ DONE: thêm 2 dark theme (idx 3 Dark Pro tài chính, idx 4 Dark Tech) + LIGHT/DARK_MODE token + `data-mode`; tokenize card-border/grid-dot/body-bg/elev. Render-test theme 3: 13 cảnh đều đẹp, 0 vỡ. (Còn quan sát: cảnh bignum hơi trống — theme-independent, để sau.)
 - [x] B2. Icon glow semantic. ✅ DONE: icon eyebrow đã là Lucide-style sẵn → nâng `.ico` 44→58px + gradient accent→accent2 + box-shadow glow. Render-test dark+bright: nổi bật, premium 2 mode.
 - [ ] B3. Flow-diagram scene → render-test. (chưa làm)
-- [ ] B4. Caption layer (sync read-script). (chưa làm — word-timestamps đã có sẵn từ `transcribeWords` trong buildAnimation → tái dùng cho caption.)
+- [x] B4. Caption layer (sync read-script). ✅ DONE: composition thêm biến `captions` + `#capbox` + CSS (reserve chỗ đáy `[data-caps]`) + JS hook `tl.eventCallback("onUpdate")` render karaoke (said=ink, cur=accent, future=sub). Builder `buildCaptions(words,total)` gom Whisper word-timestamps thành phrase + truyền `captions`. Render-test dark+light: sync, không đè nội dung, đọc rõ 2 mode. tsc PASS.
 - [x] B5. Bỏ hero 3D + dọn. ✅ DONE: buildAnimation bỏ gọi generateHeroImageUrl, img_hero="" (scene tự ẩn) → TIẾT KIỆM gpt-image + nhanh hơn. `generateHeroImageUrl` giữ lại = RESERVED cho AI-icon tương lai.
 - [x] B6. Builder chọn theme theo industry. ✅ DONE: `themeForTopic(industry,seed)` — tài chính→dark idx 3, còn lại→bright 0-2. Fetch profile trong buildAnimation, override `theme` var. tsc+build PASS.
 - [ ] B7. Route số grounded thật vào viz + nhãn nguồn. (chưa làm — cần Tommy bật billing trước để có số thật.)
