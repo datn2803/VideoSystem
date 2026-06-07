@@ -61,6 +61,13 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
 - ⚠ Nên scp composition + push builder GẦN nhau để finance video ra dark+caption ngay (không thì: builder mới + composition cũ → clamp về light, bỏ qua caption/flow — vẫn KHÔNG vỡ, chỉ chưa thấy look mới).
 - Verify thật: Tommy gen 1 video tài chính (C3) sau khi scp+push → xem dark + caption + (flow nếu chủ đề có quy trình).
 
+### 🔬 KẾT QUẢ RENDER THẬT trên VPS (script e8da57c3 tài chính) — tự test
+- ✅ **dark theme + theme-theo-industry**: video render NỀN TỐI, accent cyan-violet — ĐÚNG (builder chọn dark cho finance).
+- ✅ **mọi scene** (bignum/donut/trend/before-after/point/...) render đẹp trên dark; ✅ **icon glow**; ✅ **bỏ 3D** (không có nhân vật).
+- ❌ **CAPTION KHÔNG hiện** trên video thật (chạy ở local nhưng không lên VPS). Chẩn đoán: `transcribeWords` (Whisper) trả `null` SILENT (key/quota/audio) → builder set `captions=""` → không có phụ đề. (`scene_times` cũng đang fallback theo trọng số → khớp giả thuyết whisper fail.)
+- 🔧 **ĐÃ FIX**: `buildCaptions` thêm FALLBACK — whisper null thì chia đều read-script theo thời lượng → VẪN có caption. Test 7/7 + tsc/build PASS. (Whisper chạy được thì caption sync chuẩn hơn.)
+- ⏳ **CẦN để xác nhận caption**: (1) push builder fix lên main, (2) Tommy RE-SCP composition mới nhất (đảm bảo VPS có code #capbox — phòng trường hợp scp trước thiếu), (3) re-render → soi lại đáy.
+
 ## 6. Cách test (đã có công cụ)
 - Render LOCAL offline: `node _c3_render.mjs` (Playwright + Chrome hệ thống, inject biến mẫu, step-frame count-up) → ảnh `/tmp/c3frames/`. So sánh ref `/tmp/vidframes/`.
 - KHÔNG cần VPS để iterate. Khi C3 ổn → Tommy scp animation.html + `docker compose up -d --build`.

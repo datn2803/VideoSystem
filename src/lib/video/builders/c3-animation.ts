@@ -105,24 +105,33 @@ function themeForTopic(industry: string, seed: string): number {
   return themeFromSeed(seed); // 0-2 Bright
 }
 
-/** Gom Whisper word-timestamps → phụ đề SYNC karaoke cho C3: JSON [{s,e,w:[{t,x}]}].
- *  Ngắt câu theo dấu kết câu / ~7 từ / ~42 ký tự / khoảng lặng >0.55s. e câu = s câu sau (liền mạch).
- *  words=null (whisper lỗi/thiếu key) → "" → composition tự ẩn phụ đề. */
-function buildCaptions(words: Word[] | null, total: number): string {
-  if (!words || words.length === 0) return "";
+/** Gom thành phụ đề SYNC karaoke cho C3: JSON [{s,e,w:[{t,x}]}]. Ngắt câu theo dấu kết câu /
+ *  ~7 từ / ~42 ký tự / khoảng lặng >0.55s. e câu = s câu sau (liền mạch).
+ *  - CÓ Whisper words → timing THẬT (sync chuẩn nhất).
+ *  - words=null (whisper lỗi/thiếu key — hay xảy ra & SILENT) → FALLBACK: chia đều `fallbackText`
+ *    (read-script) theo thời lượng → VẪN có caption (kém sync hơn) thay vì rỗng. */
+function buildCaptions(words: Word[] | null, total: number, fallbackText?: string): string {
+  type WT = { t: number; x: string; gap: number };
+  let wlist: WT[] = [];
+  if (words && words.length > 0) {
+    const ws = words.map((w) => ({ x: (w.text || "").trim(), start: w.start, end: w.end })).filter((w) => w.x);
+    wlist = ws.map((w, i) => ({ t: +w.start.toFixed(2), x: w.x, gap: i + 1 < ws.length ? ws[i + 1].start - w.end : 99 }));
+  } else {
+    const toks = (fallbackText || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    if (toks.length === 0) return "";
+    const t0 = 0.3, t1 = Math.max(t0 + 1, total - 0.8);
+    wlist = toks.map((x, i) => ({ t: +(t0 + (t1 - t0) * (i / Math.max(1, toks.length - 1))).toFixed(2), x, gap: 0 }));
+  }
+  if (wlist.length === 0) return "";
   type Ph = { s: number; e: number; w: { t: number; x: string }[] };
   const phrases: Ph[] = [];
   let cur: { t: number; x: string }[] = [];
   let chars = 0;
   const flush = () => { if (cur.length) { phrases.push({ s: cur[0].t, e: 0, w: cur }); cur = []; chars = 0; } };
-  for (let i = 0; i < words.length; i++) {
-    const x = (words[i].text || "").trim();
-    if (!x) continue;
-    cur.push({ t: +words[i].start.toFixed(2), x });
-    chars += x.length + 1;
-    const next = words[i + 1];
-    const gap = next ? next.start - words[i].end : 99;
-    if (cur.length >= 7 || chars >= 42 || /[.!?…]$/.test(x) || gap > 0.55) flush();
+  for (const wd of wlist) {
+    cur.push({ t: wd.t, x: wd.x });
+    chars += wd.x.length + 1;
+    if (cur.length >= 7 || chars >= 42 || /[.!?…]$/.test(wd.x) || wd.gap > 0.55) flush();
   }
   flush();
   for (let i = 0; i < phrases.length; i++) phrases[i].e = i + 1 < phrases.length ? phrases[i + 1].s : Math.max(total, phrases[i].s + 1);
@@ -409,8 +418,8 @@ export async function buildAnimation(input: {
         topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
         // THEME theo industry: tài chính → dark pro; còn lại → bright (ghi đè theme hash trong animVars)
         theme: String(themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())),
-        // Phụ đề SYNC read-script (karaoke) từ Whisper word-timestamps. words=null → "" → ẩn.
-        captions: buildCaptions(words, durationSec),
+        // Phụ đề SYNC read-script (karaoke). Whisper words → sync chuẩn; null → fallback chia đều read-script.
+        captions: buildCaptions(words, durationSec, `${script.script.hook} ${script.script.body} ${script.script.cta}`),
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {
