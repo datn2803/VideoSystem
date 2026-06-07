@@ -92,12 +92,12 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
 - [x] R2.5 **Wiring builder**: `c3-animation.ts` map `anim.points` (giàu) → pointScenes {n,total,title,detail,stat}; thiếu → fallback
   keyMessages (chỉ title, backward-compat). Cắt giới hạn an toàn. **Test 6 ca biên PASS** (rich/fallback/thiếu field/tràn/rỗng).
 - [x] R2.6 **Self-test**: render-test theme 3 (dark) + theme 0 (bright) — point 2 thẻ xếp lớp đẹp, mini-stat đều, bars/CTA OK. tsc + build PASS.
-- [ ] R2.7 **Deploy + verify thật**: push builder/scripter (Vercel) + Tommy scp composition VPS → gen 1 video tài chính → xem point cards giàu data + chiều sâu.
+- [x] R2.7a **Deploy Vercel + VERIFY SCRIPTER THẬT**: ✅ pushed `916352d` (deploy READY production). Gen 1 script MỚI live (id `f9ed585c`, chủ đề AI lộ trình) → scripter sinh ĐÚNG `animation.points` giàu (3 thẻ: title+detail DẠY cụ thể+stat). 🔥 **GROUNDING NAY CHẠY**: fact researcher trả **8 nguồn THẬT** (vneconomy/tuoitre/vietnamnet… grounding-api-redirect) + số 2024 cụ thể → số liệu point là GROUNDED không phải bịa (billing hình như đã bật — xem memory). Render LOCAL data thật trong composition mới: 3 point card đẹp + flow 4 bước + bars 2 thanh căn giữa (đúng cái Tommy than "2 bản chia ra"). Builder map: edge-test 6 ca PASS.
+- [ ] R2.7b **Verify VIDEO THẬT trên VPS**: ⏳ CẦN Tommy scp composition mới + rebuild → gen/re-render 1 video → xem point cards giàu + chiều sâu trên video render thật (như lần verify caption). Backward-compat: builder gửi `text=title` nên dù chưa scp, point KHÔNG vỡ (chỉ hiện title-only tới khi scp).
 
 ### Trạng thái deploy Round 2
-- **Composition (animation.html)**: point cards + mini-stat fix + CTA arrow — Ở GIT, **CẦN Tommy scp + rebuild VPS** (lệnh như mục 5 trên).
-- **Scripter + builder**: push `git push origin HEAD:main` → Vercel (field points + mapping).
-- ⚠ Như cũ: scp composition + push GẦN nhau để point cards giàu hiện ngay (composition cũ + builder mới vẫn KHÔNG vỡ — point chỉ có title).
+- ✅ **Scripter + builder**: ĐÃ push `916352d` → Vercel READY. Verify live: rich points + grounded. KHÔNG vỡ với composition cũ (text=title).
+- ⏳ **Composition (animation.html)**: point cards + mini-stat fix + CTA arrow — Ở GIT, **CẦN Tommy scp + rebuild VPS** (lệnh như mục 5 trên) để point cards GIÀU hiện trên video thật.
 
 ## 6. Cách test (đã có công cụ)
 - Render LOCAL offline: `node _c3_render.mjs` (Playwright + Chrome hệ thống, inject biến mẫu, step-frame count-up) → ảnh `/tmp/c3frames/`. So sánh ref `/tmp/vidframes/`.
