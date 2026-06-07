@@ -66,7 +66,15 @@ Mở rộng `THEMES` (animation.html ~L581) thêm field `mode` + token mode-depe
 - ✅ **mọi scene** (bignum/donut/trend/before-after/point/...) render đẹp trên dark; ✅ **icon glow**; ✅ **bỏ 3D** (không có nhân vật).
 - ❌ **CAPTION KHÔNG hiện** trên video thật (chạy ở local nhưng không lên VPS). Chẩn đoán: `transcribeWords` (Whisper) trả `null` SILENT (key/quota/audio) → builder set `captions=""` → không có phụ đề. (`scene_times` cũng đang fallback theo trọng số → khớp giả thuyết whisper fail.)
 - 🔧 **ĐÃ FIX**: `buildCaptions` thêm FALLBACK — whisper null thì chia đều read-script theo thời lượng → VẪN có caption. Test 7/7 + tsc/build PASS. (Whisper chạy được thì caption sync chuẩn hơn.)
-- ⏳ **CẦN để xác nhận caption**: (1) push builder fix lên main, (2) Tommy RE-SCP composition mới nhất (đảm bảo VPS có code #capbox — phòng trường hợp scp trước thiếu), (3) re-render → soi lại đáy.
+- ✅ **CAPTION ĐÃ VERIFY trên production** (render lại sau fix + re-scp): băng đáy 40 frame đầy phụ đề karaoke đúng read-script, keyword tô màu, không đè nội dung. HOÀN TẤT.
+  - Quá trình: push builder fix `65e7d1e` → re-scp composition (lần đầu scp lỗi do path `.../`) → **gặp HTTP 404** (container rebuild lỗi/mong manh sau scp-lỗi, KHÔNG phải code: `/health`=200, `/render`=401 route OK) → re-scp ĐÚNG full-path + rebuild (container recreate sạch) → re-render → **caption hiện**.
+  - Bài học: (1) scp PHẢI full-path (đừng `.../`); (2) Docker `COPY . . CACHED` OK nếu file scp giống bản đã bake; (3) sau rebuild lỗi, container có thể mong manh → recreate sạch là khỏi.
+
+### Tình trạng cuối — C3 v2 (đã deploy + verify production)
+- ✅ dark theme · ✅ icon glow · ✅ caption karaoke · ✅ bỏ 3D · ✅ theme-theo-industry — TẤT CẢ chạy thật trên video VPS.
+- ⏳ flow: không xuất hiện ở render test (script cũ không có data flow) — sẽ hiện với chủ đề CÓ quy trình (scripter mới sinh field flow).
+- ⏳ B7 số thật: plumbing đã deploy, kích hoạt khi Tommy bật billing Gemini.
+- (nhỏ, để sau) vài cảnh thưa khi ít mục (bars 2 thanh, bignum) — pre-existing, không gấp.
 
 ## 6. Cách test (đã có công cụ)
 - Render LOCAL offline: `node _c3_render.mjs` (Playwright + Chrome hệ thống, inject biến mẫu, step-frame count-up) → ảnh `/tmp/c3frames/`. So sánh ref `/tmp/vidframes/`.
