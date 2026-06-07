@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
+import { store } from "@/lib/integration-hub/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
 import { getOpenAIKey, transcribeWords, alignByWeights } from "@/lib/audio/whisper";
 import type { ScriptResult } from "@/lib/agents/scripter";
@@ -12,6 +13,8 @@ import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_sh
  * Sinh 1 ảnh cutout nền TRONG SUỐT trên Vercel (OpenAI reach được; VPS bị Cloudflare
  * chặn IP datacenter) → upload Supabase → trả PUBLIC URL cho VPS render fetch.
  * Lỗi bất kỳ → trả "" (scene tự ẩn ảnh — fallback 2A, KHÔNG fail render).
+ * ⚠ C3 v2: HIỆN KHÔNG GỌI (đã bỏ nhân vật 3D). GIỮ LẠI có chủ đích = reserved cho
+ * AI-gen icon/logo/ảnh minh hoạ nhỏ tương lai (theo ý Tommy). KHÔNG phải dead code lỡ tay.
  */
 async function generateHeroImageUrl(scriptId: string, subject: string): Promise<string> {
   try {
@@ -89,6 +92,17 @@ function themeFromSeed(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return h % 3; // 3 light theme trong animation.html (lavender/cream/mist)
+}
+
+/** Chọn THEME theo CHỦ ĐỀ (industry của profile) — chốt với Tommy:
+ *  tài chính/ngân hàng → DARK PRO (nghiêm túc, chỉn chu, idx 3);
+ *  công nghệ/đời sống/khác → BRIGHT tươi (idx 0-2, vary theo nội dung).
+ *  Composition clamp idx về [0, THEMES-1] nên an toàn nếu VPS chưa cập nhật dark. */
+function themeForTopic(industry: string, seed: string): number {
+  const ind = (industry || "").toLowerCase();
+  const isFinance = /bank|financ|tài chính|ngân hàng|fintech|chứng khoán|securit|invest|đầu tư|bảo hiểm|insur|tín dụng|\bvay\b|\bloan/.test(ind);
+  if (isFinance) return 3; // Dark Pro
+  return themeFromSeed(seed); // 0-2 Bright
 }
 
 /** Token đơn vị NGẮN (1 từ) cho chip/bar. */
@@ -311,6 +325,7 @@ export async function buildAnimation(input: {
 }): Promise<VideoDraftRecord> {
   const script = await scriptStore.get(input.scriptId);
   if (!script) throw new Error("Script not found");
+  const profile = await store.getProfile(script.profileId); // → chọn theme dark/bright theo industry
 
   const audios = await audioStore.byScript(input.scriptId);
   // GIỌNG C3 = "full" (read script = hook+body+cta) → KHỚP C1/C2 khi ghép/đồng bộ.
@@ -344,23 +359,14 @@ export async function buildAnimation(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 18.5;
-      // 2B-fix: sinh ảnh cutout NGAY TRÊN VERCEL (VPS bị OpenAI chặn IP) → URL Supabase.
-      // Subject GENERIC từ keyMessage/hook; lỗi → "" (scene tự ẩn ảnh).
-      const anim = script.script.variantPrompts.animation;
-      const heroSubject = (anim.heroSubject || anim.keyMessages?.[0] || script.script.hook || "modern finance concept")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 120);
       const { variables: animVars, sceneSpecs } = buildAnimationVariables(script.script, durationSec);
 
       // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
-      // Chạy SONG SONG với sinh ảnh hero để tránh vượt Vercel 60s. Lỗi/thiếu key → words=null
-      // → alignByWeights tự fallback chia theo tỉ lệ trọng số (vẫn tốt hơn chia đều cứng).
+      // Lỗi/thiếu key → words=null → alignByWeights tự fallback chia theo tỉ lệ trọng số.
+      // C3 v2: BỎ sinh ảnh nhân vật 3D (Tommy chốt) → tiết kiệm gpt-image + nhanh hơn; img_hero="" → scene tự ẩn.
       const openaiKey = await getOpenAIKey();
-      const [imgHeroUrl, words] = await Promise.all([
-        generateHeroImageUrl(input.scriptId, `${heroSubject}, conceptual subject for a Vietnamese finance/tech short video`),
-        voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
-      ]);
+      const words = voiceUrl && openaiKey ? await transcribeWords(voiceUrl, openaiKey) : null;
+      const imgHeroUrl = "";
       const times = alignByWeights(sceneSpecs.map((sp) => sp.weight), words, durationSec);
       const sceneTimes: Record<string, { start: number; dur: number }> = {};
       sceneSpecs.forEach((sp, i) => { sceneTimes[sp.id] = times[i]; });
@@ -372,6 +378,8 @@ export async function buildAnimation(input: {
         img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
         scene_times: JSON.stringify(sceneTimes), // đồng bộ cảnh với giọng đọc
         topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
+        // THEME theo industry: tài chính → dark pro; còn lại → bright (ghi đè theme hash trong animVars)
+        theme: String(themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())),
       };
       const job = await renderer.render({ templateId: "animation", modifications: variables });
       return (await videoStore.update(draft.id, {

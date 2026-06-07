@@ -47,13 +47,16 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
-        width: 1080px; height: 1920px; overflow: hidden; background: #f3f0fb;
+        width: 1080px; height: 1920px; overflow: hidden; background: var(--bg2, #f3f0fb);
         font-family: "Be Vietnam Pro", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
       }
       :root {
         --bg1: #f4f0fc; --bg2: #e9e3f8; --accent: #7c3aed; --accent2: #a78bfa;
         --ink: #1e1b2e; --sub: #6b6480; --card: #ffffff; --glow: rgba(124,58,237,0.16);
+        /* mode-dependent (theme JS ghi đè cho dark) — mặc định = light */
+        --card-border: rgba(120,90,210,0.08); --grid-dot: rgba(124,58,237,0.06);
+        --good: #16a34a; --bad: #dc2626; --warn: #d97706;
         /* hệ ELEVATION 2 lớp (depth premium): 1 bóng tight ghì thẻ + 1 bóng to mềm nâng thẻ */
         --elev-1: 0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13);
         --elev-2: 0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow);
@@ -87,7 +90,7 @@
       }
       .dotgrid {
         position: absolute; inset: 0; pointer-events: none;
-        background-image: radial-gradient(rgba(124,58,237,0.06) 1.4px, transparent 1.4px);
+        background-image: radial-gradient(var(--grid-dot) 1.4px, transparent 1.4px);
         background-size: 46px 46px;
         -webkit-mask-image: radial-gradient(85% 75% at 50% 45%, #000 30%, transparent 82%);
         mask-image: radial-gradient(85% 75% at 50% 45%, #000 30%, transparent 82%);
@@ -98,9 +101,12 @@
       .eyebrow.dot { align-self: center; background: rgba(124,58,237,0.10); color: var(--accent);
         font-weight: 800; font-size: 32px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 26px; border-radius: 999px; }
       .eyebrow.dot::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
-      .eyebrow.icon .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); color: #fff;
+      /* Icon glow semantic (học ref): square lớn + gradient + box-shadow glow → nổi bật, premium 2 mode */
+      .eyebrow.icon .ico { width: 58px; height: 58px; border-radius: 16px;
+        background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff;
+        box-shadow: 0 6px 22px var(--glow), inset 0 1px 0 rgba(255,255,255,0.28);
         display: flex; align-items: center; justify-content: center; }
-      .eyebrow.icon .ico svg { width: 24px; height: 24px; }
+      .eyebrow.icon .ico svg { width: 30px; height: 30px; }
       .eyebrow.icon .lbl { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 2px; text-transform: uppercase; }
 
       /* ── Headline ── */
@@ -108,7 +114,7 @@
       .h-title .ac { color: var(--accent); }
 
       /* ── Bento card primitives ── */
-      .bento { background: var(--card); border-radius: 22px; border: 1px solid rgba(120,90,210,0.08);
+      .bento { background: var(--card); border-radius: 22px; border: 1px solid var(--card-border);
         box-shadow: var(--elev-1); }
       .bento-accent { background: linear-gradient(150deg, var(--accent), var(--accent2)); color: #fff; border-radius: 22px; box-shadow: var(--elev-2); }
       /* SHEEN kính: vệt sáng góc trên-trái trên thẻ gradient → chiều sâu 3D, premium (không dùng blur → render nhanh) */
@@ -577,19 +583,44 @@
         });
       }
 
-      // ── THEME (light) ──
+      // ── THEME: BRIGHT (0-2, mode light) + DARK PRO (3-4, mode dark). Builder chọn index theo industry. ──
+      // Token mode-dependent: light/dark dùng default chung, theme có thể override riêng.
+      const LIGHT_MODE = {
+        cardBorder: "rgba(120,90,210,0.08)", gridDot: "rgba(124,58,237,0.06)",
+        elev1: "0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13)",
+        elev2: "0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow)",
+        good: "#16a34a", bad: "#dc2626", warn: "#d97706",
+      };
+      const DARK_MODE = {
+        cardBorder: "rgba(255,255,255,0.09)", gridDot: "rgba(255,255,255,0.05)",
+        elev1: "0 2px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)",
+        elev2: "0 10px 34px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06), 0 0 46px var(--glow)",
+        good: "#34d399", bad: "#f87171", warn: "#fbbf24",
+      };
       const THEMES = [
-        { bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
-        { bg1: "#f8f2e9", bg2: "#f1e7d6", accent: "#7c3aed", accent2: "#f59e0b", ink: "#2b2238", sub: "#6b6480", card: "#fffdfa", glow: "rgba(124,58,237,0.14)" },
-        { bg1: "#eef1fb", bg2: "#e3e8f7", accent: "#6d28d9", accent2: "#60a5fa", ink: "#1b1d2e", sub: "#646b80", card: "#ffffff", glow: "rgba(109,40,217,0.15)" },
+        // BRIGHT (công nghệ/đời sống — tươi, năng lượng)
+        { mode: "light", bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
+        { mode: "light", bg1: "#f8f2e9", bg2: "#f1e7d6", accent: "#7c3aed", accent2: "#f59e0b", ink: "#2b2238", sub: "#6b6480", card: "#fffdfa", glow: "rgba(124,58,237,0.14)" },
+        { mode: "light", bg1: "#eef1fb", bg2: "#e3e8f7", accent: "#6d28d9", accent2: "#60a5fa", ink: "#1b1d2e", sub: "#646b80", card: "#ffffff", glow: "rgba(109,40,217,0.15)" },
+        // DARK PRO (tài chính — nghiêm túc, chỉn chu, premium)
+        { mode: "dark", bg1: "#0f0d17", bg2: "#17121f", accent: "#8b5cf6", accent2: "#22d3ee", ink: "#f4f2fb", sub: "#a39db8", card: "#1c1828", glow: "rgba(139,92,246,0.30)" },
+        // DARK TECH (công nghệ nghiêm túc — xanh dương/xanh lá)
+        { mode: "dark", bg1: "#0c0f17", bg2: "#121826", accent: "#38bdf8", accent2: "#34d399", ink: "#eef4fb", sub: "#93a0b5", card: "#161c28", glow: "rgba(56,189,248,0.26)" },
       ];
       const ti = Math.max(0, Math.min(THEMES.length - 1, parseInt(v.theme, 10) || 0));
       const TH = THEMES[ti];
+      const MO = TH.mode === "dark" ? DARK_MODE : LIGHT_MODE;
       const rs = document.documentElement.style;
+      document.documentElement.dataset.mode = TH.mode || "light";
       rs.setProperty("--bg1", TH.bg1); rs.setProperty("--bg2", TH.bg2);
       rs.setProperty("--accent", TH.accent); rs.setProperty("--accent2", TH.accent2);
       rs.setProperty("--ink", TH.ink); rs.setProperty("--sub", TH.sub);
       rs.setProperty("--card", TH.card); rs.setProperty("--glow", TH.glow);
+      rs.setProperty("--card-border", TH.cardBorder || MO.cardBorder);
+      rs.setProperty("--grid-dot", TH.gridDot || MO.gridDot);
+      rs.setProperty("--elev-1", TH.elev1 || MO.elev1);
+      rs.setProperty("--elev-2", TH.elev2 || MO.elev2);
+      rs.setProperty("--good", TH.good || MO.good); rs.setProperty("--bad", TH.bad || MO.bad); rs.setProperty("--warn", TH.warn || MO.warn);
       // gradient stop cho ring donut + đường trend (set trực tiếp → chắc chắn render, không lệ thuộc var() trong SVG)
       const setStop = (id, c) => { const e = document.getElementById(id); if (e) e.setAttribute("stop-color", c); };
       setStop("dnG0", TH.accent2); setStop("dnG1", TH.accent);
