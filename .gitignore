@@ -35,3 +35,23 @@ hyperframes-demo/
 
 # Script test/scratch tạm (E2E headless, sanity test) — local-only, không commit
 _*.mjs
+
+# ───────────────────────── BẢO MẬT (thêm) ─────────────────────────
+# Belt-and-suspenders: MỌI biến thể .env khác (.env.production, .env.development…) — chỉ chừa *.example
+.env.*
+!.env.example
+# MCP config có thể chứa token (Supabase PAT) → KHÔNG commit. Muốn chia sẻ: tạo .mcp.example.json chỉ chứa ${ENV}
+.mcp.json
+# Khoá riêng / chứng chỉ / service-account / credential
+*.pem
+*.key
+*.p12
+*.pfx
+*-private-key*
+*service-account*.json
+*serviceaccount*.json
+*credentials*.json
+secrets/
+*.secret
+# Bản kiểm tra/đời chạy LOCAL có thể chứa key (vd check.local.sh) — nhưng vẫn commit check.sh (zero-secret)
+*.local.sh

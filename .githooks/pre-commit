@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# Pre-commit secret guard — CHẶN commit nếu phát hiện chuỗi giống API key / token.
+# Đã từng lộ DeepSeek + ElevenLabs key lên GitHub; hook này để KHÔNG bao giờ tái diễn.
+# Bypass khẩn cấp (khi CHẮC CHẮN là dương tính giả):  git commit --no-verify
+# Bật hook:  git config core.hooksPath .githooks   (hoặc chạy `npm install`)
+# ─────────────────────────────────────────────────────────────────────────────
+set -u
+RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; DIM=$'\033[2m'; RST=$'\033[0m'
+
+files=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$files" ] && exit 0
+
+# Mẫu secret theo ĐỊNH DẠNG GIÁ TRỊ (không match tên header/biến → tránh dương tính giả)
+# Lưu ý: sk-/sk_ cho phép cả _ và - để bắt key có gạch dưới (vd HeyGen sk_V2_hgu_…)
+PATTERNS='sk-[A-Za-z0-9_-]{20,}|sk_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[0-9A-Za-z-]{10,}|AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+# Loại trừ: tham chiếu env, placeholder, ví dụ
+EXCLUDE='process\.env|import\.meta\.env|os\.environ|getenv|process\.argv|\$\{|<[A-Za-z_]|placeholder|YOUR_|your_|xxxx|XXXX|example|sample|dummy|REPLACE|eyJhbGc\.\.\.'
+
+hits=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$f" in
+    *.example|*.example.*|*.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.mp4|*.mp3|*.wav|*.woff|*.woff2|*.ico|*.pdf|*.lock|package-lock.json|pnpm-lock.yaml|yarn.lock|SECURITY.md|.githooks/*) continue;;
+  esac
+  content=$(git show ":$f" 2>/dev/null) || continue
+  matches=$(printf '%s\n' "$content" | grep -nIE "$PATTERNS" 2>/dev/null | grep -vIE "$EXCLUDE")
+  if [ -n "$matches" ]; then
+    hits=1
+    echo "${RED}✖ Nghi secret:${RST} $f"
+    printf '%s\n' "$matches" | sed -E 's/([A-Za-z0-9_-]{5})[A-Za-z0-9_+/=-]{10,}([A-Za-z0-9_-]{4})/\1…\2/g' | sed 's/^/    /'
+  fi
+done <<EOF
+$files
+EOF
+
+if [ "$hits" -ne 0 ]; then
+  echo
+  echo "${RED}⛔ COMMIT BỊ CHẶN — phát hiện chuỗi giống secret.${RST}"
+  echo "${YEL}→ Nếu là secret THẬT:${RST} gỡ khỏi code, đưa vào .env.local (đã .gitignore) hoặc Vercel env."
+  echo "${YEL}→ Nếu CHẮC là dương tính giả:${RST} ${DIM}git commit --no-verify${RST}"
+  exit 1
+fi
+exit 0

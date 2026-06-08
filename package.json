@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
+    "check": "bash check.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
