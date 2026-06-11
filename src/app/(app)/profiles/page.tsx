@@ -5,12 +5,18 @@ import { store } from "@/lib/integration-hub/storage";
 import { CreateProfileDialog } from "@/components/profiles/create-profile-dialog";
 import { CreatePlanButton, DeleteProfileButton } from "@/components/profiles/profile-actions";
 import { ProfileStrategyPanel } from "@/components/profiles/profile-strategy";
+import { BrandKitPanel } from "@/components/profiles/brand-kit-card";
+import { getOrCreateBrandKit } from "@/lib/design/director";
+import { DESIGN_SYSTEMS } from "@/design/library";
 import { UserCircle2, Briefcase, Target, Mic, Award, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function ProfilesPage() {
   const profiles = await store.listProfiles();
+  // Director đảm bảo mỗi profile có BrandKit (idempotent, $0) — đa brand keyed theo profile.
+  const kits = await Promise.all(profiles.map((p) => getOrCreateBrandKit(p.id)));
+  const systemOptions = DESIGN_SYSTEMS.map((s) => ({ id: s.id, name: s.name, mode: s.mode }));
 
   return (
     <>
@@ -38,7 +44,7 @@ export default async function ProfilesPage() {
           </Card>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            {profiles.map((p) => (
+            {profiles.map((p, pi) => (
               <Card key={p.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6 space-y-4">
                   <div className="flex items-start gap-4">
@@ -95,6 +101,8 @@ export default async function ProfilesPage() {
                   </div>
 
                   <ProfileStrategyPanel profileId={p.id} strategy={p.strategy} />
+
+                  <BrandKitPanel profileId={p.id} kit={kits[pi]} systems={systemOptions} />
 
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <DeleteProfileButton profileId={p.id} name={p.name} />

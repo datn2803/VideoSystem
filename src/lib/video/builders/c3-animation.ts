@@ -6,6 +6,7 @@ import { store } from "@/lib/integration-hub/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
 import { getOpenAIKey, transcribeWords, alignByWeights, type Word } from "@/lib/audio/whisper";
 import type { ScriptResult } from "@/lib/agents/scripter";
+import { getOrCreateBrandKit } from "@/lib/design/director";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 
@@ -426,6 +427,11 @@ export async function buildAnimation(input: {
       const sceneTimes: Record<string, { start: number; dur: number }> = {};
       sceneSpecs.forEach((sp, i) => { sceneTimes[sp.id] = times[i]; });
 
+      // BrandKit (Tầng 2 → Tầng 3): token chảy vào composition qua biến `tokens`.
+      // Composition MỚI ưu tiên tokens; composition CŨ trên VPS chưa khai báo biến
+      // này → tự bỏ qua, rơi về `theme` fallback bên dưới → KHÔNG gãy khi chưa scp.
+      const kit = await getOrCreateBrandKit(script.profileId);
+
       const variables = {
         ...animVars,
         voice_url: voiceUrl,
@@ -433,7 +439,12 @@ export async function buildAnimation(input: {
         img_hero: imgHeroUrl, // URL công khai → VPS render fetch (KHÔNG nhờ VPS sinh ảnh)
         scene_times: JSON.stringify(sceneTimes), // đồng bộ cảnh với giọng đọc
         topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
-        // THEME theo industry: tài chính → dark pro; còn lại → bright (ghi đè theme hash trong animVars)
+        // BrandKit tokens (Phase 2) — đổi kit là đổi look, không sửa code composition.
+        tokens: kit ? JSON.stringify(kit.tokens) : "",
+        // Cổng QC thiết kế 5 chiều trên VPS (vision Gemini): bật mặc định, tắt bằng RENDER_QC=0.
+        // Server chỉ chạy QC khi có GEMINI_API_KEY; ngưỡng re-render <6 + tối đa 2 vòng (cost-guard).
+        visionQC: process.env.RENDER_QC !== "0",
+        // THEME fallback theo industry (composition cũ): tài chính → dark pro; còn lại → bright.
         theme: String(themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())),
         // Phụ đề SYNC read-script (karaoke). Whisper words → sync chuẩn; null → fallback chia đều read-script.
         captions: buildCaptions(words, durationSec, `${script.script.hook} ${script.script.body} ${script.script.cta}`),

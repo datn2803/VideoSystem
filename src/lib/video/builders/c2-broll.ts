@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
 import { decryptSecret } from "@/lib/integration-hub/vault";
+import { getOrCreateBrandKit } from "@/lib/design/director";
 import { hub } from "@/lib/integration-hub/hub";
 import { footageStore } from "@/lib/footage/storage";
 import { audioStore } from "@/lib/audio/storage";
@@ -423,6 +424,10 @@ export async function buildBroll(input: {
         break;
       }
 
+      // BrandKit (Tầng 2): C2 ăn accent + grade màu thương hiệu qua biến `tokens`.
+      // Composition cũ trên VPS chưa biết biến này → dùng accent_color như cũ (không gãy).
+      const kit = await getOrCreateBrandKit(profile);
+
       const variables: Record<string, unknown> = {
         duration,
         bg_type: "image", // ảnh AI + Ken Burns
@@ -432,7 +437,8 @@ export async function buildBroll(input: {
         // caption_groups: karaoke sync (ưu tiên); caption_lines: fallback chia đều.
         caption_groups: JSON.stringify(captionGroups),
         caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
-        accent_color: "#e11d2a",
+        accent_color: kit?.tokens.accent || "#e11d2a",
+        tokens: kit ? JSON.stringify(kit.tokens) : "",
         hook, // title-card reveal đầu clip
         stat: JSON.stringify(stat), // stat insert (null nếu không có số thật)
       };
