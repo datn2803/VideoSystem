@@ -1,7 +1,23 @@
 import { buildTalkingHead, pollTalkingJob } from "./builders/c1-talking";
 import { buildBroll, pollBrollJob } from "./builders/c2-broll";
 import { buildAnimation, pollAnimationJob } from "./builders/c3-animation";
+import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore, type ConceptKind, type VideoDraftRecord } from "./storage";
+
+/**
+ * CHỐT COMPLIANCE (rule cứng): script bị Auditor đánh FAIL (vi phạm critical
+ * BANKING_RULES_VN) thì KHÔNG ĐƯỢC render — không đốt credit cho nội dung vi
+ * phạm. Đặt ở orchestrator = mọi đường render (UI từng concept / render-all /
+ * pipeline 1-lệnh) đều đi qua. Sửa script + re-audit pass rồi mới render lại.
+ */
+async function assertAuditAllowsRender(scriptId: string): Promise<void> {
+  const rec = await scriptStore.get(scriptId);
+  if (rec?.audit?.status === "fail") {
+    throw new Error(
+      "Compliance: script bị Auditor đánh FAIL (vi phạm quy tắc ngân hàng) — sửa nội dung và Re-audit PASS trước khi render."
+    );
+  }
+}
 
 export async function buildConcept(
   scriptId: string,
@@ -9,6 +25,7 @@ export async function buildConcept(
   audioId?: string,
   force?: boolean
 ): Promise<VideoDraftRecord> {
+  await assertAuditAllowsRender(scriptId);
   if (concept === "talking") return buildTalkingHead({ scriptId, audioId, force });
   if (concept === "broll") return buildBroll({ scriptId, audioId, force });
   if (concept === "animation") return buildAnimation({ scriptId, audioId, force });
