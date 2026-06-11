@@ -9,6 +9,8 @@ import { scriptStore } from "@/lib/scripts/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { videoStore, type VideoDraftRecord } from "../storage";
+import { getEngine } from "../engine";
+import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage } from "../cost-guard";
 import { withRetry, pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 
 async function pickImageProvider() {
@@ -143,8 +145,9 @@ async function generateBrollImages(
   totalDur: number
 ): Promise<BrollImagesResult> {
   const imageProvider = await pickImageProvider();
-  const useAI = process.env.RENDER_LIVE === "1" && !!imageProvider;
-  // Không bật RENDER_LIVE / thiếu provider → chế độ gradient CỐ Ý (không phải lỗi).
+  // Cost-guard (Phase 3): ảnh AI là PAID → chỉ khi RENDER_MODE=live (compat RENDER_LIVE=1).
+  const useAI = isLive() && !!imageProvider;
+  // Không bật live / thiếu provider → chế độ gradient CỐ Ý (không phải lỗi).
   if (!useAI) return { images: [], intended: false, failed: 0 };
 
   const imgAdapter = await hub.image();
@@ -154,6 +157,9 @@ async function generateBrollImages(
   // Số cảnh theo nhịp ~4s/cảnh (chuẩn 2–5s/cảnh), tối thiểu 4, cap MAX_IMAGES
   // (giữ sinh song song < Vercel 60s). Đạo diễn cảnh đa góc theo voiceOver.
   const count = Math.max(4, Math.min(MAX_IMAGES, Math.round((totalDur || 20) / 4.2)));
+  // Trần chi phí/ngày TRƯỚC khi sinh (ước tính count ảnh; cache hit thì rẻ hơn — chặn an toàn).
+  const perImgUsd = Number(process.env.IMAGE_COST_PER_IMAGE_USD) || 0.05;
+  await assertDailyCap(count * perImgUsd, `${count} ảnh b-roll`);
   const hints = shotList.map((s) => (s.note || "").trim()).filter(Boolean);
   const prompts = await planShotPrompts(topic, voiceOver, hints, count);
   const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
@@ -194,13 +200,17 @@ async function generateBrollImages(
 
   // Ghi cache 1 lần sau khi tất cả ảnh xong (an toàn, không race).
   let cacheDirty = false;
+  let freshCount = 0;
   for (const r of results) {
     if (r?.fresh) {
       cache[r.hash] = r.fresh;
       cacheDirty = true;
+      freshCount++;
     }
   }
   if (cacheDirty) await kvWrite(IMG_CACHE_KEY, cache);
+  // Usage meter: chỉ tính ảnh SINH MỚI (cache hit = $0) → trần/ngày enforce đúng thực tế.
+  if (freshCount > 0) await recordPaidUsage("image", freshCount * perImgUsd, freshCount);
 
   const ok = results.filter((r): r is Shot => r != null && !!r.url);
   const errors = results.filter((r): r is Shot => r != null && !r.url && !!r.error);
@@ -321,9 +331,19 @@ function buildCaptionLines(text: string, totalDur: number): CaptionLine[] {
   });
 }
 
+/** Cache key C2 (Phase 3): content + audio + BrandKit + live-mode (ảnh AI có/không). */
+function hashBrollRender(scriptId: string, audioId: string | undefined, content: object, tokens: string, live: boolean): string {
+  return crypto
+    .createHash("sha256")
+    .update(`${scriptId}::${audioId || ""}::${JSON.stringify(content)}::${tokens}::${live ? "live" : "free"}`)
+    .digest("hex");
+}
+
 export async function buildBroll(input: {
   scriptId: string;
   audioId?: string;
+  /** true (nút Re-render) → bỏ qua cache renderHash */
+  force?: boolean;
 }): Promise<VideoDraftRecord> {
   const script = await scriptStore.get(input.scriptId);
   if (!script) throw new Error("Script not found");
@@ -336,8 +356,10 @@ export async function buildBroll(input: {
     : audios.find((a) => a.part === "full") || audios.find((a) => a.part === "broll");
 
   const provider = await pickRenderProvider();
-  const mode =
-    provider?.name === "creatomate" ? "creatomate" : provider?.name === "hyperframes" ? "hyperframes" : "mock";
+  // RENDER_MODE=mock → không gọi cả VPS (test pipeline thuần placeholder).
+  const mode = !allowSelfHostRender()
+    ? "mock"
+    : provider?.name === "creatomate" ? "creatomate" : provider?.name === "hyperframes" ? "hyperframes" : "mock";
 
   const brollFootage = await footageStore.listByProfile(profile);
   const shotList = script.script.variantPrompts.broll.shotList || [];
@@ -345,19 +367,33 @@ export async function buildBroll(input: {
     .map((shot) => brollFootage.find((f) => f.tag === shot.footageTag))
     .filter(Boolean);
 
+  // BrandKit (Tầng 2): C2 ăn accent + grade qua `tokens` (composition cũ tự bỏ qua).
+  const kit = mode === "hyperframes" ? await getOrCreateBrandKit(profile) : null;
+  const tokensJson = kit ? JSON.stringify(kit.tokens) : "";
+
+  // ── Cost-guard cache (Phase 3): trùng hash → trả video cũ (0 credit ảnh, 0 phút VPS). ──
+  const renderHash = hashBrollRender(input.scriptId, audio?.id, script.script, tokensJson, isLive());
+  if (mode === "hyperframes" && !input.force) {
+    const cached = (await videoStore.byScript(input.scriptId)).find(
+      (v) => v.concept === "broll" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
+    );
+    if (cached) return cached;
+  }
+
   const draft = await videoStore.create({
     scriptId: input.scriptId,
     audioId: audio?.id,
     concept: "broll",
     mode,
     providerName: mode,
+    renderHash: mode === "hyperframes" ? renderHash : undefined,
     status: "queued",
     progress: 0,
   });
 
   if (mode === "hyperframes") {
     try {
-      const renderer = await hub.render();
+      const renderer = await getEngine("render");
       // Độ dài: ưu tiên độ dài voice-over thật để ảnh phủ hết lời nói.
       const duration =
         audio?.durationMs && audio.durationMs > 0
@@ -424,10 +460,6 @@ export async function buildBroll(input: {
         break;
       }
 
-      // BrandKit (Tầng 2): C2 ăn accent + grade màu thương hiệu qua biến `tokens`.
-      // Composition cũ trên VPS chưa biết biến này → dùng accent_color như cũ (không gãy).
-      const kit = await getOrCreateBrandKit(profile);
-
       const variables: Record<string, unknown> = {
         duration,
         bg_type: "image", // ảnh AI + Ken Burns
@@ -438,12 +470,12 @@ export async function buildBroll(input: {
         caption_groups: JSON.stringify(captionGroups),
         caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
         accent_color: kit?.tokens.accent || "#e11d2a",
-        tokens: kit ? JSON.stringify(kit.tokens) : "",
+        tokens: tokensJson,
         hook, // title-card reveal đầu clip
         stat: JSON.stringify(stat), // stat insert (null nếu không có số thật)
       };
 
-      const job = await renderer.render({ templateId: "broll", modifications: variables });
+      const job = await renderer.render({ templateId: "broll", variables });
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
@@ -461,7 +493,7 @@ export async function buildBroll(input: {
 
   if (mode === "creatomate") {
     try {
-      const renderer = await hub.render();
+      const renderer = await getEngine("render");
       const templateId = (provider?.config?.brollTemplateId as string) || "";
       if (!templateId) throw new Error("Chưa cấu hình brollTemplateId trong provider Creatomate");
 
@@ -498,7 +530,7 @@ export async function buildBroll(input: {
         });
       }
 
-      const job = await renderer.render({ templateId, modifications });
+      const job = await renderer.render({ templateId, variables: modifications });
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
@@ -547,7 +579,7 @@ export async function pollBrollJob(draftId: string): Promise<VideoDraftRecord | 
   if ((draft.mode !== "creatomate" && draft.mode !== "hyperframes") || !draft.providerJobId) return draft;
 
   try {
-    const renderer = await hub.render();
+    const renderer = await getEngine("render");
     const status = await renderer.poll(draft.providerJobId);
     if (status.status === "done" && status.outputUrl) {
       const res = await fetch(status.outputUrl);

@@ -8,6 +8,8 @@ import { getOpenAIKey, transcribeWords, alignByWeights, type Word } from "@/lib/
 import type { ScriptResult } from "@/lib/agents/scripter";
 import { getOrCreateBrandKit } from "@/lib/design/director";
 import { videoStore, type VideoDraftRecord } from "../storage";
+import { getEngine } from "../engine";
+import { allowSelfHostRender } from "../cost-guard";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 
 /**
@@ -375,9 +377,20 @@ function buildAnimationVariables(
   return { variables, sceneSpecs };
 }
 
+/** Cache key C3 (Phase 3): input ổn định đổi là hash đổi → render lại đúng;
+ *  trùng → trả video cũ (tiết kiệm 10-20 phút render VPS + không tạo draft mới). */
+function hashAnimationRender(scriptId: string, audioId: string | undefined, content: ScriptResult, tokens: string, theme: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(`${scriptId}::${audioId || ""}::${JSON.stringify(content)}::${tokens}::${theme}`)
+    .digest("hex");
+}
+
 export async function buildAnimation(input: {
   scriptId: string;
   audioId?: string;
+  /** true (nút Re-render) → bỏ qua cache renderHash */
+  force?: boolean;
 }): Promise<VideoDraftRecord> {
   const script = await scriptStore.get(input.scriptId);
   if (!script) throw new Error("Script not found");
@@ -391,8 +404,29 @@ export async function buildAnimation(input: {
     : audios.find((a) => a.part === "full") || audios.find((a) => a.part === "animation");
 
   const provider = await pickRenderProvider();
-  const mode =
-    provider?.name === "creatomate" ? "creatomate" : provider?.name === "hyperframes" ? "hyperframes" : "mock";
+  // RENDER_MODE=mock → không gọi cả VPS (test pipeline thuần placeholder).
+  const mode = !allowSelfHostRender()
+    ? "mock"
+    : provider?.name === "creatomate" ? "creatomate" : provider?.name === "hyperframes" ? "hyperframes" : "mock";
+
+  // BrandKit (Tầng 2 → Tầng 3): token chảy vào composition qua biến `tokens`.
+  // Composition MỚI ưu tiên tokens; composition CŨ trên VPS chưa khai báo biến
+  // này → tự bỏ qua, rơi về `theme` fallback bên dưới → KHÔNG gãy khi chưa scp.
+  const kit = mode === "hyperframes" ? await getOrCreateBrandKit(script.profileId) : null;
+  const tokensJson = kit ? JSON.stringify(kit.tokens) : "";
+  const themeFallback = String(
+    themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())
+  );
+
+  // ── Cost-guard cache (Phase 3): cùng script content + audio + BrandKit → trả
+  //    video cũ, KHÔNG re-render VPS (tiết kiệm 10-20 phút). force → bỏ cache. ──
+  const renderHash = hashAnimationRender(input.scriptId, audio?.id, script.script, tokensJson, themeFallback);
+  if (mode === "hyperframes" && !input.force) {
+    const cached = (await videoStore.byScript(input.scriptId)).find(
+      (v) => v.concept === "animation" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
+    );
+    if (cached) return cached;
+  }
 
   const draft = await videoStore.create({
     scriptId: input.scriptId,
@@ -400,6 +434,7 @@ export async function buildAnimation(input: {
     concept: "animation",
     mode,
     providerName: mode,
+    renderHash: mode === "hyperframes" ? renderHash : undefined,
     status: "queued",
     progress: 0,
   });
@@ -407,7 +442,7 @@ export async function buildAnimation(input: {
   // HyperFrames: render composition "animation" với biến map từ script (async → poll).
   if (mode === "hyperframes") {
     try {
-      const renderer = await hub.render();
+      const renderer = await getEngine("render");
       // Voice-over: URL công khai (Supabase) — service ở VPS tải audio qua mạng.
       const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
       // Độ dài: ưu tiên độ dài audio thật để animation co giãn khớp giọng đọc.
@@ -427,11 +462,6 @@ export async function buildAnimation(input: {
       const sceneTimes: Record<string, { start: number; dur: number }> = {};
       sceneSpecs.forEach((sp, i) => { sceneTimes[sp.id] = times[i]; });
 
-      // BrandKit (Tầng 2 → Tầng 3): token chảy vào composition qua biến `tokens`.
-      // Composition MỚI ưu tiên tokens; composition CŨ trên VPS chưa khai báo biến
-      // này → tự bỏ qua, rơi về `theme` fallback bên dưới → KHÔNG gãy khi chưa scp.
-      const kit = await getOrCreateBrandKit(script.profileId);
-
       const variables = {
         ...animVars,
         voice_url: voiceUrl,
@@ -440,16 +470,16 @@ export async function buildAnimation(input: {
         scene_times: JSON.stringify(sceneTimes), // đồng bộ cảnh với giọng đọc
         topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
         // BrandKit tokens (Phase 2) — đổi kit là đổi look, không sửa code composition.
-        tokens: kit ? JSON.stringify(kit.tokens) : "",
+        tokens: tokensJson,
         // Cổng QC thiết kế 5 chiều trên VPS (vision Gemini): bật mặc định, tắt bằng RENDER_QC=0.
         // Server chỉ chạy QC khi có GEMINI_API_KEY; ngưỡng re-render <6 + tối đa 2 vòng (cost-guard).
         visionQC: process.env.RENDER_QC !== "0",
         // THEME fallback theo industry (composition cũ): tài chính → dark pro; còn lại → bright.
-        theme: String(themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())),
+        theme: themeFallback,
         // Phụ đề SYNC read-script (karaoke). Whisper words → sync chuẩn; null → fallback chia đều read-script.
         captions: buildCaptions(words, durationSec, `${script.script.hook} ${script.script.body} ${script.script.cta}`),
       };
-      const job = await renderer.render({ templateId: "animation", modifications: variables });
+      const job = await renderer.render({ templateId: "animation", variables });
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
@@ -466,7 +496,7 @@ export async function buildAnimation(input: {
 
   if (mode === "creatomate") {
     try {
-      const renderer = await hub.render();
+      const renderer = await getEngine("render");
       const templateId = (provider?.config?.animationTemplateId as string) || "";
       if (!templateId) throw new Error("Chưa cấu hình animationTemplateId trong provider Creatomate");
       const anim = script.script.variantPrompts.animation;
@@ -478,7 +508,7 @@ export async function buildAnimation(input: {
         data_1: anim.dataPoints[0],
         data_2: anim.dataPoints[1],
       };
-      const job = await renderer.render({ templateId, modifications });
+      const job = await renderer.render({ templateId, variables: modifications });
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
@@ -512,7 +542,7 @@ export async function pollAnimationJob(draftId: string): Promise<VideoDraftRecor
   if ((draft.mode !== "creatomate" && draft.mode !== "hyperframes") || !draft.providerJobId) return draft;
 
   try {
-    const renderer = await hub.render();
+    const renderer = await getEngine("render");
     const status = await renderer.poll(draft.providerJobId);
     if (status.status === "done" && status.outputUrl) {
       const res = await fetch(status.outputUrl);

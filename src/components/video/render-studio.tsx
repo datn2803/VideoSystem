@@ -70,11 +70,14 @@ export function RenderStudio({
   initialDrafts,
   hasAvatarProvider,
   hasRenderProvider,
+  renderMode = "dryrun",
 }: {
   scriptId: string;
   initialDrafts: Draft[];
   hasAvatarProvider: boolean;
   hasRenderProvider: boolean;
+  /** Cost-guard (Phase 3): "live" → xác nhận trước khi tốn credit */
+  renderMode?: string;
 }) {
   const [drafts, setDrafts] = useState(initialDrafts);
   const [busyConcept, setBusyConcept] = useState<ConceptKind | "all" | null>(null);
@@ -106,7 +109,18 @@ export function RenderStudio({
     };
   }, [hasPending, drafts]);
 
+  // Confirm-before-spend (Phase 3): RENDER_MODE=live + concept tốn credit → hỏi trước.
+  const confirmSpend = (concepts: ConceptKind[]): boolean => {
+    if (renderMode !== "live") return true;
+    const paid: string[] = [];
+    if (concepts.includes("talking")) paid.push("C1 avatar (~1 credit HeyGen/60s)");
+    if (concepts.includes("broll")) paid.push("C2 ảnh AI (~4-5 ảnh gpt-image, cache cũ = $0)");
+    if (paid.length === 0) return true;
+    return confirm(`RENDER_MODE=live — lần render này có thể TỐN CREDIT:\n• ${paid.join("\n• ")}\n\nTiếp tục?`);
+  };
+
   const handleRender = (concept: ConceptKind, force = false) => {
+    if (!confirmSpend([concept])) return;
     setError(null);
     setBusyConcept(concept);
     startTransition(async () => {
@@ -125,6 +139,7 @@ export function RenderStudio({
   };
 
   const handleRenderAll = () => {
+    if (!confirmSpend(["talking", "broll", "animation"])) return;
     setError(null);
     setBusyConcept("all");
     startTransition(async () => {

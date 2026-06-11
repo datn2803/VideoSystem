@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
-import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore, type VideoDraftRecord } from "../storage";
+import { getEngine } from "../engine";
+import { isLive, assertDailyCap, recordPaidUsage } from "../cost-guard";
 import { withRetry, generatePlaceholderMp4 } from "./_shared";
 
 /** Chế độ render avatar thật. "mock" = không gọi API trả phí. */
@@ -15,8 +16,9 @@ async function pickAvatarProvider() {
 }
 
 async function decideMode(): Promise<TalkingMode> {
-  // Cost-guard: chỉ render thật khi RENDER_LIVE="1". Mọi trường hợp khác → mock.
-  if (process.env.RENDER_LIVE !== "1") return "mock";
+  // Cost-guard (Phase 3): avatar là PAID → chỉ render thật khi RENDER_MODE=live
+  // (backward-compat RENDER_LIVE="1"). Mọi trường hợp khác → mock.
+  if (!isLive()) return "mock";
   const avatar = await pickAvatarProvider();
   if (avatar?.name === "heygen") return "heygen";
   if (avatar?.name === "d-id") return "d-id";
@@ -105,18 +107,25 @@ export async function buildTalkingHead(input: {
     });
 
     try {
-      const avatarAdapter = await hub.avatar();
+      // Trần chi phí/ngày TRƯỚC khi gọi PAID (HeyGen ~1 credit/60s — ước tính qua env).
+      const estUsd = Number(process.env.AVATAR_COST_PER_RENDER_USD) || 0.5;
+      await assertDailyCap(estUsd, "render avatar");
+      const engine = await getEngine("avatar");
       const job = await withRetry(
         () =>
-          avatarAdapter.renderTalking({
-            avatarId,
-            aspectRatio: "9:16",
-            audioUrl,
-            // Chỉ HeyGen mới cho fallback text-to-speech; D-ID đã bắt buộc audioUrl ở trên.
-            text: audioUrl ? undefined : script.script.hook + " " + script.script.body + " " + script.script.cta,
+          engine.render({
+            templateId: "talking",
+            variables: {
+              avatarId,
+              aspectRatio: "9:16",
+              audioUrl,
+              // Chỉ HeyGen mới cho fallback text-to-speech; D-ID đã bắt buộc audioUrl ở trên.
+              text: audioUrl ? undefined : script.script.hook + " " + script.script.body + " " + script.script.cta,
+            },
           }),
         1
       );
+      await recordPaidUsage("avatar", estUsd); // usage meter cộng dồn → trần/ngày enforce được
       return (await videoStore.update(draft.id, {
         status: "rendering",
         progress: 10,
@@ -160,7 +169,7 @@ export async function pollTalkingJob(draftId: string): Promise<VideoDraftRecord 
   if (!isLiveAvatar || !draft.providerJobId) return draft;
 
   try {
-    const adapter = await hub.avatar();
+    const adapter = await getEngine("avatar");
     const status = await adapter.poll(draft.providerJobId);
     if (status.status === "done" && status.outputUrl) {
       const res = await fetch(status.outputUrl);

@@ -13,6 +13,7 @@ import { ScriptDetail } from "@/components/scripts/script-detail";
 import { VoiceStudio } from "@/components/audio/voice-studio";
 import { RenderStudio } from "@/components/video/render-studio";
 import { ReviewStateBar } from "@/components/review/send-to-review-button";
+import { renderMode } from "@/lib/video/cost-guard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -105,6 +106,7 @@ export default async function ScriptDetailPage({ params }: { params: Promise<{ i
           initialDrafts={drafts}
           hasAvatarProvider={hasAvatarProvider}
           hasRenderProvider={hasRenderProvider}
+          renderMode={renderMode()}
         />
 
         <ScriptDetail record={record} />
