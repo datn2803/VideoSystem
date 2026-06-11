@@ -13,13 +13,14 @@
 | File đích trong repo này | Nguồn upstream | Sửa đổi |
 |---|---|---|
 | `src/lib/content-graph/index.ts` | `packages/content-graph/src/index.ts` | NGUYÊN VẸN + header provenance |
+| `src/lib/sources/fetch-source.ts` | `packages/cli/src/fetch-source.ts` | Header provenance + **VÁ BẢO MẬT có ghi chú `[VideoSystem vá thêm]`**: validate từng hop redirect (manual ≤4) + chặn IP decimal/hex/rút gọn + IPv6 private (SSRF) |
 
 **Tham khảo method (KHÔNG copy nguyên văn — sẽ ghi bổ sung nếu vendor thêm):**
 - `packages/core/src/types/index.ts` — interface `EngineAdapter`/`RenderInput`/`RenderConfig`/`TemplateMetadata` (Phase 3 định nghĩa interface riêng soi theo đây).
 - `packages/adapter-hyperframes/src/render.ts` — cách render Playwright + ffmpeg theo frame (Phase 3 nâng `hyperframes-service/server.mjs`).
 - `templates/*/template.html-video.yaml` — format manifest template (Phase 2).
-- `packages/cli/src/fetch-source.ts` — URL/repo → Markdown có chặn SSRF (Phase 4).
-- `packages/core/src/minimax.ts` — sinh nhạc MiniMax + mux ffmpeg (Phase 5).
+- `packages/adapter-hyperframes/src/render.ts` → method cho `hyperframes-service/lib/render-engine.mjs` (đổi chiến lược recordVideo→frame-stepping, viết lại).
+- `packages/core/src/minimax.ts` → PORT pattern gọi API vào `src/lib/audio/minimax-music.ts` (music-1.5, base_resp check, hex decode) + chuẩn duck -18dB cho `/audio/mix`.
 
 ## 2. nexu-io/open-design
 
