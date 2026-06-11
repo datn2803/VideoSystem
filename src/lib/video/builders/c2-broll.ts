@@ -11,8 +11,9 @@ import { blobUpload } from "@/lib/backend/blob-store";
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
-import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage } from "../cost-guard";
+import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage, recordExtraUsage } from "../cost-guard";
 import { withRetry, pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
+import { RENDER_PIPELINE_VERSION } from "../render-version";
 
 async function pickImageProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
@@ -337,7 +338,7 @@ function buildCaptionLines(text: string, totalDur: number): CaptionLine[] {
 function hashBrollRender(scriptId: string, audioId: string | undefined, musicId: string | undefined, content: object, tokens: string, live: boolean): string {
   return crypto
     .createHash("sha256")
-    .update(`${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(content)}::${tokens}::${live ? "live" : "free"}`)
+    .update(`${RENDER_PIPELINE_VERSION}::${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(content)}::${tokens}::${live ? "live" : "free"}`)
     .digest("hex");
 }
 
@@ -431,10 +432,13 @@ export async function buildBroll(input: {
 
       // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
       // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
+      // Whisper = call OpenAI TRẢ PHÍ (nhỏ) → gate isLive (P0.3); dryrun rơi về
+      // caption_lines chia đều (pipeline vẫn chạy).
       const [imgResult, words] = await Promise.all([
         generateBrollImages(input.scriptId, topic, captionSource, shotList, duration),
-        voiceUrlRaw && openaiKey ? transcribeWords(voiceUrlRaw, openaiKey) : Promise.resolve(null),
+        isLive() && voiceUrlRaw && openaiKey ? transcribeWords(voiceUrlRaw, openaiKey) : Promise.resolve(null),
       ]);
+      if (words) await recordExtraUsage("openai-whisper", ((duration || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006));
 
       // FAIL-FAST: nếu CÓ ý định sinh ảnh (RENDER_LIVE + provider) nhưng ra 0 ảnh →
       // đây là LỖI người dùng cần biết, KHÔNG render câm ra video đen im lặng.

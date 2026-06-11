@@ -10,8 +10,9 @@ import { getOrCreateBrandKit } from "@/lib/design/director";
 import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
-import { allowSelfHostRender, isLive } from "../cost-guard";
+import { allowSelfHostRender, isLive, assertDailyCap, recordExtraUsage } from "../cost-guard";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
+import { RENDER_PIPELINE_VERSION } from "../render-version";
 
 /**
  * Sinh 1 ảnh cutout nền TRONG SUỐT trên Vercel (OpenAI reach được; VPS bị Cloudflare
@@ -22,8 +23,12 @@ import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_sh
  */
 async function generateHeroImageUrl(scriptId: string, subject: string): Promise<string> {
   try {
+    // Cost-guard (P0.3 review đợt 2): ảnh AI là PAID — dù hàm đang reserved
+    // (không nơi nào gọi), gate sẵn để tương lai gọi lại không rò tiền.
+    if (!isLive()) return "";
     const img = await hub.image();
     if (!img) return "";
+    await assertDailyCap(Number(process.env.IMAGE_COST_PER_IMAGE_USD) || 0.05, "ảnh hero C3");
     // Light Bento v3: NHÂN VẬT 3D cartoon (Pixar/Blender), hợp nền sáng pastel.
     const prompt =
       `3D cartoon character, Pixar/Blender style, friendly young person mascot, ${subject}, ` +
@@ -387,7 +392,7 @@ function hashAnimationRender(scriptId: string, audioId: string | undefined, musi
   const stable = { ...content, storyboard: undefined };
   return crypto
     .createHash("sha256")
-    .update(`${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(stable)}::${tokens}::${theme}`)
+    .update(`${RENDER_PIPELINE_VERSION}::${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(stable)}::${tokens}::${theme}`)
     .digest("hex");
 }
 
@@ -474,8 +479,11 @@ export async function buildAnimation(input: {
       // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
       // Lỗi/thiếu key → words=null → alignByWeights tự fallback chia theo tỉ lệ trọng số.
       // C3 v2: BỎ sinh ảnh nhân vật 3D (Tommy chốt) → tiết kiệm gpt-image + nhanh hơn; img_hero="" → scene tự ẩn.
+      // Whisper = call OpenAI TRẢ PHÍ (nhỏ ~$0.006/phút) → gate isLive (P0.3).
+      // dryrun: words=null → caption/scene_times fallback chia đều (pipeline vẫn chạy).
       const openaiKey = await getOpenAIKey();
-      const words = voiceUrlRaw && openaiKey ? await transcribeWords(voiceUrlRaw, openaiKey) : null;
+      const words = isLive() && voiceUrlRaw && openaiKey ? await transcribeWords(voiceUrlRaw, openaiKey) : null;
+      if (words) await recordExtraUsage("openai-whisper", ((durationSec || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006));
       const imgHeroUrl = "";
       const times = alignByWeights(sceneSpecs.map((sp) => sp.weight), words, durationSec);
       const sceneTimes: Record<string, { start: number; dur: number }> = {};

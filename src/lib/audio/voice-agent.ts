@@ -1,10 +1,14 @@
 import { hub } from "@/lib/integration-hub/hub";
 import { store } from "@/lib/integration-hub/storage";
 import { scriptStore } from "@/lib/scripts/storage";
+import { makeMockTTS } from "@/lib/integration-hub/adapters/mock";
+import { isLive, assertDailyCap, consumeReserve } from "@/lib/video/cost-guard";
 import { audioStore, type AudioPart } from "./storage";
 import { sanitizeForTTS } from "./sanitize-tts";
 import { speedUpAudioViaService } from "./speed-service";
 
+// Ghi usage TTS vào provider_usage (cộng vào spendTodayUsd của cost-guard).
+// Giữ tên riêng thay vì recordPaidUsage chung vì ghi CHI TIẾT hơn (chars + providerId).
 async function recordTTSUsage(costUsd: number, chars: number, providerId?: string) {
   const providers = (await store.listProviders()).filter((p) => p.kind === "tts" && p.enabled);
   const def = providerId ? await store.getProvider(providerId) : providers.find((p) => p.isDefault) || providers[0];
@@ -16,6 +20,7 @@ async function recordTTSUsage(costUsd: number, chars: number, providerId?: strin
     costEstimateUsd: costUsd,
     requestCount: 1,
   });
+  consumeReserve(costUsd); // quyết toán đặt chỗ assertDailyCap (P1.1)
 }
 
 async function getDefaultTTSProvider() {
@@ -49,8 +54,17 @@ export async function generateAudioForScript(input: {
   const text = sanitizeForTTS(rawText);
 
   const provider = await getDefaultTTSProvider();
-  const providerName = provider?.name || "mock";
-  const tts = await hub.tts();
+  // P0.2 review đợt 2 — cost-guard TTS (ElevenLabs = PAID, trước đây không gate):
+  //  - RENDER_MODE ≠ live → ÉP mock TTS (MP3 im lặng đúng độ dài ước tính, $0) —
+  //    pipeline C1/C2/C3 vẫn chạy trọn ở dryrun, không gọi ElevenLabs tính phí;
+  //  - live → trần chi phí/ngày chặn TRƯỚC khi synthesize.
+  const live = isLive();
+  const providerName = live ? provider?.name || "mock" : "mock (cost-guard)";
+  const tts = live ? await hub.tts() : makeMockTTS();
+  if (live) {
+    const per1k = Number(process.env.TTS_COST_PER_1K_CHARS_USD) || 0.05;
+    await assertDailyCap((text.length / 1000) * per1k, `TTS ${text.length} ký tự`);
+  }
 
   // Chiến lược tốc độ: ElevenLabs đọc native tới 1.2 (API chặn cứng), phần vượt
   // → ffmpeg atempo trên VPS (giữ cao độ). target ≤1.2 → KHÔNG gọi VPS.
@@ -60,7 +74,7 @@ export async function generateAudioForScript(input: {
 
   const result = await tts.synthesize({ text, voiceId: input.voiceId, lang: input.lang || "vi", speed: nativeSpeed });
 
-  await recordTTSUsage(result.costUsd, text.length, provider?.id);
+  if (live) await recordTTSUsage(result.costUsd, text.length, provider?.id);
 
   let audioBase64 = result.audioBase64;
   let durationMs = result.durationMs;
