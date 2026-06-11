@@ -340,6 +340,7 @@ async function renderAnimationWithQC({ variables }) {
   const rounds = haveGemini ? 2 : 1; // tối đa 2 nhưng vòng 2 CHỈ chạy khi điểm < 6
   let best = null; // { tmpDir, outFile, avg, report }
 
+  try {
   for (let round = 0; round < rounds; round++) {
     const r = await renderTemplate({ template: "animation", variables: vars, quality: "draft" });
     if (!haveGemini) { best = { ...r, avg: 10, report: [] }; break; } // 429/thiếu key → pass-through
@@ -370,6 +371,11 @@ async function renderAnimationWithQC({ variables }) {
     if (n === 0 || avg >= QC_REDO_BELOW) break;
     if (round >= rounds - 1) break;
     if (wantCompact) vars.compact = "1"; // vòng cứu: co chữ gọn hơn
+  }
+  } catch (e) {
+    // Vòng sau throw → dọn tmpDir của best vòng trước (kẻo leak /tmp trên VPS).
+    if (best) await fs.rm(best.tmpDir, { recursive: true, force: true }).catch(() => {});
+    throw e;
   }
   return best;
 }

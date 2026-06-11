@@ -5,7 +5,7 @@
  * chữ/số/thời lượng + đổi thứ tự + re-render RIÊNG cảnh đó (engine $0).
  * Lưu = updateStoryboardAction (sanitize + validate + anti-fab ở server).
  */
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, Clapperboard, Film, Loader2, Save } from "lucide-react";
@@ -63,6 +63,12 @@ export function SceneStudio({
   const [isPending, startTransition] = useTransition();
   const pollTimer = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const dirty = useMemo(() => nodes.some((n) => n._dirty), [nodes]);
+
+  // Rời trang giữa lúc render cảnh → dọn mọi interval poll (không chạy nền vô chủ).
+  useEffect(() => {
+    const timers = pollTimer.current;
+    return () => Object.values(timers).forEach((t) => clearInterval(t));
+  }, []);
 
   if (!storyboard || nodes.length === 0) {
     return (

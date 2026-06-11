@@ -78,6 +78,22 @@ export function assertPublicHttpUrl(raw: string): URL {
   ) {
     throw new Error(`refusing to fetch local host: ${host}`);
   }
+  // [VideoSystem vá thêm so với upstream — review T3] Chặn các dạng IP "lách":
+  // decimal/hex/octal nguyên cục (http://2130706433/, http://0x7f000001/) và
+  // IPv4 RÚT GỌN (http://127.1/) — trình duyệt/fetch hiểu là IP, regex 4-octet bỏ lọt.
+  if (/^(0x[0-9a-f]+|\d+)$/.test(host)) {
+    throw new Error(`refusing to fetch numeric host: ${host}`);
+  }
+  if (/^\d{1,3}(\.\d{1,10}){1,3}$/.test(host) && !/^(\d{1,3}\.){3}\d{1,3}$/.test(host)) {
+    throw new Error(`refusing to fetch shorthand IP: ${host}`);
+  }
+  // [VideoSystem vá thêm] IPv6: chặn loopback/link-local/unique-local + IPv4-mapped.
+  if (host.includes(':')) {
+    const h6 = host.replace(/^\[|\]$/g, '');
+    if (h6 === '::' || h6.startsWith('fe80:') || h6.startsWith('fc') || h6.startsWith('fd') || h6.includes('::ffff:') || h6 === '::1') {
+      throw new Error(`refusing to fetch private IPv6: ${host}`);
+    }
+  }
   // IPv4 private / loopback / link-local ranges.
   const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
@@ -302,14 +318,27 @@ async function fetchTopLevelTree(
 // --------------------------------------------------------------------------
 
 async function fetchText(url: string, extraHeaders: Record<string, string>, signal?: AbortSignal): Promise<string> {
-  assertPublicHttpUrl(url);
-  const res = await fetch(url, {
-    headers: { 'user-agent': UA, ...extraHeaders },
-    redirect: 'follow',
-    signal: signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`fetch ${url} → HTTP ${res.status}`);
+  // [VideoSystem vá thêm so với upstream — review T3] redirect: 'follow' chỉ
+  // validate URL ĐẦU TIÊN → URL public 302 sang http://169.254.169.254/ đi lọt.
+  // Đổi sang redirect thủ công: VALIDATE TỪNG HOP qua assertPublicHttpUrl, tối đa 4.
+  let current = url;
+  for (let hop = 0; hop < 5; hop++) {
+    assertPublicHttpUrl(current);
+    const res = await fetch(current, {
+      headers: { 'user-agent': UA, ...extraHeaders },
+      redirect: 'manual',
+      signal: signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) throw new Error(`fetch ${current} → HTTP ${res.status} không có Location`);
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    if (!res.ok) {
+      throw new Error(`fetch ${current} → HTTP ${res.status}`);
+    }
+    return res.text();
   }
-  return res.text();
+  throw new Error(`fetch ${url} → quá 4 lần redirect`);
 }

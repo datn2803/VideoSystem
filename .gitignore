@@ -55,3 +55,10 @@ secrets/
 *.secret
 # Bản kiểm tra/đời chạy LOCAL có thể chứa key (vd check.local.sh) — nhưng vẫn commit check.sh (zero-secret)
 *.local.sh
+
+# File tạm của render engine (bake/playwright) — sinh trong compositions/ lúc render
+hyperframes-service/compositions/.render-*.html
+hyperframes-service/compositions/.pw-*.html
+hyperframes-service/compositions/.test-*.html
+hyperframes-service/compositions/.probe.html
+hyperframes-service/compositions/.smoke-*.html

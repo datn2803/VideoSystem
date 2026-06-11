@@ -44,7 +44,7 @@ inputs:
       hook_keyword: { type: string, description: "Từ khoá accent cảnh hook" }
       hook_sub: { type: string, description: "Hook phụ đề (rỗng=ẩn)" }
       hook_eyebrow: { type: string, description: "Eyebrow IN HOA (rỗng=ẩn)" }
-      hook_stat: { type: string, description: "Chip số hook 'value|unit' (rỗng=ẩn)" }
+      hook_stat: { type: string, description: "(DEPRECATED — composition hiện KHÔNG đọc; builder vẫn gửi, vô hại)" }
       bignum_value: { type: string, description: "S2 số lớn (rỗng=ẩn cảnh)" }
       bignum_unit: { type: string, description: "S2 đơn vị" }
       bignum_label: { type: string, description: "S2 nhãn" }

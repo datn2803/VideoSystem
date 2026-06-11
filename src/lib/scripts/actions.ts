@@ -7,6 +7,7 @@ import { projectStore } from "@/lib/projects/storage";
 import { fetchSource } from "@/lib/sources/fetch-source";
 import { getEngine } from "@/lib/video/engine";
 import { sceneVariablesForNode } from "@/lib/video/scene-preview";
+import { themeForTopic } from "@/lib/video/builders/c3-animation";
 import { getOrCreateBrandKit } from "@/lib/design/director";
 import { allowSelfHostRender } from "@/lib/video/cost-guard";
 import type { ContentGraph } from "@/lib/content-graph";
@@ -154,12 +155,18 @@ export async function renderSceneAction(scriptId: string, nodeId: string) {
   if (!allowSelfHostRender()) return { error: "RENDER_MODE=mock — bật dryrun/live để render preview cảnh" } as const;
   const rec = await scriptStore.get(scriptId);
   if (!rec) return { error: "Không tìm thấy script" } as const;
+  // CHỐT COMPLIANCE (đồng bộ orchestrator): script audit FAIL thì cảnh lẻ cũng
+  // KHÔNG render (không cho xuất nội dung vi phạm ra MP4 qua cửa preview).
+  if (rec.audit?.status === "fail") {
+    return { error: "Compliance: script bị Auditor đánh FAIL — sửa nội dung + Re-audit trước khi render cảnh." } as const;
+  }
   const node = rec.script.storyboard?.nodes.find((n) => n.id === nodeId);
   if (!node) return { error: `Không có cảnh "${nodeId}" trong storyboard` } as const;
   const kit = await getOrCreateBrandKit(rec.profileId);
   const profile = await store.getProfile(rec.profileId);
-  const isFinance = /bank|financ|tài chính|ngân hàng|fintech/i.test(profile?.industry || "");
-  const { variables } = sceneVariablesForNode(node, kit, isFinance ? "3" : "0");
+  // Theme fallback DÙNG CHUNG themeForTopic với builder C3 — preview khớp video thật.
+  const theme = String(themeForTopic(profile?.industry || "", (rec.script.hook || "x").trim()));
+  const { variables } = sceneVariablesForNode(node, kit, theme);
   try {
     const engine = await getEngine("render");
     const job = await engine.render({ templateId: "animation", variables });

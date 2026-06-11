@@ -69,9 +69,24 @@ export function sceneVariablesForNode(node: GraphNode, kit: BrandKit | null, the
   }
 
   if (direct) {
+    // s1 + s7 LUÔN trong DOM (composition không remove) → nếu không ép scene_times,
+    // 2 cảnh chia đôi thời lượng và nửa khung trống. Ép cảnh đích chiếm gần trọn,
+    // cảnh còn lại 0.3s cuối/đầu.
+    const total = +(dur + 0.3).toFixed(2);
+    const sceneTimes: Record<string, { start: number; dur: number }> =
+      intent === "outro" || node.id === "cta"
+        ? { s1: { start: 0, dur: 0.3 }, s7: { start: 0.3, dur } }
+        : { s1: { start: 0, dur }, s7: { start: dur, dur: 0.3 } };
     return {
-      variables: { ...vars, duration: String(dur), theme, tokens: kit ? JSON.stringify(kit.tokens) : "", visionQC: false },
-      durationSec: dur,
+      variables: {
+        ...vars,
+        duration: String(total),
+        theme,
+        tokens: kit ? JSON.stringify(kit.tokens) : "",
+        scene_times: JSON.stringify(sceneTimes),
+        visionQC: false,
+      },
+      durationSec: total,
     };
   }
   // Bookend 0.3s cho s1/s7 (luôn trong DOM) — cảnh đích chiếm trọn phần giữa.

@@ -10,7 +10,7 @@ import { getOrCreateBrandKit } from "@/lib/design/director";
 import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
-import { allowSelfHostRender } from "../cost-guard";
+import { allowSelfHostRender, isLive } from "../cost-guard";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 
 /**
@@ -102,7 +102,7 @@ function themeFromSeed(seed: string): number {
  *  tài chính/ngân hàng → DARK PRO (nghiêm túc, chỉn chu, idx 3);
  *  công nghệ/đời sống/khác → BRIGHT tươi (idx 0-2, vary theo nội dung).
  *  Composition clamp idx về [0, THEMES-1] nên an toàn nếu VPS chưa cập nhật dark. */
-function themeForTopic(industry: string, seed: string): number {
+export function themeForTopic(industry: string, seed: string): number {
   const ind = (industry || "").toLowerCase();
   const isFinance = /bank|financ|tài chính|ngân hàng|fintech|chứng khoán|securit|invest|đầu tư|bảo hiểm|insur|tín dụng|\bvay\b|\bloan/.test(ind);
   if (isFinance) return 3; // Dark Pro
@@ -379,11 +379,15 @@ function buildAnimationVariables(
 }
 
 /** Cache key C3 (Phase 3): input ổn định đổi là hash đổi → render lại đúng;
- *  trùng → trả video cũ (tiết kiệm 10-20 phút render VPS + không tạo draft mới). */
-function hashAnimationRender(scriptId: string, audioId: string | undefined, content: ScriptResult, tokens: string, theme: string): string {
+ *  trùng → trả video cũ (tiết kiệm 10-20 phút render VPS + không tạo draft mới).
+ *  Gồm musicId (thêm/xoá nhạc = video mới). LOẠI storyboard khỏi content: studio
+ *  sửa storyboard hiện CHƯA chảy vào video chính (chỉ preview cảnh lẻ) — để trong
+ *  hash chỉ tổ phá cache vô ích (re-render ra video y hệt). */
+function hashAnimationRender(scriptId: string, audioId: string | undefined, musicId: string | undefined, content: ScriptResult, tokens: string, theme: string): string {
+  const stable = { ...content, storyboard: undefined };
   return crypto
     .createHash("sha256")
-    .update(`${scriptId}::${audioId || ""}::${JSON.stringify(content)}::${tokens}::${theme}`)
+    .update(`${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(stable)}::${tokens}::${theme}`)
     .digest("hex");
 }
 
@@ -419,9 +423,12 @@ export async function buildAnimation(input: {
     themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())
   );
 
-  // ── Cost-guard cache (Phase 3): cùng script content + audio + BrandKit → trả
-  //    video cũ, KHÔNG re-render VPS (tiết kiệm 10-20 phút). force → bỏ cache. ──
-  const renderHash = hashAnimationRender(input.scriptId, audio?.id, script.script, tokensJson, themeFallback);
+  // Nhạc nền (Phase 5): tìm TRƯỚC hash — có/không nhạc là 2 video khác nhau.
+  const music = audios.find((a) => a.part === "music");
+
+  // ── Cost-guard cache (Phase 3): cùng script content + audio + nhạc + BrandKit →
+  //    trả video cũ, KHÔNG re-render VPS (tiết kiệm 10-20 phút). force → bỏ cache. ──
+  const renderHash = hashAnimationRender(input.scriptId, audio?.id, music?.id, script.script, tokensJson, themeFallback);
   if (mode === "hyperframes" && !input.force) {
     const cached = (await videoStore.byScript(input.scriptId)).find(
       (v) => v.concept === "animation" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
@@ -446,9 +453,10 @@ export async function buildAnimation(input: {
       const renderer = await getEngine("render");
       // Voice-over: URL công khai (Supabase) — service ở VPS tải audio qua mạng.
       let voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      // Whisper transcribe trên VOICE GỐC (trước khi mix nhạc) — timing chuẩn hơn.
+      const voiceUrlRaw = voiceUrl;
       // Nhạc nền MiniMax (Phase 5, tuỳ chọn): script có track "music" → mix duck
       // -18dB dưới giọng (cache theo voiceId+musicId → URL ổn định, renderHash sống).
-      const music = audios.find((a) => a.part === "music");
       if (voiceUrl && audio && music) {
         const musicUrl = toAbsoluteUrl(music.storagePath);
         if (musicUrl) {
@@ -467,7 +475,7 @@ export async function buildAnimation(input: {
       // Lỗi/thiếu key → words=null → alignByWeights tự fallback chia theo tỉ lệ trọng số.
       // C3 v2: BỎ sinh ảnh nhân vật 3D (Tommy chốt) → tiết kiệm gpt-image + nhanh hơn; img_hero="" → scene tự ẩn.
       const openaiKey = await getOpenAIKey();
-      const words = voiceUrl && openaiKey ? await transcribeWords(voiceUrl, openaiKey) : null;
+      const words = voiceUrlRaw && openaiKey ? await transcribeWords(voiceUrlRaw, openaiKey) : null;
       const imgHeroUrl = "";
       const times = alignByWeights(sceneSpecs.map((sp) => sp.weight), words, durationSec);
       const sceneTimes: Record<string, { start: number; dur: number }> = {};
@@ -482,9 +490,10 @@ export async function buildAnimation(input: {
         topic: (script.topic || script.script.hook || "").slice(0, 40), // header trên đóng khung đỉnh
         // BrandKit tokens (Phase 2) — đổi kit là đổi look, không sửa code composition.
         tokens: tokensJson,
-        // Cổng QC thiết kế 5 chiều trên VPS (vision Gemini): bật mặc định, tắt bằng RENDER_QC=0.
-        // Server chỉ chạy QC khi có GEMINI_API_KEY; ngưỡng re-render <6 + tối đa 2 vòng (cost-guard).
-        visionQC: process.env.RENDER_QC !== "0",
+        // Cổng QC thiết kế 5 chiều trên VPS (vision Gemini — call TRẢ PHÍ nhẹ):
+        // mặc định CHỈ bật ở live (kỷ luật cost-guard); RENDER_QC=1 ép bật mọi mode,
+        // RENDER_QC=0 tắt hẳn. Server gate thêm theo GEMINI_API_KEY; re-render <6, ≤2 vòng.
+        visionQC: process.env.RENDER_QC === "1" || (process.env.RENDER_QC !== "0" && isLive()),
         // THEME fallback theo industry (composition cũ): tài chính → dark pro; còn lại → bright.
         theme: themeFallback,
         // Phụ đề SYNC read-script (karaoke). Whisper words → sync chuẩn; null → fallback chia đều read-script.

@@ -332,11 +332,12 @@ function buildCaptionLines(text: string, totalDur: number): CaptionLine[] {
   });
 }
 
-/** Cache key C2 (Phase 3): content + audio + BrandKit + live-mode (ảnh AI có/không). */
-function hashBrollRender(scriptId: string, audioId: string | undefined, content: object, tokens: string, live: boolean): string {
+/** Cache key C2 (Phase 3): content + audio + NHẠC + BrandKit + live-mode (ảnh AI có/không).
+ *  musicId trong hash → thêm/xoá nhạc là render mới (không dính video cũ từ cache). */
+function hashBrollRender(scriptId: string, audioId: string | undefined, musicId: string | undefined, content: object, tokens: string, live: boolean): string {
   return crypto
     .createHash("sha256")
-    .update(`${scriptId}::${audioId || ""}::${JSON.stringify(content)}::${tokens}::${live ? "live" : "free"}`)
+    .update(`${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(content)}::${tokens}::${live ? "live" : "free"}`)
     .digest("hex");
 }
 
@@ -371,9 +372,11 @@ export async function buildBroll(input: {
   // BrandKit (Tầng 2): C2 ăn accent + grade qua `tokens` (composition cũ tự bỏ qua).
   const kit = mode === "hyperframes" ? await getOrCreateBrandKit(profile) : null;
   const tokensJson = kit ? JSON.stringify(kit.tokens) : "";
+  // Nhạc nền (Phase 5): tìm TRƯỚC hash — có/không nhạc là 2 video khác nhau.
+  const music = audios.find((a) => a.part === "music");
 
   // ── Cost-guard cache (Phase 3): trùng hash → trả video cũ (0 credit ảnh, 0 phút VPS). ──
-  const renderHash = hashBrollRender(input.scriptId, audio?.id, script.script, tokensJson, isLive());
+  const renderHash = hashBrollRender(input.scriptId, audio?.id, music?.id, script.script, tokensJson, isLive());
   if (mode === "hyperframes" && !input.force) {
     const cached = (await videoStore.byScript(input.scriptId)).find(
       (v) => v.concept === "broll" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
@@ -402,8 +405,9 @@ export async function buildBroll(input: {
           : script.script.estimatedDurationSec || 30;
       // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
       let voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      // Whisper transcribe trên VOICE GỐC (trước khi mix nhạc) — timing chuẩn hơn.
+      const voiceUrlRaw = voiceUrl;
       // Nhạc nền MiniMax (Phase 5, tuỳ chọn): có track "music" → mix duck -18dB.
-      const music = audios.find((a) => a.part === "music");
       if (voiceUrl && audio && music) {
         const musicUrl = toAbsoluteUrl(music.storagePath);
         if (musicUrl) {
@@ -429,7 +433,7 @@ export async function buildBroll(input: {
       // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
       const [imgResult, words] = await Promise.all([
         generateBrollImages(input.scriptId, topic, captionSource, shotList, duration),
-        voiceUrl && openaiKey ? transcribeWords(voiceUrl, openaiKey) : Promise.resolve(null),
+        voiceUrlRaw && openaiKey ? transcribeWords(voiceUrlRaw, openaiKey) : Promise.resolve(null),
       ]);
 
       // FAIL-FAST: nếu CÓ ý định sinh ảnh (RENDER_LIVE + provider) nhưng ra 0 ảnh →

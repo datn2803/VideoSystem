@@ -109,10 +109,18 @@ export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, o
     ffmpeg = spawn(ffmpegBin(), args, { stdio: ["pipe", "ignore", "pipe"] });
     let ffErr = "";
     ffmpeg.stderr.on("data", (c) => { ffErr += c.toString("utf8"); if (ffErr.length > 8000) ffErr = ffErr.slice(-8000); });
+    // stdin PHẢI có handler error: ffmpeg chết sớm → write EPIPE emit trên stream;
+    // không handler = uncaughtException → SẬP CẢ SERVICE (mất job store in-memory).
+    ffmpeg.stdin.on("error", () => {});
     const ffDone = new Promise((resolve, reject) => {
       ffmpeg.on("error", (e) => reject(new Error(`ffmpeg spawn: ${e.message} (FFMPEG_PATH?)`)));
       ffmpeg.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${ffErr.slice(-1500)}`))));
     });
+    // Đăng ký handler NGAY: nếu vòng lặp frame throw trước khi tới `await ffDone`,
+    // finally kill ffmpeg → ffDone reject "mồ côi" = unhandledRejection → Node 22
+    // terminate process. catch rỗng này chỉ chặn unhandled; `await ffDone` ở dưới
+    // vẫn nhận nguyên rejection (catch tạo promise MỚI, không nuốt promise gốc).
+    ffDone.catch(() => {});
 
     // Frame-stepping: seek TĂNG DẦN từng frame → screenshot → ghi stdin (chờ drain).
     const writeFrame = (buf) =>
