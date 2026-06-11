@@ -1,5 +1,12 @@
 /**
- * Cost-guard (Phase 3) — MỌI call trả phí gate sau đây.
+ * Cost-guard (Phase 3, siết P0 review đợt 2) — các call trả phí gate sau đây.
+ *
+ * PHẠM VI THẬT (đối soát P0.3 — đừng nói quá): ảnh AI (b-roll/preview/hero),
+ * avatar HeyGen/D-ID, TTS ElevenLabs, nhạc MiniMax, Whisper = ĐỀU qua
+ * isLive + assertDailyCap + record usage. NGOẠI LỆ CÓ CHỦ ĐÍCH: (1) LLM Gemini
+ * (planner/scripter/auditor/đạo diễn ảnh) KHÔNG gate isLive — là core flow,
+ * free-tier/grounding 1500 lượt/ngày, usage vẫn record qua recordLLMUsage;
+ * (2) render VPS self-host $0 — chỉ tắt ở mode mock.
  *
  * RENDER_MODE = "mock" | "dryrun" | "live" (env):
  *  - mock   — KHÔNG gọi gì hết (kể cả VPS $0): render placeholder, test pipeline.
@@ -49,6 +56,7 @@ export async function recordExtraUsage(label: string, costUsd: number): Promise<
   // Giữ gọn: chỉ lưu 60 ngày gần nhất
   const cutoff = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
   await kvWrite(EXTRA_KEY, list.filter((u) => u.date >= cutoff));
+  consumeReserve(costUsd); // quyết toán đặt chỗ (P1.1)
 }
 
 /** Tổng chi phí ước tính ĐÃ ghi nhận hôm nay (mọi provider + extra). */
@@ -62,19 +70,63 @@ export async function spendTodayUsd(): Promise<number> {
   return hub + extra;
 }
 
+// ── Chống TOCTOU trần/ngày (P1.1 review đợt 2) ──
+// Vấn đề cũ: assert ĐỌC spend rồi caller mới GHI usage — N nhánh song song
+// (buildAll p-limit) cùng đọc spend cũ → cùng qua → vượt trần.
+// Vá: "đặt chỗ trước, quyết toán sau" TRONG PROCESS — (1) serialize toàn bộ
+// assert qua 1 promise-chain (không còn 2 assert đọc cùng lúc); (2) khoản đã
+// assert được ĐẶT CHỖ (reserve) và tính vào lần assert sau; (3) record*Usage
+// quyết toán → nhả chỗ (khoản đã nằm trong spendToday, giữ reserve nữa là
+// double-count); (4) call fail không record → reserve TỰ HẾT HẠN sau 5 phút.
+// Giới hạn còn lại (ghi nhận): nhiều INSTANCE serverless song song vẫn có thể
+// vượt nhẹ (KV không atomic) — vector chính (song song trong 1 invocation) đã chặn.
+const RESERVE_TTL_MS = 5 * 60_000;
+let reserves: { usd: number; at: number }[] = [];
+let assertChain: Promise<void> = Promise.resolve();
+
+function reservedNowUsd(): number {
+  const cutoff = Date.now() - RESERVE_TTL_MS;
+  reserves = reserves.filter((r) => r.at >= cutoff && r.usd > 0);
+  return reserves.reduce((s, r) => s + r.usd, 0);
+}
+
+/** Quyết toán: usage thật đã ghi vào KV → trừ dần phần đã đặt chỗ (FIFO, clamp ≥0). */
+export function consumeReserve(usd: number): void {
+  let left = Math.max(0, usd);
+  for (const r of reserves) {
+    if (left <= 0) break;
+    const take = Math.min(r.usd, left);
+    r.usd -= take;
+    left -= take;
+  }
+  reserves = reserves.filter((r) => r.usd > 0);
+}
+
 /**
- * Chặn TRƯỚC khi tốn tiền: spend hôm nay + ước tính lần này vượt trần → throw
- * message rõ (action bắt + hiện UI). Gọi ở MỌI điểm sắp gọi provider trả phí.
+ * Chặn TRƯỚC khi tốn tiền: (spend hôm nay + đã đặt chỗ + ước tính lần này) vượt
+ * trần → throw message rõ (action bắt + hiện UI). Qua được = ước tính ĐÃ được
+ * đặt chỗ. Gọi ở MỌI điểm sắp gọi provider trả phí.
  */
 export async function assertDailyCap(estimatedUsd: number, label: string): Promise<void> {
-  const spent = await spendTodayUsd();
-  const cap = dailyCapUsd();
-  if (spent + estimatedUsd > cap) {
-    throw new Error(
-      `Trần chi phí/ngày chạm mức: đã dùng ~$${spent.toFixed(2)} + ${label} ~$${estimatedUsd.toFixed(2)} > trần $${cap}/ngày. ` +
-        `Đợi mai hoặc nâng DAILY_COST_CAP_USD.`
-    );
-  }
+  const run = assertChain.then(async () => {
+    const spent = await spendTodayUsd();
+    const reserved = reservedNowUsd();
+    const cap = dailyCapUsd();
+    if (spent + reserved + estimatedUsd > cap) {
+      throw new Error(
+        `Trần chi phí/ngày chạm mức: đã dùng ~$${spent.toFixed(2)}` +
+          (reserved > 0 ? ` + đang đặt chỗ ~$${reserved.toFixed(2)}` : "") +
+          ` + ${label} ~$${estimatedUsd.toFixed(2)} > trần $${cap}/ngày. Đợi mai hoặc nâng DAILY_COST_CAP_USD.`
+      );
+    }
+    reserves.push({ usd: estimatedUsd, at: Date.now() });
+  });
+  // giữ chain sống kể cả khi run reject (nuốt ở nhánh chain, KHÔNG nuốt với caller)
+  assertChain = run.then(
+    () => {},
+    () => {}
+  );
+  return run;
 }
 
 /** Ghi nhận usage cho provider mặc định của 1 kind (avatar/image/tts/render). */
@@ -93,4 +145,5 @@ export async function recordPaidUsage(
     costEstimateUsd: costUsd,
     requestCount: 1,
   });
+  consumeReserve(costUsd); // quyết toán đặt chỗ (P1.1)
 }

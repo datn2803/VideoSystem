@@ -95,7 +95,14 @@ export function assertPublicHttpUrl(raw: string): URL {
     }
   }
   // IPv4 private / loopback / link-local ranges.
-  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  assertPublicIpLiteral(host);
+  return u;
+}
+
+/** [VideoSystem vá thêm — P1.2] Bộ luật IP dùng CHUNG cho hostname literal lẫn
+ *  IP đã resolve qua DNS. Throw nếu private/loopback/link-local. */
+export function assertPublicIpLiteral(ip: string): void {
+  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
     const [a, b] = [Number(m[1]), Number(m[2])];
     if (
@@ -106,10 +113,37 @@ export function assertPublicHttpUrl(raw: string): URL {
       (a === 169 && b === 254) || // link-local (cloud metadata)
       a === 0
     ) {
-      throw new Error(`refusing to fetch private IP: ${host}`);
+      throw new Error(`refusing to fetch private IP: ${ip}`);
     }
   }
-  return u;
+  if (ip.includes(':')) {
+    const h6 = ip.toLowerCase().replace(/^\[|\]$/g, '');
+    if (h6 === '::' || h6 === '::1' || h6.startsWith('fe80:') || h6.startsWith('fc') || h6.startsWith('fd') || h6.includes('::ffff:')) {
+      throw new Error(`refusing to fetch private IPv6: ${ip}`);
+    }
+  }
+}
+
+/**
+ * [VideoSystem vá thêm — P1.2 chống DNS REBINDING] hostname công khai có thể
+ * trỏ A-record về IP nội bộ (169.254.169.254…) — validate chuỗi hostname là
+ * chưa đủ. Resolve DNS rồi áp bộ luật IP lên TỪNG địa chỉ trả về.
+ * Giới hạn ghi nhận: fetch sau đó resolve lại (TOCTOU DNS) — chặn được
+ * rebinding tĩnh, không chặn được DNS đổi đáp án giữa check và fetch.
+ */
+async function assertResolvesPublic(urlStr: string): Promise<void> {
+  const u = new URL(urlStr);
+  const host = u.hostname.toLowerCase();
+  // IP literal đã được assertPublicHttpUrl xử — chỉ resolve hostname chữ.
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(':')) return;
+  const dns = await import('node:dns/promises');
+  let addrs: { address: string }[];
+  try {
+    addrs = await dns.lookup(host, { all: true, verbatim: true });
+  } catch {
+    throw new Error(`không resolve được DNS cho host: ${host}`);
+  }
+  for (const a of addrs) assertPublicIpLiteral(a.address);
 }
 
 /** Dispatch: GitHub repo URL → repo summary, anything else → article. */
@@ -324,6 +358,7 @@ async function fetchText(url: string, extraHeaders: Record<string, string>, sign
   let current = url;
   for (let hop = 0; hop < 5; hop++) {
     assertPublicHttpUrl(current);
+    await assertResolvesPublic(current); // P1.2: chặn hostname trỏ DNS về IP nội bộ
     const res = await fetch(current, {
       headers: { 'user-agent': UA, ...extraHeaders },
       redirect: 'manual',

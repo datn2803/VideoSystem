@@ -31,13 +31,17 @@
         -webkit-font-smoothing: antialiased;
         text-rendering: geometricPrecision;
       }
-      /* Token hoá (Phase 2): --red = accent thương hiệu; grade/glow phái sinh từ accent.
-         Default = look MagentX hiện tại (đỏ + ám rượu vang) khi không có BrandKit. */
+      /* Token hoá (Phase 2 + P1.4): --red = accent thương hiệu; grade/glow phái sinh
+         từ accent; NỀN cũng token theo mode BrandKit (brand sáng ra NỀN SÁNG).
+         Default = look MagentX hiện tại (nền tối + đỏ + ám rượu vang) khi không tokens. */
       :root {
         --red: #e11d2a;
         --grade-glow: rgba(160, 20, 35, 0.42);
         --grade-tint: rgba(160, 20, 35, 0.30);
         --red-glow: rgba(225, 29, 42, 0.5);
+        --bg-base1: #16161a;
+        --bg-base2: #050506;
+        --vignette-a: 0.55;
       }
 
       #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
@@ -47,7 +51,7 @@
       #bgbase {
         position: absolute; inset: 0;
         background: radial-gradient(120% 90% at 80% 110%, var(--grade-glow), rgba(0,0,0,0) 45%),
-                    linear-gradient(160deg, #16161a, #050506);
+                    linear-gradient(160deg, var(--bg-base1), var(--bg-base2));
       }
 
       #bglayer { position: absolute; inset: 0; z-index: 1; }
@@ -74,7 +78,7 @@
       /* Vignette: hút mắt vào trung tâm, rìa tối điện ảnh. */
       #vignette {
         position: absolute; inset: 0; pointer-events: none; z-index: 3;
-        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,var(--vignette-a)) 100%);
       }
       /* (Đã BỎ #grain feTurbulence — SVG turbulence filter ngốn CPU cực mạnh khi
          render software trên VPS → gây render chậm/timeout. Grade + vignette đủ chất phim.) */
@@ -218,10 +222,20 @@
         const hexA = (a) => `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
         const rs = document.documentElement.style;
         rs.setProperty("--red", BK.accent);
-        rs.setProperty("--grade-glow", hexA(0.42));
-        rs.setProperty("--grade-tint", hexA(0.30));
         rs.setProperty("--red-glow", hexA(0.5));
         document.documentElement.dataset.skin = BK.styleVariant || "classic";
+        // P1.4: NỀN theo mode BrandKit — brand sáng ra nền sáng (grade dịu hơn,
+        // vignette nhẹ hơn); dark/không mode → giữ nền tối MagentX cũ.
+        if (BK.mode === "light" && /^#[0-9a-f]{6}$/i.test(String(BK.bg1 || "")) ) {
+          rs.setProperty("--bg-base1", BK.bg1);
+          rs.setProperty("--bg-base2", BK.bg2 && /^#[0-9a-f]{6}$/i.test(BK.bg2) ? BK.bg2 : BK.bg1);
+          rs.setProperty("--grade-glow", hexA(0.16));
+          rs.setProperty("--grade-tint", hexA(0.10));
+          rs.setProperty("--vignette-a", "0.22");
+        } else {
+          rs.setProperty("--grade-glow", hexA(0.42));
+          rs.setProperty("--grade-tint", hexA(0.30));
+        }
       })();
 
       // PHASE 3b: hook → title-card đầu clip; stat → insert giữa clip (nếu có số thật).
