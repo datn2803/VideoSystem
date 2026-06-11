@@ -6,8 +6,10 @@ import { CreateProfileDialog } from "@/components/profiles/create-profile-dialog
 import { CreatePlanButton, DeleteProfileButton } from "@/components/profiles/profile-actions";
 import { ProfileStrategyPanel } from "@/components/profiles/profile-strategy";
 import { BrandKitPanel } from "@/components/profiles/brand-kit-card";
+import { PipelineRunner } from "@/components/profiles/pipeline-runner";
 import { getOrCreateBrandKit } from "@/lib/design/director";
 import { DESIGN_SYSTEMS } from "@/design/library";
+import { renderMode } from "@/lib/video/cost-guard";
 import { UserCircle2, Briefcase, Target, Mic, Award, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +105,8 @@ export default async function ProfilesPage() {
                   <ProfileStrategyPanel profileId={p.id} strategy={p.strategy} />
 
                   <BrandKitPanel profileId={p.id} kit={kits[pi]} systems={systemOptions} />
+
+                  <PipelineRunner profileId={p.id} renderMode={renderMode()} />
 
                   <div className="flex gap-2 pt-2 border-t border-border">
                     <DeleteProfileButton profileId={p.id} name={p.name} />

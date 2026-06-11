@@ -1,7 +1,7 @@
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { blobUpload, blobDelete } from "@/lib/backend/blob-store";
 
-export type AudioPart = "hook" | "body" | "cta" | "full" | "broll" | "animation";
+export type AudioPart = "hook" | "body" | "cta" | "full" | "broll" | "animation" | "music";
 
 export type AudioRecord = {
   id: string;

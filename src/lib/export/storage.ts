@@ -9,6 +9,8 @@ export type ExportRecord = {
   captionLocalized: string;
   hashtags: string[];
   exportedAt: string;
+  /** Hook lịch đăng (Phase 5): thời điểm dự kiến đăng (ISO) — người dùng tự đặt. */
+  scheduledAt?: string;
 };
 
 const KEY = "exports";
@@ -45,5 +47,15 @@ export const exportStore = {
     list.push(record);
     await write(list);
     return record;
+  },
+  /** Đặt/đổi lịch đăng cho 1 export (Phase 5). */
+  async schedule(id: string, scheduledAt: string | null): Promise<ExportRecord | undefined> {
+    const list = await read();
+    const idx = list.findIndex((e) => e.id === id);
+    if (idx < 0) return undefined;
+    if (scheduledAt) list[idx].scheduledAt = scheduledAt;
+    else delete list[idx].scheduledAt;
+    await write(list);
+    return list[idx];
   },
 };

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
 import { decryptSecret } from "@/lib/integration-hub/vault";
 import { getOrCreateBrandKit } from "@/lib/design/director";
+import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { hub } from "@/lib/integration-hub/hub";
 import { footageStore } from "@/lib/footage/storage";
 import { audioStore } from "@/lib/audio/storage";
@@ -400,7 +401,16 @@ export async function buildBroll(input: {
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 30;
       // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
-      const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      let voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      // Nhạc nền MiniMax (Phase 5, tuỳ chọn): có track "music" → mix duck -18dB.
+      const music = audios.find((a) => a.part === "music");
+      if (voiceUrl && audio && music) {
+        const musicUrl = toAbsoluteUrl(music.storagePath);
+        if (musicUrl) {
+          const mixed = await mixVoiceWithMusic({ id: audio.id, url: voiceUrl }, { id: music.id, url: musicUrl });
+          if (mixed) voiceUrl = mixed;
+        }
+      }
 
       // B-roll CHUYÊN NGHIỆP: ẢNH AI sinh theo topic (GPT Image), style đồng nhất,
       // 9:16, KHÔNG chữ. Cost-guard RENDER_LIVE + cache + retry trong helper.

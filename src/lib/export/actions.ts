@@ -24,6 +24,17 @@ export async function recordExportAction(input: { scriptId: string; platform: Pl
   return record;
 }
 
+/** Hook lịch đăng (Phase 5): đặt/đổi thời điểm dự kiến đăng cho 1 export. */
+export async function scheduleExportAction(exportId: string, scheduledAt: string | null) {
+  if (scheduledAt && Number.isNaN(Date.parse(scheduledAt))) {
+    return { error: "Thời điểm không hợp lệ" } as const;
+  }
+  const rec = await exportStore.schedule(exportId, scheduledAt);
+  if (!rec) return { error: "Không tìm thấy export" } as const;
+  revalidatePath("/export");
+  return { ok: true, record: rec } as const;
+}
+
 export async function markAllExportedAction(scriptId: string) {
   // Record exports for all 3 platforms
   for (const platform of ["tiktok", "facebook", "youtube_shorts"] as Platform[]) {

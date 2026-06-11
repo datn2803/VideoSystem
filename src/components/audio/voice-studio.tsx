@@ -30,9 +30,11 @@ const PART_LABEL: Record<AudioPart, string> = {
   full: "Full script (cho C1 Talking)",
   broll: "B-roll voice-over (cho C2)",
   animation: "Animation voice-over (cho C3)",
+  music: "Nhạc nền (MiniMax — sinh ở Music Studio)",
 };
 
 const PART_COLOR: Record<AudioPart, "default" | "accent" | "success" | "warning"> = {
+  music: "accent",
   hook: "warning",
   body: "default",
   cta: "warning",

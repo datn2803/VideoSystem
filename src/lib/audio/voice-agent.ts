@@ -40,6 +40,7 @@ export async function generateAudioForScript(input: {
     cta: record.script.cta,
     full: `${record.script.hook}\n\n${record.script.body}\n\n${record.script.cta}`,
     broll: record.script.variantPrompts.broll.voiceOver,
+    music: "", // part music KHÔNG đi qua TTS — sinh ở minimax-music
     animation: record.script.variantPrompts.animation.voiceOver,
   };
   const rawText = textMap[input.part] || "";

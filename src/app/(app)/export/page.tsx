@@ -7,6 +7,7 @@ import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore } from "@/lib/video/storage";
 import { exportStore } from "@/lib/export/storage";
 import { ExportCard } from "@/components/export/export-card";
+import { ExportSchedule } from "@/components/export/export-schedule";
 import { localizeCaption } from "@/lib/export/caption-localizer";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +128,16 @@ export default async function ExportPage() {
                 </ol>
               </CardContent>
             </Card>
+
+            <ExportSchedule
+              items={allExports.map((e) => ({
+                id: e.id,
+                platform: e.platform,
+                topic: scripts.find((s) => s.id === e.scriptId)?.topic || e.scriptId.slice(0, 8),
+                exportedAt: e.exportedAt,
+                scheduledAt: e.scheduledAt,
+              }))}
+            />
 
             <div className="space-y-6">
               {items.map((item) => (

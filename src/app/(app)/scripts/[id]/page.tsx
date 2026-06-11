@@ -12,6 +12,7 @@ import { videoStore } from "@/lib/video/storage";
 import { ScriptDetail } from "@/components/scripts/script-detail";
 import { SceneStudio } from "@/components/scripts/scene-studio";
 import { VoiceStudio } from "@/components/audio/voice-studio";
+import { MusicStudio } from "@/components/audio/music-studio";
 import { RenderStudio } from "@/components/video/render-studio";
 import { ReviewStateBar } from "@/components/review/send-to-review-button";
 import { renderMode } from "@/lib/video/cost-guard";
@@ -102,6 +103,12 @@ export default async function ScriptDetailPage({ params }: { params: Promise<{ i
         />
 
         <VoiceStudio scriptId={id} initialAudios={audios} hasTTSProvider={hasTTSProvider} defaultSpeed={defaultSpeed} />
+
+        <MusicStudio
+          scriptId={id}
+          initialMusicUrl={audios.find((a) => a.part === "music")?.storagePath ?? null}
+          renderMode={renderMode()}
+        />
 
         <RenderStudio
           scriptId={id}

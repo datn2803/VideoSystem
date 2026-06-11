@@ -13,6 +13,7 @@
  * (provider_usage) hôm nay; chạm trần → assertDailyCap throw, action báo rõ.
  */
 import { store } from "@/lib/integration-hub/storage";
+import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 
 export type RenderMode = "mock" | "dryrun" | "live";
 
@@ -37,11 +38,28 @@ export function dailyCapUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : 5;
 }
 
-/** Tổng chi phí ước tính ĐÃ ghi nhận hôm nay (mọi provider). */
+// Usage cho dịch vụ NGOÀI Integration Hub (vd nhạc MiniMax key env) — KV riêng,
+// vẫn cộng vào spendTodayUsd để trần/ngày đếm đủ.
+const EXTRA_KEY = "extra-usage";
+type ExtraUsage = { date: string; label: string; costUsd: number };
+
+export async function recordExtraUsage(label: string, costUsd: number): Promise<void> {
+  const list = await kvRead<ExtraUsage[]>(EXTRA_KEY, []);
+  list.push({ date: new Date().toISOString().slice(0, 10), label, costUsd });
+  // Giữ gọn: chỉ lưu 60 ngày gần nhất
+  const cutoff = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
+  await kvWrite(EXTRA_KEY, list.filter((u) => u.date >= cutoff));
+}
+
+/** Tổng chi phí ước tính ĐÃ ghi nhận hôm nay (mọi provider + extra). */
 export async function spendTodayUsd(): Promise<number> {
   const today = new Date().toISOString().slice(0, 10);
   const usage = await store.listUsage();
-  return usage.filter((u) => u.date === today).reduce((s, u) => s + (u.costEstimateUsd || 0), 0);
+  const hub = usage.filter((u) => u.date === today).reduce((s, u) => s + (u.costEstimateUsd || 0), 0);
+  const extra = (await kvRead<ExtraUsage[]>(EXTRA_KEY, []))
+    .filter((u) => u.date === today)
+    .reduce((s, u) => s + (u.costUsd || 0), 0);
+  return hub + extra;
 }
 
 /**

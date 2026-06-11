@@ -495,6 +495,55 @@ app.post("/audio/speed", async (req, res) => {
   }
 });
 
+// POST /audio/mix { voiceBase64, musicBase64, duckDb? } → { audioBase64, durationMs }
+// Trộn nhạc nền DƯỚI giọng đọc (Phase 5): nhạc volume duckDb (default -18dB,
+// chuẩn html-video), aloop lặp phủ hết voice, amix duration=first cắt theo voice.
+// Nhẹ (~1-2s ffmpeg) → không cần render-lock.
+app.post("/audio/mix", async (req, res) => {
+  const auth = checkAuth(req);
+  if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });
+
+  const { voiceBase64, musicBase64, duckDb } = req.body || {};
+  if (typeof voiceBase64 !== "string" || voiceBase64.length < 16)
+    return res.status(400).json({ ok: false, error: "voiceBase64 không hợp lệ" });
+  if (typeof musicBase64 !== "string" || musicBase64.length < 16)
+    return res.status(400).json({ ok: false, error: "musicBase64 không hợp lệ" });
+  const duck = Number.isFinite(Number(duckDb)) ? Math.max(-40, Math.min(0, Number(duckDb))) : -18;
+
+  const id = crypto.randomUUID();
+  const vFile = path.join(os.tmpdir(), `mix-v-${id}.mp3`);
+  const mFile = path.join(os.tmpdir(), `mix-m-${id}.mp3`);
+  const outFile = path.join(os.tmpdir(), `mix-out-${id}.mp3`);
+  try {
+    await fs.writeFile(vFile, Buffer.from(voiceBase64, "base64"));
+    await fs.writeFile(mFile, Buffer.from(musicBase64, "base64"));
+    await execFileP(
+      "ffmpeg",
+      [
+        "-y",
+        "-i", vFile,
+        "-stream_loop", "-1", "-i", mFile, // nhạc lặp vô hạn — amix duration=first cắt theo voice
+        "-filter_complex",
+        `[1:a]volume=${duck}dB[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+        "-map", "[aout]",
+        "-c:a", "libmp3lame", "-b:a", "192k",
+        outFile,
+      ],
+      { timeout: 120_000, maxBuffer: 32 * 1024 * 1024 }
+    );
+    const buf = await fs.readFile(outFile);
+    const durSec = await probeDuration(outFile);
+    return res.json({ audioBase64: buf.toString("base64"), durationMs: durSec ? Math.round(durSec * 1000) : null });
+  } catch (e) {
+    console.error("[audio-mix-fail]", e?.stderr || e?.message || e);
+    return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+  } finally {
+    await fs.rm(vFile, { force: true }).catch(() => {});
+    await fs.rm(mFile, { force: true }).catch(() => {});
+    await fs.rm(outFile, { force: true }).catch(() => {});
+  }
+});
+
 app.get("/jobs/:jobId", (req, res) => {
   const auth = checkAuth(req);
   if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });

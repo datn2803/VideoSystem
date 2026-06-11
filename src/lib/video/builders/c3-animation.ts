@@ -7,6 +7,7 @@ import { blobUpload } from "@/lib/backend/blob-store";
 import { getOpenAIKey, transcribeWords, alignByWeights, type Word } from "@/lib/audio/whisper";
 import type { ScriptResult } from "@/lib/agents/scripter";
 import { getOrCreateBrandKit } from "@/lib/design/director";
+import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
 import { allowSelfHostRender } from "../cost-guard";
@@ -444,7 +445,17 @@ export async function buildAnimation(input: {
     try {
       const renderer = await getEngine("render");
       // Voice-over: URL công khai (Supabase) — service ở VPS tải audio qua mạng.
-      const voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      let voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
+      // Nhạc nền MiniMax (Phase 5, tuỳ chọn): script có track "music" → mix duck
+      // -18dB dưới giọng (cache theo voiceId+musicId → URL ổn định, renderHash sống).
+      const music = audios.find((a) => a.part === "music");
+      if (voiceUrl && audio && music) {
+        const musicUrl = toAbsoluteUrl(music.storagePath);
+        if (musicUrl) {
+          const mixed = await mixVoiceWithMusic({ id: audio.id, url: voiceUrl }, { id: music.id, url: musicUrl });
+          if (mixed) voiceUrl = mixed;
+        }
+      }
       // Độ dài: ưu tiên độ dài audio thật để animation co giãn khớp giọng đọc.
       const durationSec =
         audio?.durationMs && audio.durationMs > 0
