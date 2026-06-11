@@ -42,6 +42,11 @@
         --bg-base1: #16161a;
         --bg-base2: #050506;
         --vignette-a: 0.55;
+        /* Chữ đặt TRỰC TIẾP trên nền (title-card/stat — ngoài pill caption):
+           default trắng + shadow đậm cho nền tối; mode light đổi sang ink tối
+           + shadow nhẹ (review T3: trắng-trên-sáng không đọc được). */
+        --title-ink: #ffffff;
+        --title-shadow: 0 6px 34px rgba(0, 0, 0, 0.85), 0 2px 8px rgba(0, 0, 0, 0.7);
       }
 
       #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
@@ -151,14 +156,14 @@
       .titleword {
         display: inline-block; margin: 0 0.12em 0.1em;
         font-weight: 900; font-size: 88px; line-height: 1.06;
-        letter-spacing: -1px; color: #fff;
-        text-shadow: 0 6px 34px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.7);
+        letter-spacing: -1px; color: var(--title-ink);
+        text-shadow: var(--title-shadow);
       }
       .titleword.accent { color: var(--red); }
       #statcard { top: 24%; }
       .statval { font-weight: 900; font-size: 138px; line-height: 1; color: var(--red); text-shadow: 0 6px 34px rgba(0,0,0,0.85); }
-      .statunit { font-weight: 800; font-size: 52px; color: #fff; }
-      .statlabel { margin-top: 16px; font-weight: 700; font-size: 44px; color: rgba(255,255,255,0.94); text-shadow: 0 2px 14px rgba(0,0,0,0.85); }
+      .statunit { font-weight: 800; font-size: 52px; color: var(--title-ink); }
+      .statlabel { margin-top: 16px; font-weight: 700; font-size: 44px; color: var(--title-ink); text-shadow: var(--title-shadow); }
 
       /* ── SKIN theo BrandKit.styleVariant (Phase 2) — classic = default, không đổi ── */
       html[data-skin="poster"] .caption { border-radius: 8px; font-weight: 900; }
@@ -232,6 +237,11 @@
           rs.setProperty("--grade-glow", hexA(0.16));
           rs.setProperty("--grade-tint", hexA(0.10));
           rs.setProperty("--vignette-a", "0.22");
+          // Chữ trực-tiếp-trên-nền (title/stat) đổi sang ink tối + shadow sáng nhẹ
+          // (T3: chữ trắng trên nền sáng không đọc được khi không có ảnh phủ).
+          if (/^#[0-9a-f]{6}$/i.test(String(BK.ink || ""))) rs.setProperty("--title-ink", BK.ink);
+          else rs.setProperty("--title-ink", "#1a1a22");
+          rs.setProperty("--title-shadow", "0 2px 12px rgba(255,255,255,0.55), 0 1px 3px rgba(0,0,0,0.18)");
         } else {
           rs.setProperty("--grade-glow", hexA(0.42));
           rs.setProperty("--grade-tint", hexA(0.30));

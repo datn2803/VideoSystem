@@ -432,13 +432,16 @@ export async function buildBroll(input: {
 
       // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
       // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
-      // Whisper = call OpenAI TRẢ PHÍ (nhỏ) → gate isLive (P0.3); dryrun rơi về
-      // caption_lines chia đều (pipeline vẫn chạy).
+      // Whisper = call OpenAI TRẢ PHÍ (nhỏ) → gate isLive + trần ngày (P0.3 + L1);
+      // dryrun rơi về caption_lines chia đều (pipeline vẫn chạy).
+      const whisperEst = ((duration || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006);
+      const useWhisper = isLive() && !!voiceUrlRaw && !!openaiKey;
+      if (useWhisper) await assertDailyCap(whisperEst, "Whisper C2");
       const [imgResult, words] = await Promise.all([
         generateBrollImages(input.scriptId, topic, captionSource, shotList, duration),
-        isLive() && voiceUrlRaw && openaiKey ? transcribeWords(voiceUrlRaw, openaiKey) : Promise.resolve(null),
+        useWhisper ? transcribeWords(voiceUrlRaw, openaiKey!) : Promise.resolve(null),
       ]);
-      if (words) await recordExtraUsage("openai-whisper", ((duration || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006));
+      if (words) await recordExtraUsage("openai-whisper", whisperEst);
 
       // FAIL-FAST: nếu CÓ ý định sinh ảnh (RENDER_LIVE + provider) nhưng ra 0 ảnh →
       // đây là LỖI người dùng cần biết, KHÔNG render câm ra video đen im lặng.
@@ -511,6 +514,15 @@ export async function buildBroll(input: {
 
   if (mode === "creatomate") {
     try {
+      // Creatomate là dịch vụ render TRẢ PHÍ theo credit (KHÔNG phải self-host $0)
+      // → gate isLive + trần ngày như mọi call paid (review đợt vá T4).
+      if (!isLive()) {
+        return (await videoStore.update(draft.id, {
+          status: "failed",
+          error: "Creatomate là dịch vụ trả phí — cần RENDER_MODE=live (cost-guard).",
+        }))!;
+      }
+      await assertDailyCap(Number(process.env.CREATOMATE_COST_PER_RENDER_USD) || 0.3, "render Creatomate C2");
       const renderer = await getEngine("render");
       const templateId = (provider?.config?.brollTemplateId as string) || "";
       if (!templateId) throw new Error("Chưa cấu hình brollTemplateId trong provider Creatomate");

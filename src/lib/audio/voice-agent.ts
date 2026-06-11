@@ -62,7 +62,9 @@ export async function generateAudioForScript(input: {
   const providerName = live ? provider?.name || "mock" : "mock (cost-guard)";
   const tts = live ? await hub.tts() : makeMockTTS();
   if (live) {
-    const per1k = Number(process.env.TTS_COST_PER_1K_CHARS_USD) || 0.05;
+    // Default 0.22 KHỚP adapter ElevenLabs (0.00022 USD/ký tự) — review T1: trước
+    // đây 0.05 = đặt chỗ chỉ 1/4.4 chi phí thật → reserve chống-TOCTOU bị yếu.
+    const per1k = Number(process.env.TTS_COST_PER_1K_CHARS_USD) || 0.22;
     await assertDailyCap((text.length / 1000) * per1k, `TTS ${text.length} ký tự`);
   }
 

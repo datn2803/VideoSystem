@@ -2,11 +2,13 @@
  * Cost-guard (Phase 3, siết P0 review đợt 2) — các call trả phí gate sau đây.
  *
  * PHẠM VI THẬT (đối soát P0.3 — đừng nói quá): ảnh AI (b-roll/preview/hero),
- * avatar HeyGen/D-ID, TTS ElevenLabs, nhạc MiniMax, Whisper = ĐỀU qua
- * isLive + assertDailyCap + record usage. NGOẠI LỆ CÓ CHỦ ĐÍCH: (1) LLM Gemini
- * (planner/scripter/auditor/đạo diễn ảnh) KHÔNG gate isLive — là core flow,
- * free-tier/grounding 1500 lượt/ngày, usage vẫn record qua recordLLMUsage;
- * (2) render VPS self-host $0 — chỉ tắt ở mode mock.
+ * avatar HeyGen/D-ID, TTS ElevenLabs, nhạc MiniMax, Whisper, render Creatomate
+ * = ĐỀU qua isLive + assertDailyCap (+ record usage). NGOẠI LỆ CÓ CHỦ ĐÍCH:
+ * (1) LLM qua hub.llm() (planner/scripter/auditor/đạo diễn ảnh) KHÔNG gate
+ *     isLive — là core flow của app; với Gemini free-tier ≈ $0, NHƯNG nếu set
+ *     default LLM là Claude/DeepSeek (trả phí) thì mọi mode đều tốn — usage
+ *     vẫn record qua recordLLMUsage nên trần ngày "đếm sau" chứ không chặn trước;
+ * (2) render VPS self-host $0 — chỉ tắt ở mode mock (atempo/mix audio cũng VPS $0).
  *
  * RENDER_MODE = "mock" | "dryrun" | "live" (env):
  *  - mock   — KHÔNG gọi gì hết (kể cả VPS $0): render placeholder, test pipeline.

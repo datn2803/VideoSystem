@@ -10,7 +10,7 @@ import { getOrCreateBrandKit } from "@/lib/design/director";
 import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
-import { allowSelfHostRender, isLive, assertDailyCap, recordExtraUsage } from "../cost-guard";
+import { allowSelfHostRender, isLive, assertDailyCap, recordPaidUsage, recordExtraUsage } from "../cost-guard";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { RENDER_PIPELINE_VERSION } from "../render-version";
 
@@ -37,6 +37,9 @@ async function generateHeroImageUrl(scriptId: string, subject: string): Promise<
       `centered, high detail, playful tech vibe`;
     // quality "medium" vừa Vercel 60s (1 ảnh); adapter tự fallback nếu provider không phải gpt-image.
     const r = await img.generate({ prompt, transparent: true, quality: "medium" });
+    // Quyết toán trần ngày (review T2: assert mà không record = tiền tiêu thật
+    // không bao giờ vào spendToday → hero vĩnh viễn không đếm vào trần).
+    await recordPaidUsage("image", r.costUsd || Number(process.env.IMAGE_COST_PER_IMAGE_USD) || 0.05, 1);
     const buf = Buffer.from(r.imageBase64, "base64");
     const hash = crypto.createHash("sha256").update(prompt).digest("hex").slice(0, 10);
     const filename = `c3-hero-${scriptId}-${hash}.png`;
@@ -479,11 +482,14 @@ export async function buildAnimation(input: {
       // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
       // Lỗi/thiếu key → words=null → alignByWeights tự fallback chia theo tỉ lệ trọng số.
       // C3 v2: BỎ sinh ảnh nhân vật 3D (Tommy chốt) → tiết kiệm gpt-image + nhanh hơn; img_hero="" → scene tự ẩn.
-      // Whisper = call OpenAI TRẢ PHÍ (nhỏ ~$0.006/phút) → gate isLive (P0.3).
+      // Whisper = call OpenAI TRẢ PHÍ (nhỏ ~$0.006/phút) → gate isLive + trần ngày (P0.3 + L1).
       // dryrun: words=null → caption/scene_times fallback chia đều (pipeline vẫn chạy).
       const openaiKey = await getOpenAIKey();
-      const words = isLive() && voiceUrlRaw && openaiKey ? await transcribeWords(voiceUrlRaw, openaiKey) : null;
-      if (words) await recordExtraUsage("openai-whisper", ((durationSec || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006));
+      const whisperEst = ((durationSec || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006);
+      const useWhisper = isLive() && !!voiceUrlRaw && !!openaiKey;
+      if (useWhisper) await assertDailyCap(whisperEst, "Whisper C3");
+      const words = useWhisper ? await transcribeWords(voiceUrlRaw, openaiKey!) : null;
+      if (words) await recordExtraUsage("openai-whisper", whisperEst);
       const imgHeroUrl = "";
       const times = alignByWeights(sceneSpecs.map((sp) => sp.weight), words, durationSec);
       const sceneTimes: Record<string, { start: number; dur: number }> = {};
@@ -524,6 +530,15 @@ export async function buildAnimation(input: {
 
   if (mode === "creatomate") {
     try {
+      // Creatomate là dịch vụ render TRẢ PHÍ theo credit (KHÔNG phải self-host $0)
+      // → gate isLive + trần ngày như mọi call paid (review đợt vá T4).
+      if (!isLive()) {
+        return (await videoStore.update(draft.id, {
+          status: "failed",
+          error: "Creatomate là dịch vụ trả phí — cần RENDER_MODE=live (cost-guard).",
+        }))!;
+      }
+      await assertDailyCap(Number(process.env.CREATOMATE_COST_PER_RENDER_USD) || 0.3, "render Creatomate C3");
       const renderer = await getEngine("render");
       const templateId = (provider?.config?.animationTemplateId as string) || "";
       if (!templateId) throw new Error("Chưa cấu hình animationTemplateId trong provider Creatomate");
