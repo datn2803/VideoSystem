@@ -1,9 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { store } from "@/lib/integration-hub/storage";
-import { generateScript, wordBudgetFor } from "@/lib/agents/scripter";
+import { generateScript, wordBudgetFor, sanitizeStoryboard } from "@/lib/agents/scripter";
 import { auditScript } from "@/lib/agents/auditor";
 import { projectStore } from "@/lib/projects/storage";
+import { fetchSource } from "@/lib/sources/fetch-source";
+import { getEngine } from "@/lib/video/engine";
+import { sceneVariablesForNode } from "@/lib/video/scene-preview";
+import { getOrCreateBrandKit } from "@/lib/design/director";
+import { allowSelfHostRender } from "@/lib/video/cost-guard";
+import type { ContentGraph } from "@/lib/content-graph";
 import { scriptStore } from "./storage";
 
 export async function generateScriptAction(input: {
@@ -17,6 +23,8 @@ export async function generateScriptAction(input: {
   dataHook?: string; // góc data từ ContentTopic → Fact Researcher (Part 4)
   lengthSec?: number;
   skipAudit?: boolean;
+  sourceBrief?: string; // Phase 4: bài nguồn (link→video)
+  sourceUrl?: string;
 }) {
   const profile = await store.getProfile(input.profileId);
   if (!profile) return { error: "Không tìm thấy profile." } as const;
@@ -33,6 +41,8 @@ export async function generateScriptAction(input: {
       targetPersona: input.targetPersona,
       dataHook: input.dataHook,
       lengthSec: input.lengthSec,
+      sourceBrief: input.sourceBrief,
+      sourceUrl: input.sourceUrl,
     });
     const scriptText = `${script.hook}\n\n${script.body}\n\n${script.cta}`;
     audit = input.skipAudit
@@ -120,4 +130,76 @@ export async function deleteScriptAction(id: string) {
   await scriptStore.delete(id);
   revalidatePath("/scripts");
   return { ok: true };
+}
+
+/**
+ * Phase 4 — Studio: lưu storyboard Tommy đã sửa (text/duration/data/thứ tự).
+ * Đi qua sanitizeStoryboard (vá id/edge + validate + anti-fab) — graph hỏng → báo lỗi rõ.
+ */
+export async function updateStoryboardAction(scriptId: string, graph: ContentGraph) {
+  const rec = await scriptStore.get(scriptId);
+  if (!rec) return { error: "Không tìm thấy script" } as const;
+  const clean = sanitizeStoryboard(graph, (rec.script.sources?.length || 0) > 0);
+  if (!clean) return { error: "Storyboard không hợp lệ (id trùng / cycle / rỗng)" } as const;
+  await scriptStore.update(scriptId, { script: { ...rec.script, storyboard: clean } });
+  revalidatePath(`/scripts/${scriptId}`);
+  return { ok: true, storyboard: clean } as const;
+}
+
+/**
+ * Phase 4 — Studio: render 1 CẢNH lẻ (preview MP4 ngắn trên engine $0, không
+ * đụng drafts chính). Trả jobId → client poll bằng pollSceneRenderAction.
+ */
+export async function renderSceneAction(scriptId: string, nodeId: string) {
+  if (!allowSelfHostRender()) return { error: "RENDER_MODE=mock — bật dryrun/live để render preview cảnh" } as const;
+  const rec = await scriptStore.get(scriptId);
+  if (!rec) return { error: "Không tìm thấy script" } as const;
+  const node = rec.script.storyboard?.nodes.find((n) => n.id === nodeId);
+  if (!node) return { error: `Không có cảnh "${nodeId}" trong storyboard` } as const;
+  const kit = await getOrCreateBrandKit(rec.profileId);
+  const profile = await store.getProfile(rec.profileId);
+  const isFinance = /bank|financ|tài chính|ngân hàng|fintech/i.test(profile?.industry || "");
+  const { variables } = sceneVariablesForNode(node, kit, isFinance ? "3" : "0");
+  try {
+    const engine = await getEngine("render");
+    const job = await engine.render({ templateId: "animation", variables });
+    return { jobId: job.jobId } as const;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) } as const;
+  }
+}
+
+/** Poll job preview cảnh (stateless — không lưu draft). */
+export async function pollSceneRenderAction(jobId: string) {
+  try {
+    const engine = await getEngine("render");
+    return await engine.poll(jobId);
+  } catch (e) {
+    return { status: "failed" as const, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Phase 4 — "Dán link/bài → video": fetch URL (chặn SSRF) → Markdown → sinh
+ * script với bài làm source brief (số trong bài = có nguồn). Trả script id.
+ */
+export async function createScriptFromLinkAction(input: { profileId: string; url: string; lengthSec?: number }) {
+  const profile = await store.getProfile(input.profileId);
+  if (!profile) return { error: "Không tìm thấy profile" } as const;
+  let fetched;
+  try {
+    fetched = await fetchSource(input.url);
+  } catch (e) {
+    return { error: `Không đọc được link: ${e instanceof Error ? e.message : String(e)}` } as const;
+  }
+  const topic = (fetched.title || fetched.url).slice(0, 120);
+  return generateScriptAction({
+    profileId: input.profileId,
+    topic,
+    painPoint: `Người xem muốn nắm nhanh nội dung: ${topic}`,
+    targetPersona: profile.audience?.segment || "khán giả của kênh",
+    lengthSec: input.lengthSec,
+    sourceBrief: fetched.markdown,
+    sourceUrl: fetched.url,
+  });
 }

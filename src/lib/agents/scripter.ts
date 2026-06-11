@@ -342,12 +342,21 @@ export async function generateScript(input: {
   targetPersona: string;
   lengthSec?: number;
   dataHook?: string; // góc data từ ContentTopic (Part 3) → định hướng Fact Researcher
+  /** Phase 4 "dán link → video": Markdown bài nguồn (đã fetch + chặn SSRF) — ghép vào fact brief. */
+  sourceBrief?: string;
+  /** URL bài nguồn (để ghi vào sources — số liệu truy được về link). */
+  sourceUrl?: string;
 }): Promise<ScriptResult> {
   const lengthSec = input.lengthSec || 60;
   const wordBudget = wordBudgetFor(lengthSec);
 
   // Tầng 1: Fact Researcher (grounded → số liệu thật + nguồn). Best-effort.
   const fact = await runFactResearcher(input.profile, input.topic, input.dataHook, input.painPoint);
+  // Bài nguồn người dùng dán (link→video) đứng TRƯỚC trong brief — số trong bài là số "có nguồn".
+  if (input.sourceBrief?.trim()) {
+    fact.brief = `BÀI NGUỒN NGƯỜI DÙNG CUNG CẤP (số liệu trong đây coi như có nguồn):\n"""\n${input.sourceBrief.trim().slice(0, 6000)}\n"""\n\n${fact.brief}`;
+    if (input.sourceUrl) fact.sources = [{ title: `Bài nguồn: ${input.topic}`, url: input.sourceUrl }, ...fact.sources];
+  }
 
   // Tầng 2: Script Writer (JSON, no-grounding) — dùng fact brief + khoá word-budget.
   const llm = await hub.llm();

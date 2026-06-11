@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { scriptStore } from "@/lib/scripts/storage";
 import { store } from "@/lib/integration-hub/storage";
+import { ScriptFromLink } from "@/components/scripts/script-from-link";
 import { FileText, ShieldCheck, ShieldAlert, ShieldX, Flame, ClipboardCheck, CheckCircle2, XCircle } from "lucide-react";
 
 const REVIEW_BADGE: Record<string, { label: string; variant: "outline" | "warning" | "success" | "destructive" | "accent"; icon?: typeof CheckCircle2 }> = {
@@ -24,6 +25,7 @@ export default async function ScriptsPage() {
     <>
       <Topbar title="Scripts" subtitle="Tất cả script đã sinh + kết quả audit" />
       <div className="p-8 space-y-4">
+        <ScriptFromLink profiles={Object.values(profilesById).map((p) => ({ id: p.id, name: p.name }))} />
         {scripts.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-16 text-center space-y-3">
