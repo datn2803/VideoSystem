@@ -30,6 +30,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev || npm install --omit=dev
 
+# Chromium cho lõi render Playwright (Phase 3, RENDER_ENGINE=playwright).
+# Runtime .so đã cài ở khối apt trên; lệnh này chỉ tải browser bundle về /root/.cache.
+RUN npx playwright install chromium
+
 # Copy the project (compositions, assets, vendor, server)
 COPY . .
 

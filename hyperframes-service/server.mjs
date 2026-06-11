@@ -23,6 +23,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { assessFrame } from "./lib/vision.mjs";
+import { renderWithPlaywright } from "./lib/render-engine.mjs";
 
 const execFileP = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,6 +41,10 @@ const SELF_PUBLIC_URL = (process.env.SELF_PUBLIC_URL || `http://localhost:${PORT
 
 const ALLOWED_TEMPLATES = new Set(["animation", "broll"]);
 const ALLOWED_QUALITY = new Set(["draft", "standard", "high"]);
+// Phase 3: lõi render. "cli" = npx hyperframes (mặc định, như cũ — zero-risk);
+// "playwright" = frame-stepping Playwright+ffmpeg tự chủ (lib/render-engine.mjs).
+const RENDER_ENGINE = (process.env.RENDER_ENGINE || "cli").toLowerCase();
+const RENDER_FPS = Math.max(12, Math.min(30, Number(process.env.RENDER_FPS) || 24));
 const COMP_DIR = path.join(__dirname, "compositions");
 const FILES_DIR = path.join(__dirname, "renders", "out"); // local fallback output
 
@@ -58,12 +63,29 @@ function pruneJobs() {
   for (const [id, j] of jobs) if (now - (j.createdAt || 0) > JOB_TTL_MS) jobs.delete(id);
 }
 
-// ── Single-render mutex (2 vCPU VPS — never run two renders at once) ──
-let renderChain = Promise.resolve();
+// ── Render semaphore (Phase 3): concurrency CẤU HÌNH ĐƯỢC qua RENDER_CONCURRENCY.
+//    Default 1 = mutex như cũ (AN TOÀN cho VPS 2 vCPU — đừng ngây thơ chạy 3 render
+//    nặng cùng lúc trên 2 core; nâng VPS rồi hãy tăng). ──
+const RENDER_CONCURRENCY = Math.max(1, Number(process.env.RENDER_CONCURRENCY) || 1);
+let renderActive = 0;
+const renderQueue = [];
 function withRenderLock(fn) {
-  const run = renderChain.then(fn, fn);
-  renderChain = run.then(() => {}, () => {}); // keep chain alive, swallow to avoid unhandled rejection
-  return run;
+  return new Promise((resolve, reject) => {
+    const run = async () => {
+      renderActive++;
+      try {
+        resolve(await fn());
+      } catch (e) {
+        reject(e);
+      } finally {
+        renderActive--;
+        const next = renderQueue.shift();
+        if (next) next();
+      }
+    };
+    if (renderActive < RENDER_CONCURRENCY) run();
+    else renderQueue.push(run);
+  });
 }
 
 // ── ffprobe duration (seconds) ──
@@ -225,6 +247,27 @@ async function renderTemplate({ template, variables, quality }) {
       tempEntryAbs = path.join(COMP_DIR, `.render-${id}.html`);
       await fs.writeFile(tempEntryAbs, patched, "utf8");
       compRel = `compositions/.render-${id}.html`;
+    }
+  }
+
+  // ── Lõi PLAYWRIGHT (Phase 3, RENDER_ENGINE=playwright): frame-stepping tự chủ.
+  //    Vẫn dùng bản HTML đã bake (ảnh b-roll tĩnh cần cho media); audio do engine
+  //    tự mux từ variables.voice_url; duration đọc từ variables. ──
+  if (RENDER_ENGINE === "playwright") {
+    try {
+      await renderWithPlaywright({
+        entryHtmlAbs: path.join(__dirname, compRel),
+        variables: variables ?? {},
+        quality: q,
+        outFile,
+        fps: RENDER_FPS,
+      });
+      return { tmpDir, outFile };
+    } catch (e) {
+      console.error("[render-fail-playwright]", e?.message || e);
+      throw e;
+    } finally {
+      if (tempEntryAbs) await fs.rm(tempEntryAbs, { force: true }).catch(() => {});
     }
   }
 
