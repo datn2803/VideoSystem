@@ -66,7 +66,9 @@ export function VoiceStudio({
     (async () => {
       const v = await listVoicesAction();
       setVoices(v);
-      if (v.length > 0 && !selectedVoiceId) setSelectedVoiceId(v[0].id);
+      // functional update → không tham chiếu state ngoài effect (hết warning
+      // exhaustive-deps mà GIỮ hành vi load-voices đúng 1 lần khi mount)
+      if (v.length > 0) setSelectedVoiceId((cur) => cur || v[0].id);
     })();
   }, []);
 
