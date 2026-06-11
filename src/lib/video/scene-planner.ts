@@ -1,12 +1,16 @@
 /**
  * Scene planner — ContentGraph (storyboard) → ScenePlan (thứ tự cảnh + timing).
  *
+ * ⚠ TRẠNG THÁI (P2.1 review đợt 2): MODULE ĐỂ DÀNH — hiện CHƯA nơi nào gọi
+ * planScenes/sceneTimesFromPlan trong production. Video chính vẫn dựng từ
+ * variantPrompts (c3-animation.ts); storyboard mới điều khiển preview cảnh lẻ
+ * (scene-preview.ts) + QC + Scene Studio. Nối module này vào builder =
+ * "graph-driven build" — việc LỚN đang CHỜ TOMMY QUYẾT (xem HANDOFF). Giữ lại
+ * có chủ đích + có test (_p1_test.mts) — KHÔNG phải dead code lỡ tay.
+ *
  * Phase 1 đại tu render: tách phần "đọc graph" khỏi buildAnimationVariables rối.
  * topoSort quyết thứ tự phát; durationSec từng node (mặc định 3s) quyết timing;
  * có audio thật thì scale tuyến tính toàn timeline khớp độ dài giọng đọc.
- *
- * Builder cũ (variantPrompts) vẫn chạy song song — module này là đường MỚI,
- * Phase 2+ template/composition sẽ ăn ScenePlan qua scene_times/tokens.
  */
 import {
   type ContentGraph,

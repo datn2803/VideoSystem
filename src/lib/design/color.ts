@@ -1,8 +1,12 @@
 /**
  * Tiện ích màu cho Design Director — thuần hàm, $0, không phụ thuộc browser.
  *
- * Gồm OKLch→sRGB hex (công thức OKLab chuẩn của Björn Ottosson — cùng phương
- * pháp open-design dùng "kỷ luật palette OKLch") + chỉnh sáng/tối/xoay hue qua HSL.
+ * ĐÍNH CHÍNH cho chính xác (P2.3 review đợt 2): đường token CHÍNH hiện derive
+ * từ anchor HEX của design system catalog bằng phép chỉnh HSL (adjustL/hueShift/
+ * withAlpha). Bộ OKLch→sRGB hex (OKLab chuẩn Björn Ottosson) có sẵn + đã test
+ * đúng, dùng khi lấy palette từ directions.ts (đang ở dạng oklch string) —
+ * parseOklchToHex hiện CHƯA có call-site production (để dành, không phải
+ * "toàn bộ palette đi qua OKLch").
  */
 
 // ── hex ↔ rgb ──

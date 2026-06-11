@@ -147,6 +147,8 @@ export function SceneStudio({
           <Clapperboard className="h-4 w-4 text-accent" />
           <h3 className="font-semibold text-sm">Scene Studio</h3>
           <Badge variant="outline" className="text-[9px]">{nodes.length} cảnh · {storyboard.intent}</Badge>
+          {/* P2.2 (UX honesty): storyboard hiện CHƯA điều khiển video chính */}
+          <Badge variant="warning" className="text-[9px]">preview cảnh lẻ — video chính vẫn dựng từ kịch bản gốc</Badge>
         </div>
         <div className="flex items-center gap-2">
           {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
