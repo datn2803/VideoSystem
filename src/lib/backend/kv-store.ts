@@ -15,6 +15,7 @@
  * Supabase persistence should migrate to async.
  */
 import fs from "node:fs";
+import path from "node:path";
 import { dataPath } from "@/lib/paths";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase-client";
 
@@ -26,7 +27,8 @@ function localFile(name: string): string {
 
 function ensureLocal(name: string, defaultValue: unknown) {
   const file = localFile(name);
-  const dir = file.substring(0, file.lastIndexOf("/"));
+  // path.dirname thay vì cắt theo "/" — path Windows dùng "\" → cắt "/" ra chuỗi rỗng → mkdir('') nổ.
+  const dir = path.dirname(file);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify(defaultValue, null, 2));
 }
