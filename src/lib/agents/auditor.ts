@@ -1,5 +1,6 @@
 import { hub } from "@/lib/integration-hub/hub";
 import { recordLLMUsage } from "@/lib/agents/usage";
+import { validate, type ContentGraph } from "@/lib/content-graph";
 
 export type AuditIssue = {
   severity: "critical" | "high" | "medium" | "low";
@@ -117,6 +118,49 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+// Nhãn anti-fab chấp nhận được trên số liệu không nguồn (khớp scripter.ESTIMATE_RE).
+const ESTIMATE_LABEL_RE = /ước tính|ví dụ|minh hoạ|minh họa|tham khảo|~/i;
+
+/**
+ * Kiểm storyboard (Phase 1) — chạy BẰNG CODE, $0, không thêm LLM call:
+ * 1) graph phải hợp lệ (validate content-graph: id trùng / edge mồ côi / cycle);
+ * 2) ANTI-FAB: node data có chữ số mà script KHÔNG có nguồn thật VÀ label thiếu nhãn
+ *    'ước tính/ví dụ' → flag (mức medium — builder sẽ tự ẩn/gắn nhãn, không chặn render).
+ * Chỉ REPORT — compliance status vẫn do BANKING_RULES_VN quyết.
+ */
+export function auditStoryboard(graph: ContentGraph, hasSources: boolean): AuditIssue[] {
+  const issues: AuditIssue[] = [];
+  const v = validate(graph);
+  if (!v.ok) {
+    issues.push({
+      severity: "high",
+      rule: "storyboard_invalid",
+      excerpt: v.errors.map((e) => e.code).join(", ").slice(0, 80),
+      suggestion: "Sinh lại script hoặc bỏ storyboard (đường render cũ không bị ảnh hưởng).",
+    });
+    return issues;
+  }
+  for (const n of graph.nodes) {
+    if (n.kind !== "data" || n.data == null) continue;
+    const blob = JSON.stringify(n.data);
+    if (!/\d/.test(blob)) continue;
+    const label = String(
+      (typeof n.data === "object" && !Array.isArray(n.data) ? (n.data as Record<string, unknown>).label : "") ||
+        n.label ||
+        ""
+    );
+    if (!hasSources && !ESTIMATE_LABEL_RE.test(label)) {
+      issues.push({
+        severity: "medium",
+        rule: "storyboard_number_unverified",
+        excerpt: `node "${n.id}": ${blob.slice(0, 60)}`,
+        suggestion: "Số không truy được về nguồn — gắn nhãn 'ước tính/ví dụ' vào label hoặc ẩn cảnh này.",
+      });
+    }
+  }
+  return issues;
+}
+
 type ParsedAudit = Omit<AuditResult, "costUsd" | "editorial"> & {
   editorial?: { hookScore?: number; dataScore?: number; notes?: string };
 };
@@ -127,9 +171,20 @@ function clamp5(v: unknown): number {
   return Math.min(5, Math.max(1, Math.round(n)));
 }
 
-export async function auditScript(scriptText: string, opts?: { wordBudget?: number }): Promise<AuditResult> {
+export async function auditScript(
+  scriptText: string,
+  opts?: {
+    wordBudget?: number;
+    /** Storyboard content-graph (nếu script có) → kiểm graph + anti-fab số liệu bằng code, $0. */
+    storyboard?: ContentGraph;
+    /** Script có nguồn thật (sources từ Fact Researcher grounded) không. */
+    hasSources?: boolean;
+  }
+): Promise<AuditResult> {
   const wordBudget = opts?.wordBudget;
   const wordCount = countWords(scriptText);
+  // Kiểm graph TRƯỚC (pure code) — merge vào issues của kết quả LLM ở dưới.
+  const graphIssues = opts?.storyboard ? auditStoryboard(opts.storyboard, opts.hasSources === true) : [];
   const llm = await hub.llm();
   const result = await llm.complete({
     system: SYSTEM,
@@ -159,7 +214,12 @@ export async function auditScript(scriptText: string, opts?: { wordBudget?: numb
       parsed = JSON.parse(cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned) as ParsedAudit;
     }
     const { editorial: edRaw, ...rest } = parsed;
-    return { ...rest, editorial: buildEditorial(edRaw), costUsd: result.costUsd };
+    return {
+      ...rest,
+      issues: [...(rest.issues || []), ...graphIssues],
+      editorial: buildEditorial(edRaw),
+      costUsd: result.costUsd,
+    };
   } catch {
     return {
       status: "warning",
@@ -171,6 +231,7 @@ export async function auditScript(scriptText: string, opts?: { wordBudget?: numb
           excerpt: "Auditor response not parseable as JSON",
           suggestion: "Có thể là do LLM mock hoặc response sai format. Re-run với LLM provider thật.",
         },
+        ...graphIssues,
       ],
       summary: "Không parse được response từ Auditor agent.",
       editorial: buildEditorial(),

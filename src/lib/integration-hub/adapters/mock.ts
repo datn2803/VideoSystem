@@ -138,6 +138,28 @@ function mockScript(topic: string, lengthSec: number) {
       },
     },
     estimatedDurationSec: lengthSec,
+    // Phase 1: storyboard content-graph mock — e2e local test trọn đường graph mới
+    // (số 70% là MINH HOẠ → label ghi 'ví dụ' đúng anti-fab; mock không có nguồn thật).
+    storyboard: {
+      schemaVersion: 1,
+      intent: "explainer",
+      synopsis: `Giải thích ngắn: ${topic}`,
+      nodes: [
+        { id: "hook", kind: "text", text: `Bạn có biết: ${topic.toLowerCase()}?`, frameIntent: "hook", durationSec: 4 },
+        { id: "diem_1", kind: "text", text: "Yếu tố 1: mục tiêu tài chính dài hạn", frameIntent: "point", durationSec: 6 },
+        { id: "so_lieu_1", kind: "data", data: { value: "70", unit: "%", label: "khách hàng gặp vấn đề (ví dụ)" }, frameIntent: "data-big", durationSec: 5 },
+        { id: "diem_2", kind: "text", text: "Yếu tố 2: khả năng chấp nhận rủi ro", frameIntent: "point", durationSec: 6 },
+        { id: "diem_3", kind: "text", text: "Yếu tố 3: dòng tiền thực tế hàng tháng", frameIntent: "point", durationSec: 6 },
+        { id: "cta", kind: "text", text: "Comment câu hỏi — tôi trả lời từng người", frameIntent: "outro", durationSec: 4 },
+      ],
+      edges: [
+        { from: "hook", to: "diem_1", kind: "sequence" },
+        { from: "diem_1", to: "so_lieu_1", kind: "sequence" },
+        { from: "so_lieu_1", to: "diem_2", kind: "sequence" },
+        { from: "diem_2", to: "diem_3", kind: "sequence" },
+        { from: "diem_3", to: "cta", kind: "sequence" },
+      ],
+    },
   };
 }
 

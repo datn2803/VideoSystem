@@ -2,6 +2,7 @@ import { hub } from "@/lib/integration-hub/hub";
 import { type ProfileRecord } from "@/lib/integration-hub/storage";
 import { recordLLMUsage } from "@/lib/agents/usage";
 import { groundedNoSourceWarning } from "@/lib/agents/grounding-util";
+import { validate, type ContentGraph, type Node as GraphNode, type Edge as GraphEdge } from "@/lib/content-graph";
 
 export type ScriptResult = {
   hook: string;
@@ -39,6 +40,13 @@ export type ScriptResult = {
   };
   estimatedDurationSec: number;
   sources?: { claim: string; url: string; year?: string }[]; // nguồn số liệu thật (từ Fact Researcher grounded)
+  /**
+   * Storyboard chuẩn content-graph (Phase 1 đại tu render) — sinh BÊN CẠNH
+   * variantPrompts (đường render cũ giữ nguyên 100%). Optional: script cũ /
+   * model không sinh được → undefined, mọi thứ vẫn chạy như trước.
+   * Node thứ tự = thứ tự giọng đọc; scene-planner topoSort ra ScenePlan.
+   */
+  storyboard?: ContentGraph;
   costUsd: number;
 };
 
@@ -119,7 +127,23 @@ Schema:
       "points": [{"title": "Tên bước NGẮN (≤7 từ)", "detail": "Cách làm/giải thích cụ thể DẠY người xem (≤22 từ)", "stat": {"value": "60", "unit": "%", "label": "nhãn ngắn (ví dụ)"}}]
     }
   },
-  "estimatedDurationSec": ${lengthSec}
+  "estimatedDurationSec": ${lengthSec},
+  "storyboard": {
+    "schemaVersion": 1,
+    "intent": "explainer",
+    "synopsis": "1 câu tóm video",
+    "nodes": [
+      {"id": "hook", "kind": "text", "text": "= hook ở trên", "frameIntent": "hook", "durationSec": 4},
+      {"id": "diem_1", "kind": "text", "text": "ý 1 của body (NGẮN)", "frameIntent": "point", "durationSec": 6},
+      {"id": "so_lieu_1", "kind": "data", "label": "nhãn số", "data": {"value": "65", "unit": "%", "label": "nhãn (ví dụ)"}, "frameIntent": "data-big", "durationSec": 5},
+      {"id": "cta", "kind": "text", "text": "= cta ở trên", "frameIntent": "outro", "durationSec": 4}
+    ],
+    "edges": [
+      {"from": "hook", "to": "diem_1", "kind": "sequence"},
+      {"from": "diem_1", "to": "so_lieu_1", "kind": "sequence"},
+      {"from": "so_lieu_1", "to": "cta", "kind": "sequence"}
+    ]
+  }
 }
 
 QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — làm ĐẦY ĐỦ):
@@ -147,7 +171,16 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
       hợp lý + nhãn ghi "ví dụ"/"ước tính". MỖI stat phải KHÁC nhau và bám đúng bước (vd bước tiết kiệm thời gian →
       số giờ; bước chi phí → %/tiền). TUYỆT ĐỐI không bịa trích dẫn nghiên cứu.
   → points giàu thông tin = video DẠY được kiến thức (đúng mục tiêu). Vẫn PHẢI điền keyMessages (đồng bộ với points).
-- ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).`;
+- ⚠ hook/body/cta/voiceOver GIỮ NGẮN GỌN như cũ — KHÔNG vì thêm data mà viết dài ra (tránh video bị dài).
+
+QUY TẮC trường storyboard (xương sống cảnh — content-graph):
+- nodes theo ĐÚNG THỨ TỰ giọng đọc: hook → mỗi ý body 1 node text (point i ↔ keyMessages[i]) xen kẽ
+  node data cho số liệu minh hoạ ý đó → cta. Tổng 5-9 node. id snake_case KHÔNG TRÙNG, không dấu.
+- node text: text NGẮN (≤20 từ). node data: data={value,unit,label} — ƯU TIÊN số THẬT từ FACT BRIEF;
+  không có số thật → label PHẢI chứa 'ví dụ' hoặc 'ước tính' (anti-fabrication). Không có số nào → BỎ node data.
+- frameIntent gợi ý loại cảnh: hook|point|data-big|data-bars|compare|flow|quote|outro.
+- durationSec mỗi node 3-8; TỔNG ≈ ${lengthSec}s.
+- edges: CHỈ "sequence" nối node liền kề theo thứ tự đọc (n-1 edge cho n node). KHÔNG cycle, không self-edge.`;
 }
 
 // ── Fact Researcher (GROUNDED → TEXT có nguồn) ──
@@ -211,6 +244,97 @@ export function parseScriptJson(text: string): Partial<ScriptResult> | null {
   return null;
 }
 
+// Nhãn anti-fab hợp lệ trên label số liệu (đã có nguồn thật thì không cần).
+const ESTIMATE_RE = /ước tính|ví dụ|minh hoạ|minh họa|tham khảo|~/i;
+
+/**
+ * Làm sạch storyboard LLM trả về thành ContentGraph hợp lệ (best-effort):
+ * - ép schemaVersion/intent/kind hợp lệ, lọc node thiếu id, khử id trùng;
+ * - bỏ edge trỏ node không tồn tại / self-edge; thiếu edges → tự nối sequence theo thứ tự node;
+ * - ANTI-FAB: node data có số mà KHÔNG có nguồn thật (hasSources=false) và label thiếu
+ *   nhãn 'ước tính/ví dụ' → TỰ THÊM '(ước tính)' vào label (đường hiển thị nào dùng graph
+ *   cũng được gắn nhãn từ gốc);
+ * - validate() cuối — invalid → null (script vẫn dùng được, chỉ mất storyboard).
+ */
+export function sanitizeStoryboard(raw: unknown, hasSources: boolean): ContentGraph | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const intents = new Set(["single-frame", "explainer", "data-viz", "promo", "comparison", "other"]);
+  const intent = intents.has(String(r.intent)) ? (String(r.intent) as ContentGraph["intent"]) : "explainer";
+
+  const rawNodes = Array.isArray(r.nodes) ? r.nodes : [];
+  const seen = new Set<string>();
+  const nodes: GraphNode[] = [];
+  for (const n of rawNodes) {
+    if (!n || typeof n !== "object") continue;
+    const o = n as Record<string, unknown>;
+    let id = String(o.id || "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!id) continue;
+    while (seen.has(id)) id = `${id}_2`;
+    seen.add(id);
+    const base = {
+      id,
+      label: o.label != null ? String(o.label).slice(0, 60) : undefined,
+      frameIntent: o.frameIntent != null ? String(o.frameIntent).slice(0, 24) : undefined,
+      durationSec: Number.isFinite(Number(o.durationSec)) && Number(o.durationSec) > 0
+        ? Math.min(15, Math.max(1, Number(o.durationSec)))
+        : undefined,
+    };
+    const kind = String(o.kind || "text");
+    if (kind === "data") {
+      // Anti-fab: số không nguồn → label gắn '(ước tính)' ngay từ graph.
+      let data = o.data;
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        const d = { ...(data as Record<string, unknown>) };
+        const hasNumber = /\d/.test(JSON.stringify(d));
+        const lbl = String(d.label || base.label || "");
+        if (hasNumber && !hasSources && !ESTIMATE_RE.test(lbl)) {
+          d.label = lbl ? `${lbl} (ước tính)` : "(ước tính)";
+        }
+        data = d;
+      }
+      nodes.push({ ...base, kind: "data", data });
+    } else if (kind === "entity") {
+      const props = o.props && typeof o.props === "object" && !Array.isArray(o.props) ? (o.props as Record<string, unknown>) : {};
+      nodes.push({ ...base, kind: "entity", props });
+    } else {
+      nodes.push({ ...base, kind: "text", text: String(o.text || base.label || "").slice(0, 200) });
+    }
+  }
+  if (nodes.length === 0) return null;
+
+  const kinds = new Set(["sequence", "contrast", "dependency"]);
+  let edges: GraphEdge[] = (Array.isArray(r.edges) ? r.edges : [])
+    .map((e): GraphEdge | null => {
+      if (!e || typeof e !== "object") return null;
+      const o = e as Record<string, unknown>;
+      const from = String(o.from || "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+      const to = String(o.to || "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+      const kind = kinds.has(String(o.kind)) ? (String(o.kind) as GraphEdge["kind"]) : "sequence";
+      if (!from || !to || from === to || !seen.has(from) || !seen.has(to)) return null;
+      return { from, to, kind, reason: o.reason != null ? String(o.reason).slice(0, 80) : undefined };
+    })
+    .filter((e): e is GraphEdge => e !== null);
+  // LLM quên edges → tự nối sequence theo thứ tự node (thứ tự đọc).
+  if (edges.length === 0 && nodes.length > 1) {
+    edges = nodes.slice(0, -1).map((n, i) => ({ from: n.id, to: nodes[i + 1].id, kind: "sequence" as const }));
+  }
+
+  const graph: ContentGraph = {
+    schemaVersion: 1,
+    intent,
+    synopsis: r.synopsis != null ? String(r.synopsis).slice(0, 160) : undefined,
+    nodes,
+    edges,
+  };
+  const v = validate(graph);
+  if (!v.ok) {
+    console.error("[scripter] storyboard invalid sau sanitize — bỏ storyboard:", v.errors.map((e) => e.code).join(","));
+    return null;
+  }
+  return graph;
+}
+
 export async function generateScript(input: {
   profile: ProfileRecord;
   topic: string;
@@ -266,6 +390,12 @@ export async function generateScript(input: {
     );
   }
 
+  // Storyboard (Phase 1): sanitize + validate; hỏng → undefined (KHÔNG phá script).
+  const storyboard = sanitizeStoryboard(
+    (parsed as Record<string, unknown>).storyboard,
+    sources.length > 0
+  );
+
   return {
     hook: parsed.hook || "",
     body: parsed.body || "",
@@ -279,6 +409,7 @@ export async function generateScript(input: {
     },
     estimatedDurationSec: parsed.estimatedDurationSec || lengthSec,
     sources: sources.length ? sources : undefined,
+    storyboard: storyboard ?? undefined,
     costUsd: totalCost,
   };
 }

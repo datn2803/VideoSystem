@@ -37,7 +37,12 @@ export async function generateScriptAction(input: {
     const scriptText = `${script.hook}\n\n${script.body}\n\n${script.cta}`;
     audit = input.skipAudit
       ? undefined
-      : await auditScript(scriptText, { wordBudget: wordBudgetFor(input.lengthSec || 60) });
+      : await auditScript(scriptText, {
+          wordBudget: wordBudgetFor(input.lengthSec || 60),
+          // Phase 1: kiểm storyboard graph + anti-fab số liệu (pure code, $0)
+          storyboard: script.storyboard,
+          hasSources: (script.sources?.length || 0) > 0,
+        });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/\b429\b|quota|prepayment|rate.?limit|RESOURCE_EXHAUSTED|exhausted/i.test(msg)) {
@@ -76,7 +81,11 @@ export async function reAuditScriptAction(id: string) {
   const rec = await scriptStore.get(id);
   if (!rec) throw new Error("Script not found");
   const text = `${rec.script.hook}\n\n${rec.script.body}\n\n${rec.script.cta}`;
-  const audit = await auditScript(text, { wordBudget: wordBudgetFor(rec.script.estimatedDurationSec || 60) });
+  const audit = await auditScript(text, {
+    wordBudget: wordBudgetFor(rec.script.estimatedDurationSec || 60),
+    storyboard: rec.script.storyboard,
+    hasSources: (rec.script.sources?.length || 0) > 0,
+  });
   await scriptStore.update(id, { audit });
   revalidatePath(`/scripts/${id}`);
   return { audit };
