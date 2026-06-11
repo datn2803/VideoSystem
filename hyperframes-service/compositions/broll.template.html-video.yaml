@@ -1,0 +1,62 @@
+# Manifest template (format template.html-video.yaml — RFC-02 của nexu-io/html-video,
+# Apache-2.0, xem THIRD_PARTY.md). Nền cho gallery template + studio sửa cảnh (Phase 4).
+spec_version: 1
+id: broll
+name: "C2 B-roll — ảnh AI điện ảnh + caption karaoke"
+description: >
+  Video dọc 9:16: chuỗi ảnh AI (Ken Burns + chuyển cảnh đa dạng) + color-grade
+  điện ảnh + title-card hook + stat insert + caption karaoke sync Whisper.
+  Ăn BrandKit tokens (accent/grade theo thương hiệu); không tokens → look đỏ
+  MagentX mặc định.
+
+engine: hyperframes
+engine_version: 0.6.63
+source_entry: broll.html
+
+category: social-shorts
+subcategory: broll-vertical
+tags: [vietnamese, 9x16, broll, ken-burns, caption-karaoke, brandkit]
+
+best_for:
+  - "Video voice-over + ảnh minh hoạ theo lời thoại"
+not_for:
+  - "Nội dung cần data-viz chi tiết (dùng template animation)"
+
+output:
+  formats: [mp4]
+  default_format: mp4
+  resolution:
+    default: { width: 1080, height: 1920 }
+    supported_aspects: ["9:16"]
+  fps: { default: 24, supported: [24, 30] }
+  duration: { type: variable, min_sec: 5, max_sec: 600 }
+  alpha: false
+  audio: { supported: true, expected_inputs: [voice_url] }
+
+inputs:
+  schema:
+    type: object
+    properties:
+      duration: { type: number, description: "Tổng giây — khớp voice-over" }
+      bg_type: { type: string, description: "'image' (ảnh AI) | 'video'" }
+      bg_urls: { type: string, description: "JSON mảng URL ảnh nền PUBLIC (server bake thành <img> tĩnh)" }
+      shot_durations: { type: string, description: "JSON mảng giây từng ảnh (rỗng=chia đều)" }
+      voice_url: { type: string, description: "URL mp3 voice-over PUBLIC" }
+      caption_groups: { type: string, description: "Karaoke JSON [{start,end,words:[{text,start,end}]}] (Whisper)" }
+      caption_lines: { type: string, description: "Caption fallback JSON [{text,keyword,start,dur}]" }
+      accent_color: { type: string, description: "Màu nhấn (fallback khi không có tokens)" }
+      tokens: { type: string, description: "BrandKit tokens JSON — accent + grade thương hiệu" }
+      hook: { type: string, description: "Title-card hook đầu clip (rỗng=ẩn)" }
+      stat: { type: string, description: "Stat insert JSON {label,value,unit} (null=ẩn)" }
+  examples: []
+
+license:
+  spdx: LicenseRef-VideoSystem-Internal
+  attribution_required: false
+  redistribution_allowed: false
+  commercial_use: true
+  notes: "Composition tự viết của VideoSystem (không vendor). Manifest theo format Apache-2.0 của html-video."
+
+author: { name: "VideoSystem (Tommy)" }
+version: "1.1.0"
+preview: { poster: "" }

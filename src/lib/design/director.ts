@@ -54,7 +54,7 @@ function ensureAccentContrast(accent: string, mode: "light" | "dark"): string {
   const rgb = hexToRgb(accent);
   if (!rgb) return accent;
   const { l } = rgbToHsl(rgb.r, rgb.g, rgb.b);
-  if (mode === "light" && l > 0.68) return adjustL(accent, 0.5 - l); // kéo về ~0.5
+  if (mode === "light" && l > 0.62) return adjustL(accent, 0.48 - l); // kéo về ~0.48 (neon wise/binance đọc rõ trên card sáng)
   if (mode === "dark" && l < 0.35) return adjustL(accent, 0.55 - l); // nhạt quá tối trên dark
   return accent;
 }

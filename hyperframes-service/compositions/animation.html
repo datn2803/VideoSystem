@@ -38,7 +38,8 @@
     {"id":"trend","type":"string","label":"S_trend JSON {label,points:[num]}","default":""},
     {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""},
     {"id":"captions","type":"string","label":"Phụ đề SYNC read-script JSON [{s,e,w:[{t,x}]}] — rỗng=ẩn","default":""},
-    {"id":"flow","type":"string","label":"S_flow JSON {title,steps:[2-4]} — sơ đồ quy trình, rỗng=ẩn","default":""}
+    {"id":"flow","type":"string","label":"S_flow JSON {title,steps:[2-4]} — sơ đồ quy trình, rỗng=ẩn","default":""},
+    {"id":"tokens","type":"string","label":"BrandKit tokens JSON (Design Director) — rỗng=THEMES cũ","default":""}
   ]'
 >
   <head>
@@ -59,6 +60,13 @@
         /* mode-dependent (theme JS ghi đè cho dark) — mặc định = light */
         --card-border: rgba(120,90,210,0.08); --grid-dot: rgba(124,58,237,0.06);
         --good: #16a34a; --bad: #dc2626; --warn: #d97706;
+        /* alpha-tint của ACCENT (Phase 2 token hoá): default = tím cũ; JS tính lại từ
+           accent thật của BrandKit/theme → đổi accent là MỌI tint đổi theo, hết tím cứng */
+        --acc-a03: rgba(124,58,237,0.03); --acc-a06: rgba(124,58,237,0.06);
+        --acc-a08: rgba(124,58,237,0.08); --acc-a10: rgba(124,58,237,0.10);
+        --acc-a12: rgba(124,58,237,0.12); --acc-a14: rgba(124,58,237,0.14);
+        --acc-a16: rgba(124,58,237,0.16); --acc-a18: rgba(124,58,237,0.18);
+        --acc-a25: rgba(124,58,237,0.25); --acc-a38: rgba(124,58,237,0.38);
         /* hệ ELEVATION 2 lớp (depth premium): 1 bóng tight ghì thẻ + 1 bóng to mềm nâng thẻ */
         --elev-1: 0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13);
         --elev-2: 0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow);
@@ -100,7 +108,7 @@
 
       /* ── Eyebrow: dot-pill (center) + icon-square (left) ── */
       .eyebrow { display: inline-flex; align-items: center; gap: 12px; }
-      .eyebrow.dot { align-self: center; background: rgba(124,58,237,0.10); color: var(--accent);
+      .eyebrow.dot { align-self: center; background: var(--acc-a10); color: var(--accent);
         font-weight: 800; font-size: 32px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 26px; border-radius: 999px; }
       .eyebrow.dot::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
       /* Icon glow semantic (học ref): square lớn + gradient + box-shadow glow → nổi bật, premium 2 mode */
@@ -142,10 +150,10 @@
       .pill2 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 26px; }
       /* feature tile: icon + nhãn gom GIỮA (cohesive) → breathing đối xứng, gọn gàng */
       .pill { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 26px; padding: 40px 34px; will-change: transform, opacity; }
-      .pill .pic { flex: 0 0 auto; width: 96px; height: 96px; border-radius: 24px; background: rgba(124,58,237,0.12);
+      .pill .pic { flex: 0 0 auto; width: 96px; height: 96px; border-radius: 24px; background: var(--acc-a12);
         display: flex; align-items: center; justify-content: center; will-change: transform; }
       .pill .pic svg { width: 50px; height: 50px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-      .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: rgba(124,58,237,0.12);
+      .pill .pn { flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px; background: var(--acc-a12);
         color: var(--accent); font-weight: 900; font-size: 26px; display: flex; align-items: center; justify-content: center; }
       .pill .pt { color: var(--ink); font-weight: 700; font-size: 44px; line-height: 1.22; }
 
@@ -156,7 +164,7 @@
       .lrow .lt { color: var(--ink); font-weight: 600; font-size: 38px; line-height: 1.25; }
 
       /* callout (thanh tím) */
-      .callout { background: rgba(124,58,237,0.08); border-left: 8px solid var(--accent); border-radius: 18px;
+      .callout { background: var(--acc-a08); border-left: 8px solid var(--accent); border-radius: 18px;
         padding: 40px 38px; color: var(--ink); font-weight: 600; font-size: 44px; line-height: 1.32; will-change: transform, opacity; }
       .callout b { color: var(--accent); font-weight: 900; }
 
@@ -168,7 +176,7 @@
       /* compare (2 cột) */
       .compare { display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 26px; width: 100%; align-items: stretch; }
       .ccard { padding: 52px 40px; text-align: left; will-change: transform, opacity; display: flex; flex-direction: column; justify-content: center; gap: 30px; }
-      .ccard .ct { font-weight: 800; font-size: 50px; line-height: 1.1; padding-bottom: 22px; border-bottom: 2px solid rgba(124,58,237,0.16); }
+      .ccard .ct { font-weight: 800; font-size: 50px; line-height: 1.1; padding-bottom: 22px; border-bottom: 2px solid var(--acc-a16); }
       .ccard.r .ct { border-bottom-color: rgba(255,255,255,0.28); }
       .ccard .cslist { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: flex-start; gap: 28px; }
       .ccard .cs { font-weight: 500; font-size: 37px; line-height: 1.32; }
@@ -183,15 +191,15 @@
       .pbar .pl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
       .pbar .pn { color: var(--ink); font-weight: 800; font-size: 42px; }
       .pbar .pv { color: var(--accent); font-weight: 900; font-size: 46px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-      .pbar .ptrack { position: relative; height: 44px; border-radius: 22px; background: rgba(124,58,237,0.10); overflow: hidden; }
+      .pbar .ptrack { position: relative; height: 44px; border-radius: 22px; background: var(--acc-a10); overflow: hidden; }
       .pbar .pfill { position: relative; height: 100%; border-radius: 18px; background: linear-gradient(90deg, var(--accent2), var(--accent));
         transform-origin: left center; transform: scaleX(0); will-change: transform; overflow: hidden; }
       /* sheen: vệt sáng quét qua thanh sau khi đầy (motion-graphics, không tĩnh) */
       .pbar .sheen { position: absolute; top: 0; bottom: 0; width: 120px; transform: translateX(-160px) skewX(-18deg);
         background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%); will-change: transform; }
       /* CONTRAST: bar GIÁ TRỊ CAO NHẤT nổi bật (viền accent + nền tint + bóng) */
-      .pbar.win { background: linear-gradient(135deg, rgba(124,58,237,0.11), rgba(124,58,237,0.02));
-        border: 2px solid rgba(124,58,237,0.38); box-shadow: 0 18px 44px var(--glow); }
+      .pbar.win { background: linear-gradient(135deg, var(--acc-a10), var(--acc-a03));
+        border: 2px solid var(--acc-a38); box-shadow: 0 18px 44px var(--glow); }
       .pbar.win .pn { color: var(--accent); }
 
       /* bignum */
@@ -243,7 +251,7 @@
       .pt-num .pnum { font-weight: 900; font-size: 210px; line-height: 0.78; letter-spacing: -8px; font-variant-numeric: tabular-nums; }
       .pt-num .picr { width: 66px; height: 66px; border-radius: 18px; display: flex; align-items: center; justify-content: center; align-self: flex-end; }
       .pt-num .picr svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-      .pt-body { flex: 1 1 auto; justify-content: flex-start; background: var(--card); border: 1px solid rgba(120,90,210,0.07);
+      .pt-body { flex: 1 1 auto; justify-content: flex-start; background: var(--card); border: 1px solid var(--card-border);
         box-shadow: var(--elev-1); }
       .pt-body .ptt { position: relative; z-index: 2; font-weight: 800; font-size: 60px; line-height: 1.16; color: var(--ink); }
       .pt-body .ptt .ac { color: var(--accent); }
@@ -279,7 +287,7 @@
       .ptwm { position: absolute; right: -64px; top: 690px; z-index: 0; font-weight: 900; font-size: 720px;
         line-height: 0.72; color: var(--accent); opacity: 0.07; pointer-events: none; font-variant-numeric: tabular-nums; }
       /* treatment TINT — tile số nền tím nhạt (chữ accent) */
-      .pt-num.tint { background: linear-gradient(150deg, rgba(124,58,237,0.12), rgba(124,58,237,0.03)); border: 1px solid rgba(124,58,237,0.14); color: var(--accent); }
+      .pt-num.tint { background: linear-gradient(150deg, var(--acc-a12), var(--acc-a03)); border: 1px solid var(--acc-a14); color: var(--accent); }
       .pt-num.tint .pnum { color: var(--accent); } .pt-num.tint .pteb { color: var(--accent); }
       .pt-num.tint .picr { background: var(--accent); color: #fff; }
 
@@ -289,14 +297,14 @@
       .bentohost .hosthead { flex: 0 0 auto; }
       .bentohost .hostbody { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 30px; min-height: 0; }
-      .bentohost.plain { background: var(--card); box-shadow: var(--elev-1); border: 1px solid rgba(120,90,210,0.08); }
-      .bentohost.tint { background: linear-gradient(155deg, rgba(124,58,237,0.075), rgba(124,58,237,0.015)); border: 1px solid rgba(124,58,237,0.12); box-shadow: var(--elev-1); }
+      .bentohost.plain { background: var(--card); box-shadow: var(--elev-1); border: 1px solid var(--card-border); }
+      .bentohost.tint { background: linear-gradient(155deg, var(--acc-a08), var(--acc-a03)); border: 1px solid var(--acc-a12); box-shadow: var(--elev-1); }
       .bentohost::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px;
         background: linear-gradient(90deg, var(--accent), var(--accent2)); }
 
       /* thanh tiến trình đáy (lấp đáy + nhịp pro) */
       #progress { position: absolute; left: 72px; right: 72px; bottom: 90px; height: 8px; border-radius: 999px;
-        background: rgba(124,58,237,0.12); overflow: hidden; z-index: 40; }
+        background: var(--acc-a12); overflow: hidden; z-index: 40; }
       #progress .pfb { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
         border-radius: 999px; background: linear-gradient(90deg, var(--accent2), var(--accent)); will-change: transform; }
 
@@ -320,12 +328,12 @@
         background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
       #topbar .tmark svg { width: 22px; height: 22px; }
       #topbar .ttxt { color: var(--sub); font-weight: 800; font-size: 28px; letter-spacing: 2.5px; text-transform: uppercase; }
-      #topbar .tline { width: 60px; height: 4px; border-radius: 999px; background: rgba(124,58,237,0.25); }
+      #topbar .tline { width: 60px; height: 4px; border-radius: 999px; background: var(--acc-a25); }
 
       /* ── S_donut: vòng tròn % (to hơn cho đầy khung) ── */
       .donutwrap { position: relative; width: 660px; height: 660px; align-self: center; }
       .donut { width: 100%; height: 100%; transform: rotate(-90deg); }
-      .donut .dtrack { fill: none; stroke: rgba(124,58,237,0.12); stroke-width: 24; }
+      .donut .dtrack { fill: none; stroke: var(--acc-a12); stroke-width: 24; }
       .donut .dfill { fill: none; stroke: url(#dnGrad); stroke-width: 24; stroke-linecap: round;
         stroke-dasharray: 578; stroke-dashoffset: 578; will-change: stroke-dashoffset; }
       .dcenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -345,7 +353,7 @@
       .baside.r .bav { color: #fff; }
       .baside .bav .bu { font-size: 0.40em; margin-left: 0.1em; color: var(--accent); }
       .baside.r .bav .bu { color: rgba(255,255,255,0.9); }
-      .baside .babar { width: 100%; height: 16px; border-radius: 999px; overflow: hidden; background: rgba(124,58,237,0.14); }
+      .baside .babar { width: 100%; height: 16px; border-radius: 999px; overflow: hidden; background: var(--acc-a14); }
       .baside.r .babar { background: rgba(255,255,255,0.28); }
       .baside .babar i { display: block; height: 100%; border-radius: 999px; transform-origin: left center; transform: scaleX(0);
         will-change: transform; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
@@ -355,8 +363,8 @@
       /* ── S_mini: lưới 2×2 mini-stat (hàng dãn ĐỀU 1fr → thẻ cao đều, hết hở giữa) ── */
       .minigrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 24px; width: 100%; }
       .ministat { padding: 44px 36px; border-radius: 22px; background: var(--card); box-shadow: var(--elev-1);
-        border: 1px solid rgba(120,90,210,0.06); display: flex; flex-direction: column; justify-content: center; will-change: transform, opacity; }
-      .ministat .mi { width: 60px; height: 60px; border-radius: 15px; background: rgba(124,58,237,0.12); color: var(--accent);
+        border: 1px solid var(--card-border); display: flex; flex-direction: column; justify-content: center; will-change: transform, opacity; }
+      .ministat .mi { width: 60px; height: 60px; border-radius: 15px; background: var(--acc-a12); color: var(--accent);
         display: flex; align-items: center; justify-content: center; margin-bottom: 26px; }
       .ministat .mi svg { width: 33px; height: 33px; }
       .ministat .mv { color: var(--accent); font-weight: 900; font-size: 78px; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -367,9 +375,9 @@
       .trendwrap { position: relative; width: 100%; flex: 1 1 auto; height: auto; min-height: 460px; align-self: stretch; }
       .trendsvg { width: 100%; height: 100%; overflow: visible; }
       .trendsvg .tline { fill: none; stroke: url(#trGrad); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; will-change: stroke-dashoffset; }
-      .trendsvg .tarea { fill: rgba(124,58,237,0.10); stroke: none; }
+      .trendsvg .tarea { fill: var(--acc-a10); stroke: none; }
       .tdot { position: absolute; width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
-        box-shadow: 0 0 0 9px rgba(124,58,237,0.18); transform: translate(-50%,-50%); will-change: transform, opacity; }
+        box-shadow: 0 0 0 9px var(--acc-a18); transform: translate(-50%,-50%); will-change: transform, opacity; }
       .tbadge { position: absolute; transform: translate(-50%,-150%); padding: 9px 20px; border-radius: 999px;
         background: var(--accent); color: #fff; font-weight: 800; font-size: 36px; white-space: nowrap;
         font-variant-numeric: tabular-nums; box-shadow: 0 10px 26px var(--glow); will-change: transform, opacity; }
@@ -387,6 +395,34 @@
       #s7 .e2 .e2hl { color: var(--accent2); }
       #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
       #s7 .e3 svg { width: 54px; height: 54px; }
+
+      /* ── SKIN theo BrandKit.styleVariant (html[data-skin]) — Phase 2.
+         classic = default, KHÔNG rule nào ở đây đụng vào. Tham khảo bố cục gallery
+         html-video (Apache-2.0): poster ~ frame-bold-poster (đậm, uppercase, góc sắc);
+         editorial ~ gu data-chart-nyt/tạp chí (serif display, kicker gạch chân). ── */
+      html[data-skin="poster"] #s1 .key { font-size: 156px; letter-spacing: -3px; text-transform: uppercase; }
+      html[data-skin="poster"] #s1 .l { text-transform: uppercase; letter-spacing: -1.5px; }
+      html[data-skin="poster"] #s7 .e2 { text-transform: uppercase; letter-spacing: -2px; }
+      html[data-skin="poster"] .pttitle { text-transform: uppercase; }
+      html[data-skin="poster"] .bento, html[data-skin="poster"] .bentohost, html[data-skin="poster"] .pttop,
+      html[data-skin="poster"] .ptstat, html[data-skin="poster"] .pttile, html[data-skin="poster"] .pbar,
+      html[data-skin="poster"] .pill, html[data-skin="poster"] .ccard, html[data-skin="poster"] .emph,
+      html[data-skin="poster"] .flowpill { border-radius: 10px; }
+      html[data-skin="poster"] .eyebrow.icon .ico, html[data-skin="poster"] .eyebrow.dot { border-radius: 8px; }
+      html[data-skin="poster"] .callout { border-radius: 8px; border-left-width: 12px; }
+
+      /* Editorial: GIỮ Be Vietnam Pro (serif hệ thống vỡ dấu tiếng Việt — đã test) —
+         tạo chất tạp chí bằng weight nhẹ hơn + kicker gạch chân + radius lớn. */
+      html[data-skin="editorial"] #s1 .key { font-weight: 800; letter-spacing: -0.5px; }
+      html[data-skin="editorial"] #s1 .l { font-weight: 700; }
+      html[data-skin="editorial"] #s7 .e2 { font-weight: 800; letter-spacing: -0.5px; }
+      html[data-skin="editorial"] .pttitle { font-weight: 800; }
+      html[data-skin="editorial"] .bento, html[data-skin="editorial"] .bentohost, html[data-skin="editorial"] .pttop,
+      html[data-skin="editorial"] .ptstat, html[data-skin="editorial"] .pttile, html[data-skin="editorial"] .pbar,
+      html[data-skin="editorial"] .pill, html[data-skin="editorial"] .ccard,
+      html[data-skin="editorial"] .flowpill { border-radius: 14px; }
+      html[data-skin="editorial"] .eyebrow.dot { background: transparent; border-bottom: 3px solid var(--accent); border-radius: 0; padding: 8px 4px; }
+      html[data-skin="editorial"] .eyebrow.dot::before { display: none; }
     </style>
   </head>
 
@@ -658,24 +694,40 @@
         // DARK TECH (công nghệ nghiêm túc — xanh dương/xanh lá)
         { mode: "dark", bg1: "#0c0f17", bg2: "#121826", accent: "#38bdf8", accent2: "#34d399", ink: "#eef4fb", sub: "#93a0b5", card: "#161c28", glow: "rgba(56,189,248,0.26)" },
       ];
-      const ti = Math.max(0, Math.min(THEMES.length - 1, parseInt(v.theme, 10) || 0));
-      const TH = THEMES[ti];
-      const MO = TH.mode === "dark" ? DARK_MODE : LIGHT_MODE;
-      const rs = document.documentElement.style;
-      document.documentElement.dataset.mode = TH.mode || "light";
-      rs.setProperty("--bg1", TH.bg1); rs.setProperty("--bg2", TH.bg2);
-      rs.setProperty("--accent", TH.accent); rs.setProperty("--accent2", TH.accent2);
-      rs.setProperty("--ink", TH.ink); rs.setProperty("--sub", TH.sub);
-      rs.setProperty("--card", TH.card); rs.setProperty("--glow", TH.glow);
-      rs.setProperty("--card-border", TH.cardBorder || MO.cardBorder);
-      rs.setProperty("--grid-dot", TH.gridDot || MO.gridDot);
-      rs.setProperty("--elev-1", TH.elev1 || MO.elev1);
-      rs.setProperty("--elev-2", TH.elev2 || MO.elev2);
-      rs.setProperty("--good", TH.good || MO.good); rs.setProperty("--bad", TH.bad || MO.bad); rs.setProperty("--warn", TH.warn || MO.warn);
-      // gradient stop cho ring donut + đường trend (set trực tiếp → chắc chắn render, không lệ thuộc var() trong SVG)
+      // ── ÁP TOKEN (Phase 2): BrandKit tokens (Design Director) ƯU TIÊN; rỗng/hỏng → THEMES cũ.
+      //    Cùng 1 hàm cho cả 2 nhánh — token đặt tên trùng key THEMES nên áp thẳng. ──
       const setStop = (id, c) => { const e = document.getElementById(id); if (e) e.setAttribute("stop-color", c); };
-      setStop("dnG0", TH.accent2); setStop("dnG1", TH.accent);
-      setStop("trG0", TH.accent2); setStop("trG1", TH.accent);
+      const hexA = (hex, a) => {
+        const m = /^#([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+        if (!m) return "";
+        const n = parseInt(m[1], 16);
+        return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+      };
+      function applyTokens(tk) {
+        const mode = tk.mode === "dark" ? "dark" : "light";
+        const MO = mode === "dark" ? DARK_MODE : LIGHT_MODE;
+        const rs = document.documentElement.style;
+        document.documentElement.dataset.mode = mode;
+        document.documentElement.dataset.skin = tk.styleVariant || "classic";
+        rs.setProperty("--bg1", tk.bg1); rs.setProperty("--bg2", tk.bg2);
+        rs.setProperty("--accent", tk.accent); rs.setProperty("--accent2", tk.accent2);
+        rs.setProperty("--ink", tk.ink); rs.setProperty("--sub", tk.sub);
+        rs.setProperty("--card", tk.card); rs.setProperty("--glow", tk.glow);
+        rs.setProperty("--card-border", tk.cardBorder || MO.cardBorder);
+        rs.setProperty("--grid-dot", tk.gridDot || MO.gridDot);
+        rs.setProperty("--elev-1", tk.elev1 || MO.elev1);
+        rs.setProperty("--elev-2", tk.elev2 || MO.elev2);
+        rs.setProperty("--good", tk.good || MO.good); rs.setProperty("--bad", tk.bad || MO.bad); rs.setProperty("--warn", tk.warn || MO.warn);
+        // Mọi tint accent (--acc-aXX) tính lại theo accent thật → đổi BrandKit là tint đổi theo.
+        const A = { a03: 0.03, a06: 0.06, a08: 0.08, a10: 0.10, a12: 0.12, a14: 0.14, a16: 0.16, a18: 0.18, a25: 0.25, a38: 0.38 };
+        for (const k in A) { const val = hexA(tk.accent, A[k]); if (val) rs.setProperty("--acc-" + k, val); }
+        // gradient stop cho ring donut + đường trend (set trực tiếp → chắc chắn render, không lệ thuộc var() trong SVG)
+        setStop("dnG0", tk.accent2); setStop("dnG1", tk.accent);
+        setStop("trG0", tk.accent2); setStop("trG1", tk.accent);
+      }
+      const ti = Math.max(0, Math.min(THEMES.length - 1, parseInt(v.theme, 10) || 0));
+      const BK = parseJSON(v.tokens || "", null);
+      applyTokens(BK && BK.bg1 && BK.accent ? BK : THEMES[ti]);
 
       // Header trên (topic) — đóng khung đỉnh. Rỗng → ẩn.
       if (String(v.topic || "").trim()) setText("topbarTxt", String(v.topic).toUpperCase().slice(0, 32));

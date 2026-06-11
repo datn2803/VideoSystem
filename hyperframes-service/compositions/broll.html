@@ -9,7 +9,8 @@
     {"id":"voice_url","type":"string","label":"URL voice-over (mp3/wav)","default":""},
     {"id":"caption_groups","type":"string","label":"Caption karaoke (JSON [{start,end,words:[{text,start,end}]}])","default":"[]"},
     {"id":"caption_lines","type":"string","label":"Caption fallback (JSON mảng [{text,keyword,start,dur}])","default":"[{\"text\":\"Đây là caption mẫu tiếng Việt\",\"keyword\":\"caption mẫu\",\"start\":0.3,\"dur\":3}]"},
-    {"id":"accent_color","type":"color","label":"Màu nhấn (highlight từ khoá)","default":"#e11d2a"}
+    {"id":"accent_color","type":"color","label":"Màu nhấn (highlight từ khoá)","default":"#e11d2a"},
+    {"id":"tokens","type":"string","label":"BrandKit tokens JSON (Design Director) — rỗng=màu mặc định","default":""}
   ]'
 >
   <head>
@@ -28,7 +29,14 @@
         -webkit-font-smoothing: antialiased;
         text-rendering: geometricPrecision;
       }
-      :root { --red: #e11d2a; }
+      /* Token hoá (Phase 2): --red = accent thương hiệu; grade/glow phái sinh từ accent.
+         Default = look MagentX hiện tại (đỏ + ám rượu vang) khi không có BrandKit. */
+      :root {
+        --red: #e11d2a;
+        --grade-glow: rgba(160, 20, 35, 0.42);
+        --grade-tint: rgba(160, 20, 35, 0.30);
+        --red-glow: rgba(225, 29, 42, 0.5);
+      }
 
       #root { position: relative; width: 1080px; height: 1920px; overflow: hidden; }
 
@@ -36,7 +44,7 @@
          or still-loading footage layer never reads as pure black. */
       #bgbase {
         position: absolute; inset: 0;
-        background: radial-gradient(120% 90% at 80% 110%, rgba(160,20,35,0.42), rgba(0,0,0,0) 45%),
+        background: radial-gradient(120% 90% at 80% 110%, var(--grade-glow), rgba(0,0,0,0) 45%),
                     linear-gradient(160deg, #16161a, #050506);
       }
 
@@ -57,7 +65,7 @@
       #grade {
         position: absolute; inset: 0; pointer-events: none; z-index: 2;
         background:
-          radial-gradient(130% 100% at 78% 112%, rgba(160,20,35,0.30), rgba(0,0,0,0) 48%),
+          radial-gradient(130% 100% at 78% 112%, var(--grade-tint), rgba(0,0,0,0) 48%),
           linear-gradient(180deg, rgba(8,8,12,0.34) 0%, rgba(8,8,12,0.0) 30%, rgba(5,5,8,0.48) 100%);
         /* (bỏ mix-blend-mode: rất nặng khi render software trên VPS → dùng overlay thường) */
       }
@@ -119,12 +127,12 @@
       .caption .w.on {
         color: var(--red);
         transform: scale(1.06);
-        text-shadow: 0 0 28px rgba(225, 29, 42, 0.5), 0 2px 14px rgba(0, 0, 0, 0.7);
+        text-shadow: 0 0 28px var(--red-glow), 0 2px 14px rgba(0, 0, 0, 0.7);
       }
       /* Legacy keyword highlight (caption_lines fallback path). */
       .caption .hl {
         color: var(--red);
-        text-shadow: 0 0 50px rgba(225,29,42,0.5), 0 6px 30px rgba(0,0,0,0.7);
+        text-shadow: 0 0 50px var(--red-glow), 0 6px 30px rgba(0,0,0,0.7);
       }
 
       /* ── PHASE 3b — title-card (hook) + stat insert ── */
@@ -145,6 +153,12 @@
       .statval { font-weight: 900; font-size: 138px; line-height: 1; color: var(--red); text-shadow: 0 6px 34px rgba(0,0,0,0.85); }
       .statunit { font-weight: 800; font-size: 52px; color: #fff; }
       .statlabel { margin-top: 16px; font-weight: 700; font-size: 44px; color: rgba(255,255,255,0.94); text-shadow: 0 2px 14px rgba(0,0,0,0.85); }
+
+      /* ── SKIN theo BrandKit.styleVariant (Phase 2) — classic = default, không đổi ── */
+      html[data-skin="poster"] .caption { border-radius: 8px; font-weight: 900; }
+      html[data-skin="poster"] .titleword { text-transform: uppercase; letter-spacing: -2px; }
+      html[data-skin="editorial"] .caption { background: rgba(0,0,0,0.38); border-left: 6px solid var(--red); border-radius: 6px; }
+      html[data-skin="editorial"] .titleword { font-weight: 800; letter-spacing: 0; }
     </style>
   </head>
 
@@ -190,6 +204,23 @@
       if (v.accent_color) document.documentElement.style.setProperty("--red", v.accent_color);
 
       const parseJSON = (s, fallback) => { try { return JSON.parse(s); } catch (e) { return fallback; } };
+
+      // BrandKit tokens (Phase 2): accent + grade/glow phái sinh theo thương hiệu.
+      // Không có tokens → giữ accent_color/mặc định (look cũ nguyên vẹn).
+      (() => {
+        const BK = parseJSON(v.tokens || "", null);
+        if (!BK || !BK.accent) return;
+        const m = /^#([0-9a-f]{6})$/i.exec(String(BK.accent).trim());
+        if (!m) return;
+        const n = parseInt(m[1], 16);
+        const hexA = (a) => `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+        const rs = document.documentElement.style;
+        rs.setProperty("--red", BK.accent);
+        rs.setProperty("--grade-glow", hexA(0.42));
+        rs.setProperty("--grade-tint", hexA(0.30));
+        rs.setProperty("--red-glow", hexA(0.5));
+        document.documentElement.dataset.skin = BK.styleVariant || "classic";
+      })();
 
       // PHASE 3b: hook → title-card đầu clip; stat → insert giữa clip (nếu có số thật).
       const hookText = String(v.hook || "").trim();

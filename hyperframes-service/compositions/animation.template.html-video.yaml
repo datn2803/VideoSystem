@@ -1,0 +1,97 @@
+# Manifest template (format template.html-video.yaml — RFC-02 của nexu-io/html-video,
+# Apache-2.0, xem THIRD_PARTY.md). Nền cho gallery template + studio sửa cảnh (Phase 4).
+spec_version: 1
+id: animation
+name: "C3 Animation — explainer số liệu (bento/poster/editorial)"
+description: >
+  Motion-graphics explainer dọc 9:16 tiếng Việt: hook kinetic → chuỗi cảnh data
+  (big number, bars, donut, trend, before/after, mini-stats, compare, flow, point
+  cards giàu hướng dẫn) → CTA. Cảnh tự ẨN khi thiếu data thật (anti-fabrication).
+  Ăn BrandKit tokens (Design Director) — đổi kit là đổi look, không sửa code.
+  Caption karaoke sync giọng đọc. 3 skin: classic (bento) / poster / editorial.
+
+engine: hyperframes
+engine_version: 0.6.63
+source_entry: animation.html
+
+category: data-viz
+subcategory: explainer-vertical
+tags: [vietnamese, 9x16, explainer, data, kinetic, brandkit, tokens, caption-karaoke]
+
+best_for:
+  - "Video ngắn giải thích chủ đề tài chính/giáo dục có số liệu"
+  - "Brand video đồng bộ token (đa brand theo profile)"
+not_for:
+  - "Nội dung không có cấu trúc hook/point/cta"
+
+output:
+  formats: [mp4]
+  default_format: mp4
+  resolution:
+    default: { width: 1080, height: 1920 }
+    supported_aspects: ["9:16"]
+  fps: { default: 24, supported: [24, 30] }
+  duration: { type: variable, min_sec: 10, max_sec: 600 }
+  alpha: false
+  audio: { supported: true, expected_inputs: [voice_url] }
+
+inputs:
+  schema:
+    type: object
+    properties:
+      hook_line1: { type: string, description: "Hook dòng 1" }
+      hook_line2: { type: string, description: "Hook dòng 2 (rỗng=ẩn)" }
+      hook_keyword: { type: string, description: "Từ khoá accent cảnh hook" }
+      hook_sub: { type: string, description: "Hook phụ đề (rỗng=ẩn)" }
+      hook_eyebrow: { type: string, description: "Eyebrow IN HOA (rỗng=ẩn)" }
+      hook_stat: { type: string, description: "Chip số hook 'value|unit' (rỗng=ẩn)" }
+      bignum_value: { type: string, description: "S2 số lớn (rỗng=ẩn cảnh)" }
+      bignum_unit: { type: string, description: "S2 đơn vị" }
+      bignum_label: { type: string, description: "S2 nhãn" }
+      data_bars: { type: string, description: "S4b JSON [{label,value,unit}] ≥2 mới hiện" }
+      bars_title: { type: string, description: "S4b eyebrow" }
+      pills: { type: string, description: "S6 JSON [{n,label}] 2×2" }
+      pills_title: { type: string, description: "S6 eyebrow" }
+      levels: { type: string, description: "(legacy) pills fallback" }
+      levels_title: { type: string, description: "(legacy)" }
+      points: { type: string, description: "Point cards JSON [{n,total,title,detail,stat{value,unit,label}}] — mỗi point 1 cảnh dạy kiến thức" }
+      compare: { type: string, description: "S_cmp JSON {leftTitle,leftItems,rightTitle,rightItems}" }
+      principle: { type: string, description: "S_emph nguyên tắc (gradient card)" }
+      callout: { type: string, description: "S_emph insight (callout bar)" }
+      donut: { type: string, description: "S_donut JSON {value,unit,label}" }
+      before_after: { type: string, description: "S_ba JSON {fromValue,fromLabel,toValue,toLabel,unit}" }
+      mini_stats: { type: string, description: "S_mini JSON [{value,unit,label}] ≥2" }
+      mini_title: { type: string, description: "S_mini eyebrow" }
+      trend: { type: string, description: "S_trend JSON {label,points:[num]} ≥2 điểm" }
+      flow: { type: string, description: "S_flow JSON {title,steps:[2-4]} — quy trình" }
+      cta_top: { type: string, description: "CTA dòng trên" }
+      cta_keyword: { type: string, description: "CTA từ khoá accent" }
+      cta_sub: { type: string, description: "CTA phụ đề" }
+      cta_hl: { type: string, description: "CTA từ nhấn (accent2)" }
+      img_hero: { type: string, description: "URL PNG hero (rỗng=ẩn — mặc định C3 v2 không dùng)" }
+      voice_url: { type: string, description: "URL mp3 voice-over PUBLIC (VPS tải qua mạng)" }
+      duration: { type: string, description: "Tổng giây — khớp audio thật" }
+      scene_times: { type: string, description: "JSON {sceneId:{start,dur}} đồng bộ giọng đọc (rỗng=chia đều)" }
+      captions: { type: string, description: "Caption karaoke JSON [{s,e,w:[{t,x}]}] (rỗng=ẩn)" }
+      topic: { type: string, description: "Header đỉnh khung (rỗng=ẩn)" }
+      theme: { type: string, description: "FALLBACK theme index 0-4 khi không có tokens" }
+      tokens: { type: string, description: "BrandKit tokens JSON (Design Director) — nguồn look chính" }
+      compact: { type: string, description: "QC: '1' = co chữ mạnh (vòng cứu re-render)" }
+      visionQC: { type: boolean, description: "Bật cổng QC 5 chiều trên server (cần GEMINI_API_KEY)" }
+      accent_color: { type: string, description: "(legacy) không dùng — tokens/theme quyết định" }
+  examples: []
+
+license:
+  spdx: LicenseRef-VideoSystem-Internal
+  attribution_required: false
+  redistribution_allowed: false
+  commercial_use: true
+  notes: "Composition tự viết của VideoSystem (không vendor). Manifest theo format Apache-2.0 của html-video."
+
+provenance:
+  origin: { name: "donniechublog (light bento) + escbase (dark/caption/flow)", kind: movement, reference: "tham chiếu thẩm mỹ — không copy asset" }
+  transformation: "Tự dựng HTML+GSAP; Phase 2 token hoá BrandKit + skin poster/editorial (bố cục tham khảo gallery html-video)."
+
+author: { name: "VideoSystem (Tommy)" }
+version: "2.0.0"
+preview: { poster: "" }
