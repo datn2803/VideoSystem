@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { videoStore, type ConceptKind, type VideoDraftRecord } from "./storage";
 import { buildConcept, buildAll, pollDraft } from "./orchestrator";
+import { actionErrorMessage } from "@/lib/integration-hub/action-error";
 
 export async function renderConceptAction(input: {
   scriptId: string;
@@ -9,15 +10,24 @@ export async function renderConceptAction(input: {
   audioId?: string;
   force?: boolean;
 }) {
-  const draft = await buildConcept(input.scriptId, input.concept, input.audioId, input.force);
-  revalidatePath(`/scripts/${input.scriptId}`);
-  return serializeDraft(draft);
+  // try/catch → return {error}: vượt trần $/ngày / provider lỗi hiện ĐÚNG message, không để Next redact.
+  try {
+    const draft = await buildConcept(input.scriptId, input.concept, input.audioId, input.force);
+    revalidatePath(`/scripts/${input.scriptId}`);
+    return serializeDraft(draft);
+  } catch (e) {
+    return { error: actionErrorMessage(e) };
+  }
 }
 
 export async function renderAllConceptsAction(scriptId: string) {
-  const drafts = await buildAll(scriptId);
-  revalidatePath(`/scripts/${scriptId}`);
-  return drafts.map(serializeDraft);
+  try {
+    const drafts = await buildAll(scriptId);
+    revalidatePath(`/scripts/${scriptId}`);
+    return { drafts: drafts.map(serializeDraft) };
+  } catch (e) {
+    return { error: actionErrorMessage(e) };
+  }
 }
 
 export async function pollDraftAction(draftId: string) {

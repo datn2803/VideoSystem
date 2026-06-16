@@ -87,6 +87,7 @@ export function VoiceStudio({
           voiceName: voice?.name,
           speed,
         });
+        if ("error" in result) { setError(result.error || "Tạo audio thất bại"); return; } // vượt trần / provider lỗi → hiện rõ
         // Optimistically update
         setAudios((prev) => {
           const filtered = prev.filter((a) => !(a.scriptId === scriptId && a.part === part));
@@ -123,7 +124,8 @@ export function VoiceStudio({
     startTransition(async () => {
       try {
         const voice = voices.find((v) => v.id === selectedVoiceId);
-        await generateAllAudioAction(scriptId, selectedVoiceId, voice?.name, speed);
+        const res = await generateAllAudioAction(scriptId, selectedVoiceId, voice?.name, speed);
+        if ("error" in res) { setError(res.error || "Tạo audio thất bại"); return; } // vd vượt trần $/ngày → hiện rõ, không reload ra rỗng
         // refresh — easier: navigate or fetch. We'll trigger a soft reload by re-running list.
         const v = await listVoicesAction();
         setVoices(v);

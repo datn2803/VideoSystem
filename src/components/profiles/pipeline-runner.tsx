@@ -58,12 +58,14 @@ export function PipelineRunner({ profileId, renderMode }: { profileId: string; r
 
         // 3. Voice
         setStep(2, { state: "run" });
-        await generateAllAudioAction(scriptId);
+        const ar = await generateAllAudioAction(scriptId);
+        if ("error" in ar) throw new Error(ar.error || "Tạo audio thất bại");
         setStep(2, { state: "ok" });
 
         // 4. Render cả 3 (dispatch — VPS render async, theo dõi ở trang script)
         setStep(3, { state: "run" });
-        await renderAllConceptsAction(scriptId);
+        const rr = await renderAllConceptsAction(scriptId);
+        if ("error" in rr) throw new Error(rr.error || "Render thất bại");
         setStep(3, { state: "ok", note: "đang render — xem trang script" });
 
         router.push(`/scripts/${scriptId}`);

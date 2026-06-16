@@ -126,6 +126,8 @@ export function RenderStudio({
     startTransition(async () => {
       try {
         const result = await renderConceptAction({ scriptId, concept, force });
+        // Phân biệt theo `id` (draft thành công có id; draft.error là lỗi-render riêng, KHÔNG dùng để bắt).
+        if (!("id" in result)) { setError(result.error || "Render thất bại"); return; }
         setDrafts((prev) => {
           const filtered = prev.filter((d) => d.concept !== concept);
           return [...filtered, result];
@@ -144,8 +146,9 @@ export function RenderStudio({
     setBusyConcept("all");
     startTransition(async () => {
       try {
-        const results = await renderAllConceptsAction(scriptId);
-        setDrafts(results);
+        const res = await renderAllConceptsAction(scriptId);
+        if ("error" in res) { setError(res.error || "Render thất bại"); return; }
+        setDrafts(res.drafts);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
