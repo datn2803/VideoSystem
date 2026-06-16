@@ -756,6 +756,10 @@
 
       function runGraphMode(scenes) {
         const root = document.getElementById("root");
+        // BỎ slot tĩnh baked (#s1..#s7) trước khi dựng cảnh graph: chúng .scene{position:absolute;
+        // inset:0} opacity:1 mặc định, mang sẵn skeleton (số "0", "Nguyên tắc", "So sánh", khung
+        // hero/CTA) → nếu để lại sẽ LÒI RA ở frame t=0 + mọi khe cross-fade. Giữ #bgbase (nền sống).
+        root.querySelectorAll(".scene.clip").forEach((el) => { if (el.id !== "bgbase") el.remove(); });
         const total = parseFloat(v.duration) || 18.5;
         const sceneTimes = parseJSON(v.scene_times, null);
         const haveTimes = sceneTimes && typeof sceneTimes === "object" && !Array.isArray(sceneTimes);
@@ -967,7 +971,8 @@
         };
         const RENDERERS = { hook: renderHook, cta: renderCta, bignum: renderBignum, bars: renderBars, points: renderPoints, flow: renderFlow, compare: renderCompare, callout: renderCallout };
 
-        // ── Dựng cảnh theo thứ tự ──
+        // ── Dựng cảnh theo thứ tự (cap 14 cảnh — chống storyboard quá dài làm chậm; log nếu cắt) ──
+        if (scenes.length > 14) console.warn("[graph mode] storyboard " + scenes.length + " cảnh > 14 → chỉ dựng 14 cảnh đầu (phần cuối bị bỏ)");
         const built = [];
         scenes.slice(0, 14).forEach((scene, i) => {
           const host = mk("div", "scene bg-light clip"); host.id = "gs" + i; host.setAttribute("data-track-index", "1");

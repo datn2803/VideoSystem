@@ -56,6 +56,10 @@ const verify = `
         if (!tl) { out.ok = false; out.errors.push("KHÔNG có window.__timelines.main"); document.getElementById("__result").textContent = JSON.stringify(out); return; }
         const hosts = Array.prototype.slice.call(document.querySelectorAll('[id^="gs"]'));
         out.hostCount = hosts.length;
+        // Slot tĩnh baked PHẢI bị bỏ (chỉ còn bgbase + gs*) — nếu sót → skeleton bleed (review HIGH).
+        const baked = Array.prototype.slice.call(document.querySelectorAll(".scene.clip")).filter(function (el) { return el.id !== "bgbase" && el.id.indexOf("gs") !== 0; });
+        out.bakedLeftover = baked.map(function (el) { return el.id; });
+        if (baked.length) { out.ok = false; out.errors.push("SLOT BAKED CÒN SÓT (bleed): " + out.bakedLeftover.join(",")); }
         // thứ tự build = gs0..gsN; data-start phải tăng dần
         let prevStart = -1;
         hosts.forEach((h, i) => {
