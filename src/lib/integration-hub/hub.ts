@@ -131,6 +131,15 @@ export const hub = {
     const p = await getDefaultProvider("llm");
     return p ? await buildLLM(p) : makeMockLLM();
   },
+  /** Model "pro" cho khâu QUYẾT ĐỊNH chất lượng (Script Writer + Fact Researcher) — B2.
+   *  Lấy từ config Integration Hub (provider llm, key `writerModel`); KHÔNG set → mặc định
+   *  Gemini 3.1 Pro. Việc nhẹ (strategist/auditor/sanitize) vẫn dùng model mặc định `config.model`
+   *  (vd gemini-3.5-flash). Override per-call qua llm.complete({ model }). */
+  async llmWriterModel(): Promise<string> {
+    const p = await getDefaultProvider("llm");
+    const m = (p?.config?.writerModel as string | undefined)?.trim();
+    return m || "gemini-3.1-pro-preview";
+  },
   async tts(): Promise<TTSProvider> {
     const p = await getDefaultProvider("tts");
     return p ? await buildTTS(p) : makeMockTTS();

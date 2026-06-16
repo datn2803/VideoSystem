@@ -201,7 +201,8 @@ async function runFactResearcher(
   profile: ProfileRecord,
   topic: string,
   dataHook: string | undefined,
-  pain: string
+  pain: string,
+  model: string
 ): Promise<{ brief: string; sources: { title: string; url: string }[]; costUsd: number }> {
   const llm = await hub.llm();
   const system = `Bạn là nhà nghiên cứu số liệu ngành ${profile.industry} tại Việt Nam.
@@ -214,6 +215,7 @@ Tìm 5-8 SỐ LIỆU/VÍ DỤ THẬT, mới, ưu tiên nguồn Việt Nam (mỗi
 Trả về TEXT gạch đầu dòng, mỗi ý kèm nguồn. Nếu KHÔNG tìm được số thật, nói rõ (đừng bịa).`;
   try {
     const r = await llm.complete({
+      model, // B2: Gemini 3.1 Pro (grounded + chất lượng) — từ config Integration Hub
       system,
       messages: [{ role: "user", content: user }],
       grounded: true,
@@ -361,9 +363,11 @@ export async function generateScript(input: {
 }): Promise<ScriptResult> {
   const lengthSec = input.lengthSec || 60;
   const wordBudget = wordBudgetFor(lengthSec);
+  // B2: model "pro" (Gemini 3.1 Pro mặc định) cho 2 khâu chất lượng — Researcher + Writer. Từ config Hub.
+  const writerModel = await hub.llmWriterModel();
 
   // Tầng 1: Fact Researcher (grounded → số liệu thật + nguồn). Best-effort.
-  const fact = await runFactResearcher(input.profile, input.topic, input.dataHook, input.painPoint);
+  const fact = await runFactResearcher(input.profile, input.topic, input.dataHook, input.painPoint, writerModel);
   // Bài nguồn người dùng dán (link→video) đứng TRƯỚC trong brief — số trong bài là số "có nguồn".
   if (input.sourceBrief?.trim()) {
     fact.brief = `BÀI NGUỒN NGƯỜI DÙNG CUNG CẤP (số liệu trong đây coi như có nguồn):\n"""\n${input.sourceBrief.trim().slice(0, 6000)}\n"""\n\n${fact.brief}`;
@@ -374,6 +378,7 @@ export async function generateScript(input: {
   const llm = await hub.llm();
   const runWriter = () =>
     llm.complete({
+      model: writerModel, // B2: Gemini 3.1 Pro — khâu viết quyết định chất lượng
       system: SYSTEM,
       messages: [
         {

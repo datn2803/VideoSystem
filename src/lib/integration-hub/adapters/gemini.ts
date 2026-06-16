@@ -1,7 +1,14 @@
 import type { LLMProvider, LLMResult } from "../types";
 
-// Gemini 2.0 Flash free tier — pricing rough estimate per million tokens
+// PRICING /1M token (USD). Nguồn: ai.google.dev/gemini-api/docs/pricing (kiểm 17/06/2026).
+// Gemini 3.x: giá ở mức <200k token (context của ta luôn dưới ngưỡng này); output GỒM thinking tokens.
 const PRICING: Record<string, { in: number; out: number }> = {
+  // Gemini 3.x — dùng cho Script Engine (Pro: Writer/Researcher; Flash: việc nhẹ)
+  "gemini-3.1-pro-preview": { in: 2, out: 12 },
+  "gemini-3.5-flash": { in: 1.5, out: 9 },
+  "gemini-3.1-flash-lite": { in: 0.25, out: 1.5 },
+  "gemini-3-flash-preview": { in: 0.5, out: 3 },
+  // Gemini 2.5 / cũ (giữ để không vỡ provider đang cấu hình model cũ)
   "gemini-2.5-flash": { in: 0.3, out: 2.5 },
   "gemini-2.5-flash-lite": { in: 0.1, out: 0.4 },
   "gemini-2.0-flash": { in: 0.1, out: 0.4 },
@@ -23,15 +30,24 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
       // bỏ JSON, trả TEXT có citations (kiến trúc Researcher[grounded→TEXT] → Writer[JSON]).
       const grounded = input.grounded === true;
       const isJson = input.responseFormat === "json" && !grounded;
+      // Gemini 3.x (3.1 Pro, 3.5 Flash…) LUÔN "thinking" (không tắt được) và output GỒM thinking tokens.
+      // → nới TRẦN output cho JSON/grounded để thinking không cắt cụt JSON (Writer) / câu trả lời (Researcher).
+      //   Trần cao KHÔNG tốn thêm — chỉ tính phí token THỰC dùng.
+      const is3x = model.startsWith("gemini-3");
       const generationConfig: Record<string, unknown> = {
         maxOutputTokens: isJson
-          ? Math.max(input.maxTokens ?? 0, 8192)
-          : (input.maxTokens ?? (grounded ? 4096 : 2048)),
+          ? Math.max(input.maxTokens ?? 0, is3x ? 24576 : 8192)
+          : grounded
+            ? Math.max(input.maxTokens ?? 0, is3x ? 8192 : 4096)
+            : (input.maxTokens ?? 2048),
         responseMimeType: isJson ? "application/json" : undefined,
       };
-      // Gemini 2.5 bật "thinking" mặc định → ăn hết token budget, JSON trả về rỗng/cụt → tắt đi.
-      // NHƯNG khi grounded: thinking là thứ giúp model QUYẾT ĐỊNH gọi google_search; tắt nó →
-      // model trả lời từ trí nhớ, groundingMetadata rỗng (không search thật). Nên grounded thì GIỮ thinking.
+      // ⚠ THINKING — khác nhau giữa các hệ:
+      //  - Gemini 2.5: bật thinking mặc định → ăn hết token budget → JSON rỗng/cụt → tắt bằng thinkingBudget:0.
+      //    (Trừ grounded: thinking giúp model QUYẾT ĐỊNH gọi google_search; tắt → trả lời từ trí nhớ.)
+      //  - Gemini 3.x: KHÔNG tắt được thinking + dùng `thinkingLevel` (KHÔNG phải thinkingBudget). Set
+      //    thinkingBudget cho 3.x = API LỖI (mix thinkingLevel/Budget). → ĐỂ MẶC ĐỊNH (không gửi thinkingConfig),
+      //    chỉ nới trần output ở trên cho JSON không bị rỗng. (docs: ai.google.dev/gemini-api/docs/thinking)
       if (model.startsWith("gemini-2.5") && !grounded) {
         generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
@@ -61,7 +77,7 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
           finishReason?: string;
           groundingMetadata?: { groundingChunks?: { web?: { uri?: string; title?: string } }[] };
         }[];
-        usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number };
+        usageMetadata?: { promptTokenCount: number; candidatesTokenCount: number; thoughtsTokenCount?: number };
       };
       const cand = data.candidates?.[0];
       // Bỏ "thinking part" (p.thought=true): với flash-lite, dù thinkingBudget:0 vẫn có thể rò 1 part
@@ -87,13 +103,15 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
       }
       const usage = data.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0 };
       const price = PRICING[model] || PRICING["gemini-2.0-flash"];
+      // Output GỒM thinking tokens (3.x tách thoughtsTokenCount riêng) → cộng vào để tính phí ĐÚNG.
+      const outTokens = usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0);
       const costUsd =
         (usage.promptTokenCount * price.in) / 1_000_000 +
-        (usage.candidatesTokenCount * price.out) / 1_000_000;
+        (outTokens * price.out) / 1_000_000;
       const result: LLMResult = {
         text,
         tokensIn: usage.promptTokenCount,
-        tokensOut: usage.candidatesTokenCount,
+        tokensOut: outTokens,
         costUsd,
         citations,
         raw: data,
