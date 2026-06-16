@@ -33,11 +33,13 @@ const graph: ContentGraph = {
   eq(JSON.parse(String(scenes[2].vars.points))[0].text, "Một ý chính cần nhớ", "points vars");
   eq(scenes[3].vars.cta_keyword, "Theo dõi ngay", "cta vars");
 
-  // 2) sceneSpecs khớp id + weight > 0 (= dur kế hoạch) → đưa vào alignByWeights
+  // 2) sceneSpecs khớp id + A2 weight theo LỜI ĐỌC (text=số từ, data≈0) → đưa vào alignByWeights
   eq(sceneSpecs.map((s) => s.id), ["hook", "big", "pt", "cta"], "sceneSpecs id khớp scenes");
   ok(sceneSpecs.every((s) => s.weight > 0), "mọi weight > 0");
-  // dur scale theo audio: rawTotal 4×3=12 → ×(20/12); weight = dur kế hoạch
-  ok(Math.abs(sceneSpecs[0].weight - 5) < 0.2, "weight ~ dur scale (3×20/12=5)");
+  eq(sceneSpecs[0].weight, 7, "hook weight = số từ lời đọc (7)");
+  ok(sceneSpecs[1].weight < 0.5, "data node (big) weight ≈ 0 (không ăn thời gian cảnh có lời)");
+  eq(sceneSpecs[2].weight, 5, "pt (point) weight = số từ (5)");
+  eq(sceneSpecs[3].weight, 3, "cta weight = số từ (3)");
 }
 
 // 3) Một node duy nhất vẫn ra 1 cảnh (n=1)

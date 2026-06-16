@@ -4,7 +4,7 @@ import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
 import { store } from "@/lib/integration-hub/storage";
 import { blobUpload } from "@/lib/backend/blob-store";
-import { getOpenAIKey, transcribeWords, alignByWeights, type Word } from "@/lib/audio/whisper";
+import { getOpenAIKey, transcribeWords, alignByWeights } from "@/lib/audio/whisper";
 import type { ScriptResult } from "@/lib/agents/scripter";
 import { getOrCreateBrandKit } from "@/lib/design/director";
 import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
@@ -15,6 +15,7 @@ import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_sh
 import { RENDER_PIPELINE_VERSION } from "../render-version";
 import { isValidGraph } from "../scene-planner";
 import { graphDrivenEnabled, buildGraphAnimationVariables } from "./graph-scenes";
+import { buildCaptions } from "../captions";
 
 /**
  * Sinh 1 ảnh cutout nền TRONG SUỐT trên Vercel (OpenAI reach được; VPS bị Cloudflare
@@ -119,38 +120,6 @@ export function themeForTopic(industry: string, seed: string): number {
   return themeFromSeed(seed); // 0-2 Bright
 }
 
-/** Gom thành phụ đề SYNC karaoke cho C3: JSON [{s,e,w:[{t,x}]}]. Ngắt câu theo dấu kết câu /
- *  ~7 từ / ~42 ký tự / khoảng lặng >0.55s. e câu = s câu sau (liền mạch).
- *  - CÓ Whisper words → timing THẬT (sync chuẩn nhất).
- *  - words=null (whisper lỗi/thiếu key — hay xảy ra & SILENT) → FALLBACK: chia đều `fallbackText`
- *    (read-script) theo thời lượng → VẪN có caption (kém sync hơn) thay vì rỗng. */
-function buildCaptions(words: Word[] | null, total: number, fallbackText?: string): string {
-  type WT = { t: number; x: string; gap: number };
-  let wlist: WT[] = [];
-  if (words && words.length > 0) {
-    const ws = words.map((w) => ({ x: (w.text || "").trim(), start: w.start, end: w.end })).filter((w) => w.x);
-    wlist = ws.map((w, i) => ({ t: +w.start.toFixed(2), x: w.x, gap: i + 1 < ws.length ? ws[i + 1].start - w.end : 99 }));
-  } else {
-    const toks = (fallbackText || "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-    if (toks.length === 0) return "";
-    const t0 = 0.3, t1 = Math.max(t0 + 1, total - 0.8);
-    wlist = toks.map((x, i) => ({ t: +(t0 + (t1 - t0) * (i / Math.max(1, toks.length - 1))).toFixed(2), x, gap: 0 }));
-  }
-  if (wlist.length === 0) return "";
-  type Ph = { s: number; e: number; w: { t: number; x: string }[] };
-  const phrases: Ph[] = [];
-  let cur: { t: number; x: string }[] = [];
-  let chars = 0;
-  const flush = () => { if (cur.length) { phrases.push({ s: cur[0].t, e: 0, w: cur }); cur = []; chars = 0; } };
-  for (const wd of wlist) {
-    cur.push({ t: wd.t, x: wd.x });
-    chars += wd.x.length + 1;
-    if (cur.length >= 7 || chars >= 42 || /[.!?…]$/.test(wd.x) || wd.gap > 0.55) flush();
-  }
-  flush();
-  for (let i = 0; i < phrases.length; i++) phrases[i].e = i + 1 < phrases.length ? phrases[i + 1].s : Math.max(total, phrases[i].s + 1);
-  return JSON.stringify(phrases);
-}
 
 /** Token đơn vị NGẮN (1 từ) cho chip/bar. */
 function oneToken(unit: string): string {
