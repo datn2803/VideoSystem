@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
-    "check": "bash check.sh"
+    "check": "bash check.sh",
+    "test": "tsc -p tsconfig.test.json && node test/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",

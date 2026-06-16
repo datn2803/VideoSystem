@@ -13,6 +13,8 @@ import { getEngine } from "../engine";
 import { allowSelfHostRender, isLive, assertDailyCap, recordPaidUsage, recordExtraUsage } from "../cost-guard";
 import { pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { RENDER_PIPELINE_VERSION } from "../render-version";
+import { isValidGraph } from "../scene-planner";
+import { graphDrivenEnabled, buildGraphAnimationVariables } from "./graph-scenes";
 
 /**
  * Sinh 1 ảnh cutout nền TRONG SUỐT trên Vercel (OpenAI reach được; VPS bị Cloudflare
@@ -477,7 +479,25 @@ export async function buildAnimation(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 18.5;
-      const { variables: animVars, sceneSpecs } = buildAnimationVariables(script.script, durationSec);
+      // Graph-driven (sau cờ): storyboard hợp lệ → mảng cảnh động; else → variantPrompts (fallback).
+      // Bọc try: BẤT KỲ lỗi nào ở nhánh graph → rơi về đường cũ (giữ đúng "graph hỏng → fallback an
+      // toàn", không để render fail). Nhánh cũ lỗi thì ném tiếp như trước (catch ngoài đánh failed).
+      const useGraph = graphDrivenEnabled() && isValidGraph(script.script.storyboard);
+      let animVars: Record<string, unknown>;
+      let sceneSpecs: SceneSpec[];
+      try {
+        const built = useGraph
+          ? buildGraphAnimationVariables(script.script.storyboard!, durationSec, kit, themeFallback)
+          : buildAnimationVariables(script.script, durationSec);
+        animVars = built.variables;
+        sceneSpecs = built.sceneSpecs;
+      } catch (e) {
+        if (!useGraph) throw e;
+        console.error("[c3 graph-driven] lỗi dựng từ storyboard → fallback variantPrompts:", e instanceof Error ? e.message : e);
+        const built = buildAnimationVariables(script.script, durationSec);
+        animVars = built.variables;
+        sceneSpecs = built.sceneSpecs;
+      }
 
       // Whisper word-level (Vercel gọi được OpenAI) → căn scene_times theo giọng đọc.
       // Lỗi/thiếu key → words=null → alignByWeights tự fallback chia theo tỉ lệ trọng số.

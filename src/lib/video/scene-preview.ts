@@ -12,6 +12,15 @@ import type { BrandKit } from "@/lib/design/brandkit";
 
 type SceneVars = { variables: Record<string, unknown>; durationSec: number };
 
+/**
+ * Spec 1 cảnh (DÙNG CHUNG cho preview + video thật graph-driven):
+ *  - `intent`: archetype CHUẨN HOÁ (hook|cta|bignum|bars|flow|compare|callout|points)
+ *    — composition (chế độ mảng-cảnh) switch theo trường này để gọi đúng hàm dựng.
+ *  - `vars`: CHỈ các biến của riêng cảnh đó (KHÔNG kèm BLANK toàn cục).
+ *  - `durationSec`: thời lượng cảnh đã kẹp [2.5, 12].
+ */
+export type SceneSpec = { intent: string; vars: Record<string, unknown>; durationSec: number };
+
 const BLANK: Record<string, unknown> = {
   hook_line1: "", hook_line2: "", hook_keyword: "", hook_sub: "", hook_eyebrow: "", hook_stat: "",
   bignum_value: "", bignum_unit: "", bignum_label: "",
@@ -28,14 +37,20 @@ const dataOf = (n: GraphNode): Record<string, unknown> =>
     ? (n.data as Record<string, unknown>)
     : {};
 
-/** Map 1 node storyboard → bộ biến composition để render RIÊNG cảnh đó. */
-export function sceneVariablesForNode(node: GraphNode, kit: BrandKit | null, theme: string): SceneVars {
+/**
+ * Map 1 node storyboard → archetype + BỘ BIẾN của riêng cảnh đó (KHÔNG kèm BLANK,
+ * KHÔNG kèm scene_times). Hàm THUẦN, dùng chung cho:
+ *  - preview cảnh lẻ (`sceneVariablesForNode` gọi lại + trộn BLANK + scene_times),
+ *  - video thật graph-driven (`buildAnimationVariablesFromGraph` lặp node → spec).
+ * → "preview = video thật" vì cùng 1 mapping. `_kit`/`_theme` reserved cho
+ * theming theo từng cảnh sau này (hiện theme/tokens là biến TOÀN CỤC).
+ */
+export function sceneSpecForNode(node: GraphNode, _kit: BrandKit | null, _theme: string): SceneSpec {
   const dur = Math.max(2.5, Math.min(12, node.durationSec || 4));
   const intent = (node.frameIntent || "").toLowerCase();
   const d = dataOf(node);
-  const vars: Record<string, unknown> = { ...BLANK };
-  // Node hook/outro map THẲNG vào s1/s7 (luôn hiện) → KHÔNG cần bookend.
-  let direct = false;
+  const vars: Record<string, unknown> = {};
+  let archetype: string;
 
   if (intent === "hook" || node.id === "hook") {
     const words = txt(node).split(/\s+/).filter(Boolean);
@@ -43,30 +58,48 @@ export function sceneVariablesForNode(node: GraphNode, kit: BrandKit | null, the
     vars.hook_line1 = words.slice(0, mid).join(" ");
     vars.hook_line2 = words.slice(mid).join(" ");
     vars.hook_keyword = node.label || "";
-    direct = true;
+    archetype = "hook";
   } else if (intent === "outro" || intent === "cta" || node.id === "cta") {
     vars.cta_top = "";
     vars.cta_keyword = txt(node);
-    direct = true;
+    archetype = "cta";
   } else if (intent === "data-big" || (node.kind === "data" && d.value != null && !Array.isArray(d.value))) {
     vars.bignum_value = String(d.value ?? "");
     vars.bignum_unit = String(d.unit ?? "");
     vars.bignum_label = String(d.label ?? node.label ?? "").toUpperCase();
+    archetype = "bignum";
   } else if (intent === "data-bars" && Array.isArray(d.bars)) {
     vars.data_bars = JSON.stringify(d.bars);
     vars.bars_title = String(d.label || node.label || "Những con số");
+    archetype = "bars";
   } else if (intent === "flow" && Array.isArray(d.steps)) {
     vars.flow = JSON.stringify({ title: String(d.title || node.label || "Quy trình"), steps: d.steps });
+    archetype = "flow";
   } else if (intent === "compare" && d.leftTitle) {
     vars.compare = JSON.stringify(d);
+    archetype = "compare";
   } else if (intent === "quote") {
     vars.callout = txt(node);
+    archetype = "callout";
   } else {
     // point/text mặc định → 1 point card
     vars.points = JSON.stringify([
       { n: 1, total: 1, text: txt(node), title: txt(node), detail: "", stat: undefined },
     ]);
+    archetype = "points";
   }
+
+  return { intent: archetype, vars, durationSec: dur };
+}
+
+/** Map 1 node storyboard → bộ biến composition để render RIÊNG cảnh đó. */
+export function sceneVariablesForNode(node: GraphNode, kit: BrandKit | null, theme: string): SceneVars {
+  const spec = sceneSpecForNode(node, kit, theme);
+  const dur = spec.durationSec;
+  const intent = (node.frameIntent || "").toLowerCase();
+  const vars: Record<string, unknown> = { ...BLANK, ...spec.vars };
+  // Node hook/cta map THẲNG vào s1/s7 (luôn hiện) → KHÔNG cần bookend.
+  const direct = spec.intent === "hook" || spec.intent === "cta";
 
   if (direct) {
     // s1 + s7 LUÔN trong DOM (composition không remove) → nếu không ép scene_times,

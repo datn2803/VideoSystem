@@ -1,0 +1,11 @@
+{
+  "//": "Type-check file test .mts (tsconfig.json chính chỉ include **/*.ts/.tsx → .mts lọt lưới).",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["test/**/*.mts"]
+}

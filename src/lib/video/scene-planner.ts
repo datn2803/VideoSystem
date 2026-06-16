@@ -1,16 +1,15 @@
 /**
  * Scene planner — ContentGraph (storyboard) → ScenePlan (thứ tự cảnh + timing).
  *
- * ⚠ TRẠNG THÁI (P2.1 review đợt 2): MODULE ĐỂ DÀNH — hiện CHƯA nơi nào gọi
- * planScenes/sceneTimesFromPlan trong production. Video chính vẫn dựng từ
- * variantPrompts (c3-animation.ts); storyboard mới điều khiển preview cảnh lẻ
- * (scene-preview.ts) + QC + Scene Studio. Nối module này vào builder =
- * "graph-driven build" — việc LỚN đang CHỜ TOMMY QUYẾT (xem HANDOFF). Giữ lại
- * có chủ đích + có test (_p1_test.mts) — KHÔNG phải dead code lỡ tay.
+ * TRẠNG THÁI (Phase 1 "Graph-driven build" — Hướng A): module này NAY được nối
+ * vào builder qua `builders/graph-scenes.ts` → `c3-animation.ts`, SAU cờ
+ * `GRAPH_DRIVEN_C3` (mặc định TẮT). Cờ tắt → video chính vẫn dựng từ variantPrompts
+ * (fallback). Cờ bật + storyboard hợp lệ → planScenes quyết thứ tự + timing cảnh.
+ * Vẫn dùng cho preview cảnh lẻ (scene-preview.ts) + QC + Scene Studio.
  *
- * Phase 1 đại tu render: tách phần "đọc graph" khỏi buildAnimationVariables rối.
  * topoSort quyết thứ tự phát; durationSec từng node (mặc định 3s) quyết timing;
- * có audio thật thì scale tuyến tính toàn timeline khớp độ dài giọng đọc.
+ * có audio thật thì scale tuyến tính toàn timeline khớp độ dài giọng đọc (builder
+ * còn tinh chỉnh lại ranh giới theo Whisper qua alignByWeights → cảnh khớp giọng).
  */
 import {
   type ContentGraph,
@@ -48,6 +47,21 @@ export type ScenePlan = {
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Storyboard có DÙNG ĐƯỢC để lái render graph-driven không? An toàn với
+ * null/undefined + graph rỗng + edges thiếu. Bọc validate() (vendored) — nếu
+ * false thì builder rơi về đường variantPrompts cũ (fallback an toàn).
+ */
+export function isValidGraph(graph: ContentGraph | null | undefined): graph is ContentGraph {
+  if (!graph || !Array.isArray(graph.nodes) || graph.nodes.length === 0) return false;
+  if (!Array.isArray(graph.edges)) return false;
+  try {
+    return validate(graph).ok;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Lập kế hoạch cảnh từ storyboard.
