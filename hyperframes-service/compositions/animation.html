@@ -39,7 +39,9 @@
     {"id":"topic","type":"string","label":"Topic (header trên — đóng khung đỉnh)","default":""},
     {"id":"captions","type":"string","label":"Phụ đề SYNC read-script JSON [{s,e,w:[{t,x}]}] — rỗng=ẩn","default":""},
     {"id":"flow","type":"string","label":"S_flow JSON {title,steps:[2-4]} — sơ đồ quy trình, rỗng=ẩn","default":""},
-    {"id":"tokens","type":"string","label":"BrandKit tokens JSON (Design Director) — rỗng=THEMES cũ","default":""}
+    {"id":"tokens","type":"string","label":"BrandKit tokens JSON (Design Director) — rỗng=THEMES cũ","default":""},
+    {"id":"graphDriven","type":"string","label":"Graph-driven (Part 1): true → chạy chế độ MẢNG CẢNH từ scenes[]","default":""},
+    {"id":"scenes","type":"string","label":"Graph mode JSON [{id,intent,vars}] theo thứ tự phát — rỗng=chế độ slot cũ","default":""}
   ]'
 >
   <head>
@@ -395,6 +397,15 @@
       #s7 .e2 .e2hl { color: var(--accent2); }
       #s7 .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
       #s7 .e3 svg { width: 54px; height: 54px; }
+      /* ── Graph mode (Part 1 §3.3): hook/cta scope theo ID #s1/#s7 → graph host (.ghook/.gcta) dùng lại typography. Bento archetype scope theo class nên tự kế thừa. ── */
+      .scene.ghook .key { display: block; color: var(--accent); font-weight: 900; font-size: 150px; line-height: 0.98; letter-spacing: -1px; }
+      .scene.ghook .l { display: block; color: var(--ink); font-weight: 900; font-size: 78px; line-height: 1.05; }
+      .scene.ghook .sub { display: block; color: var(--sub); font-weight: 600; font-size: 44px; margin-top: 18px; }
+      .scene.gcta .e1 { color: var(--ink); font-weight: 800; font-size: 80px; line-height: 1.14; }
+      .scene.gcta .e2 { color: var(--accent); font-weight: 900; font-size: 150px; line-height: 1.12; letter-spacing: -1px; }
+      .scene.gcta .e2 .e2hl { color: var(--accent2); }
+      .scene.gcta .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+      .scene.gcta .e3 svg { width: 54px; height: 54px; }
 
       /* ── SKIN theo BrandKit.styleVariant (html[data-skin]) — Phase 2.
          classic = default, KHÔNG rule nào ở đây đụng vào. Tham khảo bố cục gallery
@@ -733,6 +744,306 @@
       if (String(v.topic || "").trim()) setText("topbarTxt", String(v.topic).toUpperCase().slice(0, 32));
       else remove("topbar");
 
+      // ════════════════════════════════════════════════════════════════════════════
+      // GRAPH-DRIVEN MODE (Phase 1 §3.3) — chế độ MẢNG CẢNH ĐỘNG, SONG SONG slot cũ.
+      //   v.graphDriven=true + v.scenes (JSON [{id,intent,vars}] đúng thứ tự phát) → dựng
+      //   cảnh động từ storyboard. KHÔNG đụng code slot-cố-định (chạy ở nhánh else bên dưới
+      //   khi cờ tắt). scene_times keyed theo node id (builder) → khớp giọng qua Whisper.
+      // ════════════════════════════════════════════════════════════════════════════
+      const GRAPH_ON = (v.graphDriven === true || v.graphDriven === "true" || v.graphDriven === "1");
+      let GRAPH_SCENES = [];
+      if (GRAPH_ON) { const p = parseJSON(v.scenes, []); GRAPH_SCENES = Array.isArray(p) ? p : []; }
+
+      function runGraphMode(scenes) {
+        const root = document.getElementById("root");
+        const total = parseFloat(v.duration) || 18.5;
+        const sceneTimes = parseJSON(v.scene_times, null);
+        const haveTimes = sceneTimes && typeof sceneTimes === "object" && !Array.isArray(sceneTimes);
+        const CF = String(v.compact || "") === "1" ? 0.82 : 1;
+        const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+        // fillWords() ở trên nhận ID string; graph mode dựng theo ELEMENT → bản element-based.
+        const fillW = (el, phrase) => {
+          el.textContent = "";
+          String(phrase || "").trim().split(/\s+/).filter(Boolean).forEach((w, i) => {
+            if (i > 0) el.appendChild(document.createTextNode(" "));
+            const sp = mk("span", "word"); sp.style.display = "inline-block"; sp.textContent = w; el.appendChild(sp);
+          });
+        };
+        const eb = (iconKey, label) => {
+          const e = mk("div", "eyebrow icon");
+          const ico = mk("span", "ico"); ico.appendChild(makeIconSVG(iconKey));
+          e.appendChild(ico); e.appendChild(mk("span", "lbl", label || "")); return e;
+        };
+        const fitG = (el, mx, mn, mh) => {
+          if (!el || !String(el.textContent || "").trim()) return;
+          mx = Math.round(mx * CF); mh = Math.round(mh * CF);
+          el.style.lineHeight = el.style.lineHeight || "1.12";
+          let lo = mn, hi = mx, best = mn;
+          for (let i = 0; i < 12; i++) { const md = (lo + hi) / 2; el.style.fontSize = md + "px"; const fw = el.scrollWidth <= el.clientWidth + 1; const fh = el.scrollHeight <= mh; if (fw && fh) { best = md; lo = md; } else { hi = md; } }
+          el.style.fontSize = Math.floor(best) + "px";
+        };
+        const fits = []; // mảng hàm fit (chạy lại sau khi font sẵn sàng)
+
+        // ── 8 renderer: dựng DOM vào host + trả closure animate(tl, s) đăng ký GSAP scoped ──
+        const renderHook = (host, sv) => {
+          host.classList.add("center", "ghook");
+          const key = String(sv.hook_keyword || "").trim();
+          const keyEl = key ? mk("span", "key", key) : null;
+          const l1 = mk("span", "l"); fillW(l1, sv.hook_line1 || "");
+          const l2txt = String(sv.hook_line2 || "").trim();
+          const l2 = l2txt ? mk("span", "l") : null; if (l2) fillW(l2, l2txt);
+          const subTxt = String(sv.hook_sub || "").trim();
+          const sub = subTxt ? mk("span", "sub", subTxt) : null;
+          if (keyEl) host.appendChild(keyEl);
+          host.appendChild(l1); if (l2) host.appendChild(l2); if (sub) host.appendChild(sub);
+          if (keyEl) fits.push(() => fitG(keyEl, 150, 48, 320));
+          fits.push(() => fitG(l1, 78, 40, 180)); if (l2) fits.push(() => fitG(l2, 78, 40, 180));
+          return (tl, s) => {
+            if (keyEl) tl.fromTo(keyEl, { scale: 0.55, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.2);
+            tl.from(l1.querySelectorAll(".word"), { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.55);
+            if (l2) tl.from(l2.querySelectorAll(".word"), { yPercent: 120, opacity: 0, duration: 0.45, stagger: 0.07 }, s + 0.8);
+            if (sub) tl.fromTo(sub, { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, s + 1.1);
+          };
+        };
+        const renderCta = (host, sv) => {
+          host.classList.add("center", "gcta");
+          const hasTop = String(sv.cta_top || "").trim();
+          const e1 = mk("div", "e1", String(sv.cta_top || "")); if (hasTop) host.appendChild(e1);
+          const e2 = mk("div", "e2");
+          const text = String(sv.cta_keyword || ""); const hl = String(sv.cta_hl || "").trim();
+          const idx = hl ? text.toLowerCase().indexOf(hl.toLowerCase()) : -1;
+          if (hl && idx >= 0) {
+            if (idx > 0) e2.appendChild(document.createTextNode(text.slice(0, idx)));
+            e2.appendChild(mk("span", "e2hl", text.slice(idx, idx + hl.length)));
+            const after = text.slice(idx + hl.length); if (after) e2.appendChild(document.createTextNode(after));
+          } else e2.textContent = text;
+          host.appendChild(e2);
+          const subTxt = String(sv.cta_sub || "").trim();
+          let e3 = null;
+          if (subTxt) {
+            e3 = mk("div", "e3"); e3.appendChild(mk("span", null, subTxt));
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor");
+            svg.setAttribute("stroke-width", "2.5"); svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("stroke-linejoin", "round");
+            svg.style.color = "var(--accent)"; svg.innerHTML = '<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>';
+            e3.appendChild(svg); host.appendChild(e3);
+          }
+          if (hasTop) fits.push(() => fitG(e1, 80, 36, 200));
+          fits.push(() => fitG(e2, 150, 44, 520));
+          return (tl, s) => {
+            if (hasTop) tl.from(e1, { y: 24, opacity: 0, duration: 0.4 }, s + 0.12);
+            tl.fromTo(e2, { scale: 0.5, opacity: 0, filter: "blur(8px)" }, { scale: 1, opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.7)" }, s + 0.35);
+            tl.to(e2, { scale: 1.04, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 1.0);
+            if (e3) tl.from(e3, { y: 20, opacity: 0, duration: 0.4 }, s + 0.7);
+          };
+        };
+        const renderBignum = (host, sv) => {
+          host.classList.add("left");
+          const stack = mk("div", "stack"); const bh = mk("div", "bentohost tint");
+          const head = mk("div", "hosthead"); head.appendChild(eb("bolt", String(sv.bignum_label || "Con số").toUpperCase().slice(0, 22)));
+          const body = mk("div", "hostbody"); const bn = mk("div", "bignum");
+          const num = mk("span"); const raw = String(sv.bignum_value || "").trim();
+          const n = Number(raw.replace(/[^\d.-]/g, "")); const isNum = raw !== "" && Number.isFinite(n);
+          num.textContent = isNum ? n.toLocaleString("vi-VN") : raw;
+          bn.appendChild(num); bn.appendChild(mk("span", "bu", String(sv.bignum_unit || "")));
+          body.appendChild(bn); bh.appendChild(head); bh.appendChild(body); stack.appendChild(bh); host.appendChild(stack);
+          fits.push(() => { num.textContent = isNum ? n.toLocaleString("vi-VN") : raw; fitG(bn, 450, 110, 680); if (isNum) num.textContent = "0"; });
+          return (tl, s) => {
+            tl.from(bh, { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
+            if (isNum) { const cc = { v: 0 }; tl.to(cc, { v: n, duration: 0.6, ease: "power3.out", onUpdate: () => { num.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.2); }
+            else tl.from(num, { scale: 0.6, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.2);
+            tl.to(bn, { scale: 1.03, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut", overwrite: "auto" }, s + 1.0);
+          };
+        };
+        const renderBars = (host, sv) => {
+          host.classList.add("left");
+          const stack = mk("div", "stack"); stack.appendChild(eb("chart", String(sv.bars_title || "Những con số")));
+          const wrap = mk("div", "pbars"); stack.appendChild(wrap); host.appendChild(stack);
+          const bars = (parseJSON(sv.data_bars, []) || []).slice(0, 4);
+          const nums = bars.map((b) => Number(String(b.value || "").replace(/[^\d.-]/g, "")) || 0);
+          const maxv = Math.max.apply(null, nums.concat([1]));
+          const rows = [];
+          bars.forEach((b, i) => {
+            const row = mk("div", "pbar bento" + (nums[i] === maxv ? " win" : ""));
+            const pl = mk("div", "pl"); pl.appendChild(mk("span", "pn", String(b.label || "")));
+            const unitTxt = b.unit ? " " + String(b.unit) : ""; const isNum = /\d/.test(String(b.value || ""));
+            const pv = mk("span", "pv", isNum ? "0" + unitTxt : String(b.value || "") + unitTxt); pl.appendChild(pv);
+            const track = mk("div", "ptrack"); const fill = mk("div", "pfill"); fill.style.width = Math.max(6, Math.round((nums[i] / maxv) * 100)) + "%";
+            const sheen = mk("div", "sheen"); fill.appendChild(sheen); track.appendChild(fill);
+            row.appendChild(pl); row.appendChild(track); wrap.appendChild(row);
+            rows.push({ row, fill, sheen, pv, num: nums[i], unit: unitTxt, isNum });
+          });
+          return (tl, s) => {
+            rows.forEach((r, i) => {
+              tl.from(r.row, { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.25 + i * 0.12);
+              tl.fromTo(r.fill, { scaleX: 0 }, { scaleX: 1, duration: 0.65, ease: "power3.out" }, s + 0.4 + i * 0.12);
+              tl.fromTo(r.sheen, { x: -160 }, { x: 1240, duration: 0.75, ease: "power2.in" }, s + 0.95 + i * 0.12);
+              if (r.isNum) { const cc = { v: 0 }; tl.to(cc, { v: r.num, duration: 0.7, ease: "power2.out", onUpdate: () => { r.pv.textContent = Math.round(cc.v).toLocaleString("vi-VN") + r.unit; } }, s + 0.4 + i * 0.12); }
+            });
+          };
+        };
+        const renderPoints = (host, sv) => {
+          host.classList.add("left", "ptscene");
+          const pts = parseJSON(sv.points, []); const p = (Array.isArray(pts) && pts[0]) || {};
+          const num = String(p.n || 1); const total2 = String(p.total || 1);
+          const title = String(p.title || p.text || "").trim(); const detail = String(p.detail || "").trim();
+          const stat = p.stat && String(p.stat.value || "").trim() ? p.stat : null;
+          host.appendChild(mk("div", "ptwm", num));
+          host.appendChild(eb("spark", "ĐIỂM " + num + "/" + total2));
+          const wrap = mk("div", "ptwrap"); const top = mk("div", "pttop");
+          const tt = mk("div", "pttitle"); fillKinetic(tt, title); top.appendChild(tt);
+          if (detail) top.appendChild(mk("div", "ptdetail", detail));
+          wrap.appendChild(top);
+          let statEl = null;
+          if (stat) {
+            statEl = mk("div", "ptstat bento-accent"); const sval = mk("div", "psval");
+            sval.appendChild(mk("span", "psv", String(stat.value).trim()));
+            if (String(stat.unit || "").trim()) sval.appendChild(mk("span", "psu", String(stat.unit).trim()));
+            statEl.appendChild(sval);
+            if (String(stat.label || "").trim()) statEl.appendChild(mk("div", "pslbl", String(stat.label).trim()));
+            wrap.appendChild(statEl);
+          }
+          host.appendChild(wrap);
+          fits.push(() => fitG(tt, 80, 38, 330));
+          const wm = host.querySelector(".ptwm");
+          return (tl, s) => {
+            tl.fromTo(wm, { opacity: 0, scale: 0.82, x: 36 }, { opacity: 0.07, scale: 1, x: 0, duration: 0.7, ease: "power2.out" }, s + 0.1);
+            tl.fromTo(top, { y: 34, opacity: 0, scale: 0.97 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, s + 0.2);
+            tl.from(tt.querySelectorAll(".word"), { yPercent: 80, opacity: 0, duration: 0.5, stagger: 0.06, ease: "power3.out" }, s + 0.34);
+            if (detail) tl.from(top.querySelector(".ptdetail"), { y: 22, opacity: 0, duration: 0.5, ease: "power2.out" }, s + 0.66);
+            if (statEl) { tl.fromTo(statEl, { y: 42, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.55, ease: "back.out(1.5)" }, s + 0.82); tl.fromTo(statEl.querySelector(".psv"), { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.7)" }, s + 1.0); }
+          };
+        };
+        const renderFlow = (host, sv) => {
+          host.classList.add("left");
+          const flow = parseJSON(sv.flow, null) || {};
+          const steps = (Array.isArray(flow.steps) ? flow.steps : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4);
+          host.appendChild(eb("refresh", String(flow.title || "Quy trình").toUpperCase().slice(0, 22)));
+          const wrap = mk("div", "flowwrap");
+          const pills = [];
+          steps.forEach((st, i) => {
+            const last = i === steps.length - 1;
+            const pill = mk("div", "flowpill " + (last ? "bento-accent last" : "bento"));
+            pill.appendChild(mk("span", "fpn", String(i + 1))); pill.appendChild(mk("span", "fpt", st));
+            wrap.appendChild(pill); pills.push(pill);
+            if (!last) { const ar = mk("div", "flowarrow"); ar.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg>'; wrap.appendChild(ar); }
+          });
+          host.appendChild(wrap);
+          return (tl, s) => { tl.from(pills, { y: 26, opacity: 0, duration: 0.45, stagger: 0.12, ease: "back.out(1.4)" }, s + 0.25); };
+        };
+        const renderCompare = (host, sv) => {
+          host.classList.add("left");
+          const cmp = parseJSON(sv.compare, null) || {};
+          const stack = mk("div", "stack"); stack.appendChild(eb("layers", "So sánh"));
+          const grid = mk("div", "compare");
+          const mkCard = (side, title, items) => {
+            const c = mk("div", "ccard " + side + (side === "r" ? " bento-accent" : " bento"));
+            c.appendChild(mk("div", "ct", String(title || "")));
+            const list = mk("div", "cslist");
+            (Array.isArray(items) ? items : []).slice(0, 3).forEach((it) => list.appendChild(mk("div", "cs", "• " + String(it))));
+            c.appendChild(list); return c;
+          };
+          grid.appendChild(mkCard("l", cmp.leftTitle, cmp.leftItems));
+          grid.appendChild(mkCard("r", cmp.rightTitle || "Với AI", cmp.rightItems || []));
+          stack.appendChild(grid); host.appendChild(stack);
+          return (tl, s) => {
+            tl.from(grid.querySelectorAll(".ccard"), { y: 36, opacity: 0, duration: 0.5, stagger: 0.14, ease: "back.out(1.4)" }, s + 0.3);
+            const r = grid.querySelector(".ccard.r"); if (r) tl.to(r, { y: "-=12", duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0);
+          };
+        };
+        const renderCallout = (host, sv) => {
+          host.classList.add("left");
+          const calloutTxt = String(sv.callout || "").trim(); const principleTxt = String(sv.principle || "").trim();
+          const stack = mk("div", "stack"); stack.appendChild(eb("check", "Đúc kết"));
+          const group = mk("div", "emphgroup");
+          let calloutEl = null, card = null;
+          if (calloutTxt) { calloutEl = mk("div", "callout", calloutTxt); group.appendChild(calloutEl); }
+          if (principleTxt) { card = mk("div", "emph bento-accent"); card.appendChild(mk("div", "eb", "Nguyên tắc")); card.appendChild(mk("div", "em", principleTxt)); group.appendChild(card); }
+          stack.appendChild(group); host.appendChild(stack);
+          return (tl, s) => {
+            if (calloutEl) tl.from(calloutEl, { x: -40, opacity: 0, duration: 0.45, ease: "expo.out" }, s + 0.2);
+            if (card) { tl.fromTo(card, { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4); tl.to(card, { scale: 1.018, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0); }
+          };
+        };
+        const RENDERERS = { hook: renderHook, cta: renderCta, bignum: renderBignum, bars: renderBars, points: renderPoints, flow: renderFlow, compare: renderCompare, callout: renderCallout };
+
+        // ── Dựng cảnh theo thứ tự ──
+        const built = [];
+        scenes.slice(0, 14).forEach((scene, i) => {
+          const host = mk("div", "scene bg-light clip"); host.id = "gs" + i; host.setAttribute("data-track-index", "1");
+          host.appendChild(mk("div", "dotgrid"));
+          const sv = (scene && scene.vars) || {};
+          const fn = RENDERERS[scene && scene.intent] || renderPoints;
+          const animate = fn(host, sv) || function () {};
+          root.appendChild(host);
+          built.push({ id: (scene && scene.id) || ("gs" + i), host, animate });
+        });
+        if (!built.length) return;
+
+        // ── Timing: scene_times keyed theo node id (khớp giọng qua Whisper) → fallback chia đều ──
+        const N = built.length; let cursor = 0;
+        built.forEach((b) => {
+          let s, d;
+          const t = haveTimes ? sceneTimes[b.id] : null;
+          if (t && isFinite(t.start)) { s = Number(t.start); d = isFinite(t.dur) && Number(t.dur) > 0 ? Number(t.dur) : Math.max(0.5, total - s); }
+          else { const win = total / N; s = cursor; d = win; }
+          s = Math.max(0, Math.min(s, Math.max(0, total - 0.3))); d = Math.max(0.3, Math.min(d, total - s));
+          b.start = +s.toFixed(3); b.win = +d.toFixed(3);
+          b.host.setAttribute("data-start", String(b.start)); b.host.setAttribute("data-duration", b.win.toFixed(3));
+          cursor = s + d;
+        });
+        const ordered = built.slice().sort((a, b) => a.start - b.start);
+        const bgEl = document.getElementById("bgbase");
+        if (bgEl) { bgEl.setAttribute("data-start", "0"); bgEl.setAttribute("data-duration", total.toFixed(3)); }
+
+        // ── Auto-fit chữ lớn: ngay + LẠI sau khi web-font sẵn sàng (khử tràn) ──
+        const doFit = () => fits.forEach((f) => f());
+        doFit();
+        try { if (document.fonts && document.fonts.ready && document.fonts.ready.then) document.fonts.ready.then(doFit); } catch (e) {}
+
+        // ── GSAP timeline (paused, deterministic) ──
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({ paused: true });
+        gsap.defaults({ ease: "power3.out" });
+        if (document.getElementById("glowblob")) tl.fromTo("#glowblob", { x: -40, y: -20, scale: 0.92 }, { x: 260, y: 200, scale: 1.18, duration: Math.max(2, total / 2), ease: "sine.inOut", yoyo: true, repeat: 1 }, 0);
+        if (document.getElementById("progressFill")) tl.fromTo("#progressFill", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
+        ordered.forEach((b, i) => {
+          tl.fromTo(b.host, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power1.out" }, b.start);
+          if (i < ordered.length - 1) tl.to(b.host, { opacity: 0, duration: 0.22, ease: "power1.in" }, b.start + b.win - 0.22);
+          b.animate(tl, b.start, b.win);
+        });
+        tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
+
+        // ── Caption SYNC (karaoke) — giống nhánh slot cũ (graph mode tự chứa) ──
+        let CAPS = [];
+        try { CAPS = JSON.parse(v.captions || "[]"); } catch (e) { CAPS = []; }
+        if (Array.isArray(CAPS) && CAPS.length) {
+          document.documentElement.setAttribute("data-caps", "1");
+          const capbox = document.getElementById("capbox");
+          const escc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+          const renderCap = (tt) => {
+            let p = null;
+            for (let i = 0; i < CAPS.length; i++) { if (tt >= CAPS[i].s && tt < CAPS[i].e) { p = CAPS[i]; break; } }
+            if (!p && CAPS.length && tt >= CAPS[CAPS.length - 1].s) p = CAPS[CAPS.length - 1];
+            if (!p) { capbox.style.opacity = "0"; return; }
+            capbox.style.opacity = "1";
+            const key = String(p.s);
+            if (capbox.dataset.k !== key) { capbox.dataset.k = key; capbox.innerHTML = (p.w || []).map((wd) => '<span class="cw" data-t="' + wd.t + '">' + escc(wd.x) + "</span>").join(""); }
+            let curIdx = -1; const ws = p.w || [];
+            for (let i = 0; i < ws.length; i++) { if (tt >= ws[i].t) curIdx = i; }
+            const sp = capbox.children;
+            for (let i = 0; i < sp.length; i++) sp[i].className = "cw" + (i < curIdx ? " said" : i === curIdx ? " cur" : "");
+          };
+          const prevCb = tl.eventCallback("onUpdate");
+          tl.eventCallback("onUpdate", () => { if (prevCb) prevCb(); renderCap(tl.time()); });
+          renderCap(0);
+        }
+        window.__timelines["main"] = tl;
+      }
+
+      if (GRAPH_ON && GRAPH_SCENES.length) {
+        runGraphMode(GRAPH_SCENES);
+      } else {
       // ── S1 hero ──
       hideIfEmpty("s1eb", v.hook_eyebrow);
       setText("s1key", v.hook_keyword);
@@ -1297,6 +1608,7 @@
         renderCap(0);
       }
       window.__timelines["main"] = tl;
+      } // ── hết nhánh slot-cố-định (else của GRAPH_ON) ──
     </script>
   </body>
 </html>
