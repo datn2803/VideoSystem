@@ -40,7 +40,9 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
           : grounded
             // 3.x: nới trần (thinking ăn token). 2.5/cũ: GIỮ NGUYÊN hành vi (input.maxTokens ?? 4096) — không hồi quy.
             ? (is3x ? Math.max(input.maxTokens ?? 0, 8192) : (input.maxTokens ?? 4096))
-            : (input.maxTokens ?? 2048),
+            // Text thường (vd nút Test gửi maxTokens:16): 3.x là thinking-model → 16 token bị thinking ăn hết
+            // → rỗng (MAX_TOKENS). Nới SÀN 2048 cho 3.x (trần cao không tốn thêm — tính phí token thực). 2.5/cũ giữ nguyên.
+            : (is3x ? Math.max(input.maxTokens ?? 0, 2048) : (input.maxTokens ?? 2048)),
         responseMimeType: isJson ? "application/json" : undefined,
       };
       // ⚠ THINKING — khác nhau giữa các hệ:
