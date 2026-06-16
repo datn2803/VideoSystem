@@ -205,14 +205,25 @@ async function runFactResearcher(
   model: string
 ): Promise<{ brief: string; sources: { title: string; url: string }[]; costUsd: number }> {
   const llm = await hub.llm();
-  const system = `Bạn là nhà nghiên cứu số liệu ngành ${profile.industry} tại Việt Nam.
-CHỈ nêu số liệu TÌM ĐƯỢC qua tìm kiếm thực tế (kèm năm + nguồn). TUYỆT ĐỐI không bịa số hay trích dẫn nghiên cứu.`;
-  const user = `Chủ đề video: "${topic}"
-Góc dữ liệu cần làm rõ: ${dataHook || pain || topic}
-Audience: ${profile.audience?.segment || "N/A"}
-
-Tìm 5-8 SỐ LIỆU/VÍ DỤ THẬT, mới, ưu tiên nguồn Việt Nam (mỗi ý kèm năm + nguồn). Nêu rõ 1-2 con số gây sốc có thể dùng làm hook.
-Trả về TEXT gạch đầu dòng, mỗi ý kèm nguồn. Nếu KHÔNG tìm được số thật, nói rõ (đừng bịa).`;
+  // PHẦN C — date-aware + nguồn VN + mỗi dữ kiện kèm năm + URL (PROMPTS_SCRIPT_ENGINE #1).
+  const now = new Date();
+  const date = `ngày ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+  const system = `Bạn là nhà nghiên cứu dữ liệu cho video ngắn tiếng Việt. Hôm nay là ${date}.
+Chỉ dùng thông tin TÌM ĐƯỢC qua tìm kiếm — TUYỆT ĐỐI không bịa, không suy đoán.
+Nhiệm vụ: với chủ đề + góc data cho trước, tìm 6-8 dữ kiện THẬT, MỚI NHẤT (ưu tiên trong 12 tháng),
+hữu ích cho người Việt.
+- Ưu tiên nguồn VN uy tín: VnExpress, Tuổi Trẻ, VietnamNet, CafeF, Thanh Niên; số liệu chính thống GSO/SBV;
+  hoặc trang sản phẩm/chính chủ. Nguồn quốc tế chỉ khi không có nguồn VN.
+- MỖI dữ kiện ghi rõ: con số/sự thật cụ thể + NĂM + [nguồn](url đầy đủ).
+- Nếu chủ đề về công cụ/sản phẩm/tool: nêu TÊN THẬT cụ thể + nó làm gì (1 câu) + 1 ví dụ dùng thực tế.
+- Đánh dấu 1-2 con số GÂY SỐC nhất (gắn nhãn [HOOK]) để mở đầu video.
+Trả về TEXT gạch đầu dòng. KHÔNG trả JSON.`;
+  const user = `Chủ đề: ${topic}
+Góc data muốn khai thác: ${dataHook || pain || topic}
+Đối tượng: ${profile.audience?.segment || "người Việt quan tâm chủ đề này"}
+Nỗi đau: ${pain || "N/A"}
+Tìm 6-8 dữ kiện thật MỚI NHẤT kèm năm + nguồn (ưu tiên VN). Nêu tên công cụ/sản phẩm THẬT nếu hợp.
+Đánh dấu [HOOK] cho 1-2 số sốc.`;
   try {
     const r = await llm.complete({
       model, // B2: Gemini 3.1 Pro (grounded + chất lượng) — từ config Integration Hub
@@ -405,7 +416,11 @@ export async function generateScript(input: {
   }
 
   // Nguồn số liệu = citations THẬT từ Fact Researcher (không nhờ Writer tự đẻ URL → tránh bịa link).
-  const sources = fact.sources.map((s) => ({ claim: s.title, url: s.url }));
+  // Năm: best-effort parse 20xx từ tiêu đề nguồn (C3 — UI script hiện nguồn + năm + link).
+  const sources = fact.sources.map((s) => {
+    const ym = s.title.match(/\b(20\d{2})\b/);
+    return { claim: s.title, url: s.url, year: ym ? ym[1] : undefined };
+  });
   const totalCost = fact.costUsd + writerCost;
 
   // KHÔNG đổ raw text vào body (sẽ ra script rác: vỡ word-budget, rỗng C3, audit pass nhầm).
