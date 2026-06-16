@@ -63,14 +63,16 @@ export function sceneSpecForNode(node: GraphNode, _kit: BrandKit | null, _theme:
     vars.cta_top = "";
     vars.cta_keyword = txt(node);
     archetype = "cta";
-  } else if (intent === "data-big" || (node.kind === "data" && d.value != null && !Array.isArray(d.value))) {
+  } else if (intent === "data-big") {
     vars.bignum_value = String(d.value ?? "");
     vars.bignum_unit = String(d.unit ?? "");
     vars.bignum_label = String(d.label ?? node.label ?? "").toUpperCase();
     archetype = "bignum";
   } else if (intent === "data-bars" && Array.isArray(d.bars)) {
     vars.data_bars = JSON.stringify(d.bars);
-    vars.bars_title = String(d.label || node.label || "Những con số");
+    // bars_title = node.label (KHÔNG đọc d.label: shape {bars} không có title thật, và anti-fab
+    // có thể nhét d.label="(ước tính)" vào → tránh tiêu đề thành "(ước tính)").
+    vars.bars_title = String(node.label || "Những con số");
     archetype = "bars";
   } else if (intent === "flow" && Array.isArray(d.steps)) {
     vars.flow = JSON.stringify({ title: String(d.title || node.label || "Quy trình"), steps: d.steps });
@@ -78,9 +80,44 @@ export function sceneSpecForNode(node: GraphNode, _kit: BrandKit | null, _theme:
   } else if (intent === "compare" && d.leftTitle) {
     vars.compare = JSON.stringify(d);
     archetype = "compare";
+  } else if (intent === "donut" && d.value != null && !Array.isArray(d.value) && String(d.value).trim() !== "") {
+    vars.donut = JSON.stringify({ value: d.value, unit: d.unit ?? "", label: d.label ?? node.label ?? "" });
+    archetype = "donut";
+  } else if (intent === "trend" && Array.isArray(d.points)) {
+    vars.trend = JSON.stringify({ label: String(d.label || node.label || "Xu hướng"), points: d.points });
+    archetype = "trend";
+  } else if ((intent === "before-after" || intent === "before_after") && d.fromValue != null && d.toValue != null) {
+    vars.before_after = JSON.stringify(d);
+    archetype = "before_after";
+  } else if (intent === "mini" && Array.isArray(d.stats)) {
+    vars.mini_stats = JSON.stringify(d.stats);
+    vars.mini_title = String(d.title || node.label || "Chỉ số");
+    archetype = "mini";
+  } else if ((intent === "pills" || intent === "levels") && Array.isArray(d.items)) {
+    const items = d.items as unknown[];
+    vars.pills = JSON.stringify(items.map((it, i) => {
+      const label = typeof it === "string"
+        ? it
+        : it && typeof it === "object" && "label" in it
+          ? String((it as Record<string, unknown>).label ?? "")
+          : String(it ?? "");
+      return { n: String(i + 1), label };
+    }));
+    vars.pills_title = String(d.title || node.label || "Điểm chính");
+    archetype = "pills";
+  } else if (intent === "principle") {
+    vars.principle = txt(node);
+    archetype = "principle";
   } else if (intent === "quote") {
     vars.callout = txt(node);
     archetype = "callout";
+  } else if (node.kind === "data" && d.value != null && !Array.isArray(d.value) && String(d.value).trim() !== "") {
+    // FALLBACK CUỐI: node data có số vô hướng nhưng intent rỗng/lạ (vd "stat", "data-bar" số ít) →
+    // số lớn (GIỮ số, không rơi points làm mất số). Đặt SAU mọi nhánh viz đặc thù (donut… đi trước).
+    vars.bignum_value = String(d.value ?? "");
+    vars.bignum_unit = String(d.unit ?? "");
+    vars.bignum_label = String(d.label ?? node.label ?? "").toUpperCase();
+    archetype = "bignum";
   } else {
     // point/text mặc định → 1 point card
     vars.points = JSON.stringify([
@@ -131,6 +168,8 @@ export function sceneVariablesForNode(node: GraphNode, kit: BrandKit | null, the
   // id cảnh đích trong composition: points → spt0; còn lại theo map intent.
   const idMap: Record<string, string> = {
     "data-big": "s2", "data-bars": "s4b", flow: "s_flow", compare: "s_cmp", quote: "s_emph",
+    donut: "s_donut", trend: "s_trend", "before-after": "s_ba", before_after: "s_ba",
+    mini: "s_mini", pills: "s6", levels: "s6", principle: "s_emph",
   };
   const target = idMap[intent] || (vars.points !== "[]" ? "spt0" : "s2");
   sceneTimes[target] = { start: 0.3, dur };

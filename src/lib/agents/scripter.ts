@@ -134,14 +134,18 @@ Schema:
     "synopsis": "1 câu tóm video",
     "nodes": [
       {"id": "hook", "kind": "text", "text": "= hook ở trên", "frameIntent": "hook", "durationSec": 4},
-      {"id": "diem_1", "kind": "text", "text": "ý 1 của body (NGẮN)", "frameIntent": "point", "durationSec": 6},
-      {"id": "so_lieu_1", "kind": "data", "label": "nhãn số", "data": {"value": "65", "unit": "%", "label": "nhãn (ví dụ)"}, "frameIntent": "data-big", "durationSec": 5},
+      {"id": "diem_1", "kind": "text", "text": "ý 1 của body (NGẮN)", "frameIntent": "point", "durationSec": 5},
+      {"id": "so_lieu_1", "kind": "data", "label": "nhãn số (ví dụ)", "data": {"value": "65", "unit": "%", "label": "nhãn (ví dụ)"}, "frameIntent": "data-big", "durationSec": 4},
+      {"id": "ti_le_1", "kind": "data", "data": {"value": "72", "unit": "%", "label": "tỉ lệ (ví dụ)"}, "frameIntent": "donut", "durationSec": 4},
+      {"id": "cot_1", "kind": "data", "label": "so sánh (ví dụ)", "data": {"bars": [{"label": "Cũ", "value": "40", "unit": "giờ"}, {"label": "Mới", "value": "8", "unit": "giờ"}]}, "frameIntent": "data-bars", "durationSec": 4},
       {"id": "cta", "kind": "text", "text": "= cta ở trên", "frameIntent": "outro", "durationSec": 4}
     ],
     "edges": [
       {"from": "hook", "to": "diem_1", "kind": "sequence"},
       {"from": "diem_1", "to": "so_lieu_1", "kind": "sequence"},
-      {"from": "so_lieu_1", "to": "cta", "kind": "sequence"}
+      {"from": "so_lieu_1", "to": "ti_le_1", "kind": "sequence"},
+      {"from": "ti_le_1", "to": "cot_1", "kind": "sequence"},
+      {"from": "cot_1", "to": "cta", "kind": "sequence"}
     ]
   }
 }
@@ -176,9 +180,17 @@ QUY TẮC trường animation (QUYẾT ĐỊNH SỐ CẢNH + data motion — là
 QUY TẮC trường storyboard (xương sống cảnh — content-graph):
 - nodes theo ĐÚNG THỨ TỰ giọng đọc: hook → mỗi ý body 1 node text (point i ↔ keyMessages[i]) xen kẽ
   node data cho số liệu minh hoạ ý đó → cta. Tổng 5-9 node. id snake_case KHÔNG TRÙNG, không dấu.
-- node text: text NGẮN (≤20 từ). node data: data={value,unit,label} — ƯU TIÊN số THẬT từ FACT BRIEF;
-  không có số thật → label PHẢI chứa 'ví dụ' hoặc 'ước tính' (anti-fabrication). Không có số nào → BỎ node data.
-- frameIntent gợi ý loại cảnh: hook|point|data-big|data-bars|compare|flow|quote|outro.
+- node text: text NGẮN (≤20 từ). node data: ƯU TIÊN số THẬT từ FACT BRIEF;
+  không có số thật → label/nhãn PHẢI chứa 'ví dụ' hoặc 'ước tính' (anti-fabrication). Không có số nào → BỎ node data.
+- frameIntent gợi ý loại cảnh: hook|point|data-big|data-bars|donut|trend|before-after|mini|pills|compare|flow|quote|principle|outro.
+- ⭐ GIÀU DATA-VIZ (QUAN TRỌNG — để cảnh graph động như bản cũ): ĐƯA các số đã sinh ở trường "animation"
+  (bigStat/donut/bars/trend/beforeAfter/miniStats/pills/compare/flow/principle/callout) THÀNH node data
+  storyboard TƯƠNG ỨNG — CÙNG SỐ, KHÔNG bịa thêm. Mỗi loại = 1 node data, frameIntent + shape data:
+    • data-big {value,unit,label} · donut {value,unit,label} · data-bars {bars:[{label,value,unit}]}
+    • trend {label,points:["10","22","38"]} · before-after {fromValue,fromLabel,toValue,toLabel,unit}
+    • mini {title,stats:[{value,unit,label}]} · pills {title,items:["…","…"]}
+    • compare {leftTitle,leftItems,rightTitle,rightItems} · flow {title,steps:["…"]} · principle (node text)
+  Xen node data giữa các node point theo đúng thứ tự đọc. Loại nào KHÔNG hợp chủ đề → BỎ (đừng gượng ép).
 - durationSec mỗi node 3-8; TỔNG ≈ ${lengthSec}s.
 - edges: CHỈ "sequence" nối node liền kề theo thứ tự đọc (n-1 edge cho n node). KHÔNG cycle, không self-edge.`;
 }

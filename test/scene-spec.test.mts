@@ -139,4 +139,86 @@ const spec = (node: N) => sceneSpecForNode(node, null, "2");
   eq(spec({ id: "c", kind: "data", frameIntent: "compare", data: { leftItems: ["a"] } }).intent, "points", "compare thiếu leftTitle → points");
 }
 
+// 20) DATA-VIZ Phase 1.1: donut → donut JSON
+{
+  const r = spec({ id: "dn", kind: "data", frameIntent: "donut", data: { value: 72, unit: "%", label: "tỉ lệ (ví dụ)" } });
+  eq(r.intent, "donut", "donut → archetype donut");
+  const dn = JSON.parse(String(r.vars.donut));
+  eq(dn.value, 72, "donut.value"); eq(dn.unit, "%", "donut.unit");
+}
+
+// 21) trend → trend JSON {label, points}
+{
+  const r = spec({ id: "tr", kind: "data", frameIntent: "trend", data: { label: "Tăng trưởng", points: ["10", "20", "35", "50"] } });
+  eq(r.intent, "trend", "trend → archetype trend");
+  const tr = JSON.parse(String(r.vars.trend));
+  eq(tr.label, "Tăng trưởng", "trend.label"); eq(tr.points.length, 4, "trend.points = 4");
+}
+
+// 22) before-after (cả gạch ngang & gạch dưới) → before_after JSON
+{
+  const data = { fromValue: "8", fromLabel: "Trước", toValue: "1", toLabel: "Sau", unit: "giờ" };
+  const r = spec({ id: "ba", kind: "data", frameIntent: "before-after", data });
+  eq(r.intent, "before_after", "before-after → archetype before_after");
+  eq(JSON.parse(String(r.vars.before_after)).fromValue, "8", "before_after.fromValue");
+  eq(spec({ id: "ba2", kind: "data", frameIntent: "before_after", data }).intent, "before_after", "before_after (gạch dưới) cũng nhận");
+}
+
+// 23) mini → mini_stats JSON[] + mini_title
+{
+  const r = spec({ id: "mi", kind: "data", frameIntent: "mini", data: { title: "Chỉ số", stats: [{ value: "3", unit: "x", label: "a" }, { value: "5", unit: "x", label: "b" }] } });
+  eq(r.intent, "mini", "mini → archetype mini");
+  eq(JSON.parse(String(r.vars.mini_stats)).length, 2, "mini_stats = 2");
+  eq(r.vars.mini_title, "Chỉ số", "mini_title");
+}
+
+// 24) pills (items chuỗi) + levels (alias) → pills [{n,label}] + pills_title
+{
+  const r = spec({ id: "pl", kind: "data", frameIntent: "pills", data: { title: "Điểm chính", items: ["Nhanh", "Rẻ", "Dễ"] } });
+  eq(r.intent, "pills", "pills → archetype pills");
+  const p = JSON.parse(String(r.vars.pills));
+  eq(p.length, 3, "pills = 3"); eq(p[0], { n: "1", label: "Nhanh" }, "pill[0] {n,label}");
+  eq(r.vars.pills_title, "Điểm chính", "pills_title");
+  // items dạng object {label}
+  const r2 = spec({ id: "pl2", kind: "data", frameIntent: "levels", data: { items: [{ label: "Cấp 1" }, { label: "Cấp 2" }] } });
+  eq(r2.intent, "pills", "levels → alias pills");
+  eq(JSON.parse(String(r2.vars.pills))[0].label, "Cấp 1", "levels item.label");
+}
+
+// 25) principle (text node) → principle
+{
+  const r = spec({ id: "pr", kind: "text", frameIntent: "principle", text: "Ít mà chất hơn nhiều mà loãng" });
+  eq(r.intent, "principle", "principle → archetype principle");
+  eq(r.vars.principle, "Ít mà chất hơn nhiều mà loãng", "principle = text");
+}
+
+// 26) ANTI-FAB data-viz: frameIntent đặt nhưng data sai shape → fallback points (không bịa)
+{
+  eq(spec({ id: "x1", kind: "data", frameIntent: "trend", data: { label: "x" } }).intent, "points", "trend thiếu points → points");
+  eq(spec({ id: "x2", kind: "data", frameIntent: "mini", data: { title: "x" } }).intent, "points", "mini thiếu stats → points");
+  eq(spec({ id: "x3", kind: "data", frameIntent: "before-after", data: { fromValue: "8" } }).intent, "points", "before-after thiếu toValue → points");
+}
+
+// 27) REGRESSION (review #1): data node số vô hướng + frameIntent LẠ → vẫn bignum (KHÔNG mất số)
+{
+  const r = spec({ id: "st", kind: "data", frameIntent: "stat", data: { value: "88", unit: "điểm" } });
+  eq(r.intent, "bignum", "intent lạ + số vô hướng → bignum (fallback cuối)");
+  eq(r.vars.bignum_value, "88", "giữ số");
+  // "data-bar" số ít (vendored doc liệt kê) cũng không mất số
+  eq(spec({ id: "st2", kind: "data", frameIntent: "data-bar", data: { value: "5", unit: "x" } }).intent, "bignum", "data-bar (số ít) → bignum");
+}
+
+// 28) bars_title bỏ qua d.label (chống anti-fab "(ước tính)" làm hỏng tiêu đề)
+{
+  const r = spec({ id: "b", kind: "data", frameIntent: "data-bars", label: "So sánh", data: { bars: [{ label: "A", value: "1" }, { label: "B", value: "2" }], label: "(ước tính)" } });
+  eq(r.vars.bars_title, "So sánh", "bars_title = node.label, KHÔNG phải d.label '(ước tính)'");
+  eq(spec({ id: "b2", kind: "data", frameIntent: "data-bars", data: { bars: [{ label: "A", value: "1" }, { label: "B", value: "2" }] } }).vars.bars_title, "Những con số", "thiếu node.label → fallback mặc định");
+}
+
+// 29) donut value RỖNG → KHÔNG donut (tránh vòng trống); rơi points (không số)
+{
+  eq(spec({ id: "dz", kind: "data", frameIntent: "donut", data: { value: "" } }).intent, "points", "donut value rỗng → points");
+  eq(spec({ id: "dz2", kind: "data", frameIntent: "donut", data: { value: "  " } }).intent, "points", "donut value toàn space → points");
+}
+
 done("sceneSpecForNode");

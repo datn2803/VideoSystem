@@ -969,7 +969,176 @@
             if (card) { tl.fromTo(card, { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.4); tl.to(card, { scale: 1.018, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0); }
           };
         };
-        const RENDERERS = { hook: renderHook, cta: renderCta, bignum: renderBignum, bars: renderBars, points: renderPoints, flow: renderFlow, compare: renderCompare, callout: renderCallout };
+        // ── Helper SVG + gradient (donut/trend dùng; slot cũ có gradient def trong DOM đã bị bỏ
+        //    → graph mode tự tạo gradient unique từ --accent/--accent2 (applyTokens set sẵn ở :root)) ──
+        const NS = "http://www.w3.org/2000/svg";
+        const cssVar = (name, fb) => { const x = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return x || fb; };
+        const ACC = cssVar("--accent", "#7c3aed"), ACC2 = cssVar("--accent2", "#a78bfa");
+        const svgEl = (cls, vb) => { const e = document.createElementNS(NS, "svg"); if (cls) e.setAttribute("class", cls); e.setAttribute("viewBox", vb); return e; };
+        const svgN = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+        const mkGrad = (gid, x2, y2, c0, c1) => {
+          const defs = document.createElementNS(NS, "defs");
+          const g = svgN("linearGradient", { id: gid, x1: "0", y1: "0", x2: x2, y2: y2 });
+          g.appendChild(svgN("stop", { offset: "0", "stop-color": c0 }));
+          g.appendChild(svgN("stop", { offset: "1", "stop-color": c1 }));
+          defs.appendChild(g); return defs;
+        };
+        const num1 = (raw) => { const n = Number(String(raw).replace(/[^\d.-]/g, "")); return { n, isNum: Number.isFinite(n) && /\d/.test(String(raw)) }; };
+
+        const renderDonut = (host, sv) => {
+          host.classList.add("left");
+          const dd = parseJSON(sv.donut, null) || {};
+          const { n, isNum } = num1(dd.value);
+          const stack = mk("div", "stack"); const bh = mk("div", "bentohost plain");
+          bh.appendChild((function () { const h = mk("div", "hosthead"); h.appendChild(eb("target", "Tỉ lệ")); return h; })());
+          const body = mk("div", "hostbody"); const wrap = mk("div", "donutwrap");
+          const gid = "dnGrad_" + host.id;
+          const svg = svgEl("donut", "0 0 220 220"); svg.appendChild(mkGrad(gid, "1", "1", ACC2, ACC));
+          svg.appendChild(svgN("circle", { class: "dtrack", cx: "110", cy: "110", r: "92" }));
+          const fill = svgN("circle", { class: "dfill", cx: "110", cy: "110", r: "92" }); fill.style.stroke = "url(#" + gid + ")";
+          svg.appendChild(fill); wrap.appendChild(svg);
+          const center = mk("div", "dcenter"); const dval = mk("span", "dval");
+          const dnNum = mk("span", null, isNum ? "0" : String(dd.value || "")); dval.appendChild(dnNum);
+          if (isNum) dval.appendChild(mk("span", "du", String(dd.unit || "%")));
+          center.appendChild(dval); wrap.appendChild(center); body.appendChild(wrap);
+          if (String(dd.label || "").trim()) body.appendChild(mk("div", "blabel", String(dd.label).trim()));
+          bh.appendChild(body); stack.appendChild(bh); host.appendChild(stack);
+          return (tl, s) => {
+            tl.from(bh, { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
+            if (isNum) {
+              const CIRC = 578, off = CIRC * (1 - Math.max(0, Math.min(100, n)) / 100);
+              fill.style.strokeDasharray = CIRC; fill.style.strokeDashoffset = CIRC;
+              tl.fromTo(fill, { strokeDashoffset: CIRC }, { strokeDashoffset: off, duration: 1.0, ease: "power2.out" }, s + 0.3);
+              const cc = { v: 0 }; tl.to(cc, { v: n, duration: 1.0, ease: "power2.out", onUpdate: () => { dnNum.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.3);
+            } else tl.from(center, { scale: 0.7, opacity: 0, duration: 0.5, ease: "back.out(1.6)" }, s + 0.3);
+          };
+        };
+        const renderTrend = (host, sv) => {
+          host.classList.add("left");
+          const td = parseJSON(sv.trend, null) || {};
+          const pts = (Array.isArray(td.points) ? td.points : []).map((p) => Number(String(p).replace(/[^\d.-]/g, ""))).filter((x) => Number.isFinite(x));
+          const stack = mk("div", "stack"); const bh = mk("div", "bentohost plain");
+          bh.appendChild((function () { const h = mk("div", "hosthead"); h.appendChild(eb("chart", "Xu hướng")); return h; })());
+          const body = mk("div", "hostbody"); const wrap = mk("div", "trendwrap");
+          const gid = "trGrad_" + host.id;
+          const svg = svgEl("trendsvg", "0 0 600 300"); svg.setAttribute("preserveAspectRatio", "none");
+          svg.appendChild(mkGrad(gid, "1", "0", ACC2, ACC));
+          const area = svgN("polyline", { class: "tarea", points: "" });
+          const line = svgN("polyline", { class: "tline", points: "" }); line.style.stroke = "url(#" + gid + ")";
+          svg.appendChild(area); svg.appendChild(line); wrap.appendChild(svg);
+          const dot = mk("div", "tdot"); const badge = mk("div", "tbadge"); wrap.appendChild(dot); wrap.appendChild(badge);
+          body.appendChild(wrap);
+          if (String(td.label || "").trim()) body.appendChild(mk("div", "blabel", String(td.label).trim()));
+          bh.appendChild(body); stack.appendChild(bh); host.appendChild(stack);
+          let trLen = 0;
+          if (pts.length >= 2) {
+            const mn = Math.min.apply(null, pts), mx = Math.max.apply(null, pts), rng = (mx - mn) || 1;
+            const W = 600, H = 300, pad = 24;
+            const coords = pts.map((val, i) => [pad + (i / (pts.length - 1)) * (W - 2 * pad), H - pad - ((val - mn) / rng) * (H - 2 * pad)]);
+            const ptsStr = coords.map((c) => c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+            line.setAttribute("points", ptsStr);
+            area.setAttribute("points", ptsStr + " " + (W - pad) + "," + (H - pad) + " " + pad + "," + (H - pad));
+            const last = coords[coords.length - 1];
+            dot.style.left = (last[0] / W * 100) + "%"; dot.style.top = (last[1] / H * 100) + "%";
+            const lastRaw = String(td.points[td.points.length - 1]).trim();
+            badge.textContent = lastRaw; badge.style.left = (last[0] / W * 100) + "%"; badge.style.top = (last[1] / H * 100) + "%";
+            try { trLen = line.getTotalLength(); } catch (e) { trLen = 1400; }
+            line.style.strokeDasharray = trLen; line.style.strokeDashoffset = trLen;
+          }
+          return (tl, s) => {
+            tl.from(bh, { y: 32, scale: 0.97, duration: 0.5, ease: "back.out(1.3)" }, s + 0.04);
+            // points < 2 (trLen=0) → KHÔNG có đường/chấm/badge để animate (tránh chấm-ma ở góc).
+            if (trLen) {
+              tl.fromTo(line, { strokeDashoffset: trLen }, { strokeDashoffset: 0, duration: 1.1, ease: "power2.inOut" }, s + 0.3);
+              tl.from(area, { opacity: 0, duration: 0.8 }, s + 0.6);
+              tl.from(dot, { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.8)" }, s + 1.25);
+              tl.from(badge, { opacity: 0, duration: 0.45 }, s + 1.4);
+            }
+          };
+        };
+        const renderBeforeAfter = (host, sv) => {
+          host.classList.add("left");
+          const ba = parseJSON(sv.before_after, null) || {};
+          const fn = num1(ba.fromValue), tn = num1(ba.toValue);
+          const mxv = Math.max(Math.abs(fn.n) || 0, Math.abs(tn.n) || 0, 1);
+          const unit = String(ba.unit || "");
+          const stack = mk("div", "stack");
+          stack.appendChild(eb("refresh", String(ba.label || "Trước & Sau")));
+          const wrap = mk("div", "bawrap");
+          const side = (cls, hd, valEl, ratio) => {
+            const sd = mk("div", "baside " + cls); sd.appendChild(mk("div", "bahd", hd));
+            const bav = mk("div", "bav"); bav.appendChild(valEl);
+            if (unit) bav.appendChild(mk("span", "bu", unit));
+            sd.appendChild(bav);
+            const bar = mk("div", "babar"); const i = mk("i"); bar.appendChild(i); sd.appendChild(bar);
+            return { sd, bar: i, ratio };
+          };
+          const fEl = mk("span", null, fn.isNum ? "0" : String(ba.fromValue || ""));
+          const tEl = mk("span", null, tn.isNum ? "0" : String(ba.toValue || ""));
+          const L = side("l", String(ba.fromLabel || "Trước"), fEl, fn.isNum ? Math.max(0.08, Math.abs(fn.n) / mxv) : 1);
+          const arrow = svgEl(null, "0 0 24 24"); arrow.setAttribute("class", "baarrow"); arrow.setAttribute("fill", "none"); arrow.setAttribute("stroke", "currentColor"); arrow.setAttribute("stroke-width", "2.6"); arrow.setAttribute("stroke-linecap", "round"); arrow.setAttribute("stroke-linejoin", "round"); arrow.innerHTML = '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>';
+          const R = side("r", String(ba.toLabel || "Sau"), tEl, tn.isNum ? Math.max(0.08, Math.abs(tn.n) / mxv) : 1);
+          wrap.appendChild(L.sd); wrap.appendChild(arrow); wrap.appendChild(R.sd);
+          stack.appendChild(wrap); host.appendChild(stack);
+          return (tl, s) => {
+            tl.from(L.sd, { x: -30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.3);
+            tl.from(arrow, { scale: 0, opacity: 0, duration: 0.4, ease: "back.out(1.7)" }, s + 0.55);
+            tl.from(R.sd, { x: 30, opacity: 0, duration: 0.5, ease: "back.out(1.4)" }, s + 0.7);
+            if (fn.isNum) { const c = { v: 0 }; tl.to(c, { v: fn.n, duration: 0.7, ease: "power2.out", onUpdate: () => { fEl.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.45); }
+            if (tn.isNum) { const c = { v: 0 }; tl.to(c, { v: tn.n, duration: 0.7, ease: "power2.out", onUpdate: () => { tEl.textContent = Math.round(c.v).toLocaleString("vi-VN"); } }, s + 0.85); }
+            tl.fromTo(L.bar, { scaleX: 0 }, { scaleX: L.ratio, duration: 0.7, ease: "power3.out" }, s + 0.5);
+            tl.fromTo(R.bar, { scaleX: 0 }, { scaleX: R.ratio, duration: 0.7, ease: "power3.out" }, s + 0.9);
+          };
+        };
+        const renderMini = (host, sv) => {
+          host.classList.add("left");
+          const stats = (parseJSON(sv.mini_stats, []) || []).slice(0, 4);
+          const stack = mk("div", "stack"); stack.appendChild(eb("layers", String(sv.mini_title || "Chỉ số")));
+          const grid = mk("div", "minigrid"); stack.appendChild(grid); host.appendChild(stack);
+          const cells = [];
+          stats.forEach((m, i) => {
+            const card = mk("div", "ministat");
+            const ic = mk("div", "mi"); ic.appendChild(makeIconSVG(ICON_CYCLE[i % ICON_CYCLE.length])); card.appendChild(ic);
+            const mv = mk("div", "mv"); const { n, isNum } = num1(m.value);
+            const mvn = mk("span", null, isNum ? "0" : String(m.value || "")); mv.appendChild(mvn);
+            if (String(m.unit || "").trim()) mv.appendChild(mk("span", "mu", String(m.unit)));
+            card.appendChild(mv); card.appendChild(mk("div", "ml", String(m.label || "")));
+            grid.appendChild(card); cells.push({ mvn, n, isNum });
+          });
+          return (tl, s) => {
+            tl.from(grid.querySelectorAll(".ministat"), { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
+            cells.forEach((c, i) => { if (!c.isNum) return; const cc = { v: 0 }; tl.to(cc, { v: c.n, duration: 0.7, ease: "power2.out", onUpdate: () => { c.mvn.textContent = Math.round(cc.v).toLocaleString("vi-VN"); } }, s + 0.5 + i * 0.1); });
+          };
+        };
+        const renderPills = (host, sv) => {
+          host.classList.add("left");
+          const items = (parseJSON(sv.pills, []) || []).slice(0, 4);
+          const stack = mk("div", "stack"); stack.appendChild(eb("check", String(sv.pills_title || "Điểm chính")));
+          const grid = mk("div", "pill2"); stack.appendChild(grid); host.appendChild(stack);
+          items.forEach((lv, i) => {
+            const pill = mk("div", "pill bento");
+            const pic = mk("div", "pic"); pic.appendChild(makeIconSVG(pickIconKey(lv.label, i))); pill.appendChild(pic);
+            pill.appendChild(mk("div", "pt", String(lv.label == null ? "" : lv.label)));
+            grid.appendChild(pill);
+          });
+          return (tl, s) => {
+            tl.from(grid.querySelectorAll(".pill"), { y: 30, opacity: 0, duration: 0.45, stagger: 0.1, ease: "back.out(1.5)" }, s + 0.3);
+            grid.querySelectorAll(".pill .pic").forEach((p, i) => tl.to(p, { scale: 1.16, duration: 0.32, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 0.95 + i * 0.42));
+          };
+        };
+        const renderPrinciple = (host, sv) => {
+          host.classList.add("left");
+          const txt = String(sv.principle || "").trim();
+          const stack = mk("div", "stack"); stack.appendChild(eb("spark", "Nguyên tắc"));
+          const group = mk("div", "emphgroup");
+          const card = mk("div", "emph bento-accent"); card.appendChild(mk("div", "eb", "Nguyên tắc")); card.appendChild(mk("div", "em", txt));
+          group.appendChild(card); stack.appendChild(group); host.appendChild(stack);
+          return (tl, s) => {
+            tl.fromTo(card, { y: 36, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" }, s + 0.3);
+            tl.to(card, { scale: 1.018, duration: 1.0, yoyo: true, repeat: 1, ease: "sine.inOut" }, s + 1.0);
+          };
+        };
+        const RENDERERS = { hook: renderHook, cta: renderCta, bignum: renderBignum, bars: renderBars, points: renderPoints, flow: renderFlow, compare: renderCompare, callout: renderCallout, donut: renderDonut, trend: renderTrend, before_after: renderBeforeAfter, mini: renderMini, pills: renderPills, principle: renderPrinciple };
 
         // ── Dựng cảnh theo thứ tự (cap 14 cảnh — chống storyboard quá dài làm chậm; log nếu cắt) ──
         if (scenes.length > 14) console.warn("[graph mode] storyboard " + scenes.length + " cảnh > 14 → chỉ dựng 14 cảnh đầu (phần cuối bị bỏ)");

@@ -12,14 +12,20 @@ const GSAP = resolve(ROOT, "hyperframes-service/vendor/gsap.min.js");
 // Xuất ra TMP (KHÔNG ghi vào compositions/ → tránh lỡ deploy/commit harness lên VPS).
 const OUT = resolve(tmpdir(), "_graph-harness.html");
 
-// 8 cảnh — mỗi intent 1 cảnh, đúng thứ tự storyboard điển hình (hook→…→cta).
+// 14 cảnh — đủ archetype (Phase 1.1: thêm donut/trend/before_after/mini/pills/principle).
 const scenes = [
   { id: "hook", intent: "hook", vars: { hook_keyword: "Lãng phí", hook_line1: "Bạn đang mất hàng giờ", hook_line2: "mỗi ngày mà không hề biết" } },
   { id: "stat", intent: "bignum", vars: { bignum_value: "65", bignum_unit: "giờ", bignum_label: "MỖI THÁNG" } },
+  { id: "donut", intent: "donut", vars: { donut: JSON.stringify({ value: "72", unit: "%", label: "tự động hoá được (ví dụ)" }) } },
   { id: "bars", intent: "bars", vars: { data_bars: JSON.stringify([{ label: "Thủ công", value: "40", unit: "giờ" }, { label: "Tự động", value: "8", unit: "giờ" }]), bars_title: "So sánh thời gian" } },
-  { id: "p1", intent: "points", vars: { points: JSON.stringify([{ n: 1, total: 2, title: "Xác định việc lặp lại mỗi tuần", detail: "Liệt kê các tác vụ làm đi làm lại để khoanh vùng tự động hoá", stat: { value: "3", unit: "giờ", label: "tiết kiệm mỗi tuần" } }]) } },
+  { id: "trend", intent: "trend", vars: { trend: JSON.stringify({ label: "Tăng trưởng (ví dụ)", points: ["10", "22", "38", "60"] }) } },
+  { id: "ba", intent: "before_after", vars: { before_after: JSON.stringify({ fromValue: "8", fromLabel: "Trước", toValue: "1", toLabel: "Sau", unit: "giờ" }) } },
+  { id: "mini", intent: "mini", vars: { mini_stats: JSON.stringify([{ value: "3", unit: "x", label: "Tốc độ" }, { value: "5", unit: "x", label: "Hiệu suất" }, { value: "40", unit: "%", label: "Tiết kiệm" }, { value: "2", unit: "tuần", label: "Triển khai" }]), mini_title: "Chỉ số (ví dụ)" } },
+  { id: "pills", intent: "pills", vars: { pills: JSON.stringify([{ n: "1", label: "Nhanh hơn" }, { n: "2", label: "Rẻ hơn" }, { n: "3", label: "Ít lỗi" }, { n: "4", label: "Dễ mở rộng" }]), pills_title: "Lợi ích" } },
+  { id: "p1", intent: "points", vars: { points: JSON.stringify([{ n: 1, total: 1, title: "Xác định việc lặp lại mỗi tuần", detail: "Liệt kê các tác vụ làm đi làm lại để khoanh vùng tự động hoá", stat: { value: "3", unit: "giờ", label: "tiết kiệm mỗi tuần" } }]) } },
   { id: "flow", intent: "flow", vars: { flow: JSON.stringify({ title: "Quy trình", steps: ["Ghi lại tác vụ", "Tự động hoá", "Đo lường kết quả"] }) } },
   { id: "cmp", intent: "compare", vars: { compare: JSON.stringify({ leftTitle: "Thủ công", leftItems: ["Chậm", "Dễ sai sót"], rightTitle: "Tự động", rightItems: ["Nhanh gấp 5", "Chính xác"] }) } },
+  { id: "principle", intent: "principle", vars: { principle: "Tự động hoá việc lặp, dành sức cho việc sáng tạo" } },
   { id: "quote", intent: "callout", vars: { callout: "Tự động hoá không thay thế bạn — nó giải phóng thời gian của bạn." } },
   { id: "cta", intent: "cta", vars: { cta_top: "Sẵn sàng bứt phá?", cta_keyword: "Theo dõi ngay", cta_hl: "ngay" } },
 ];
