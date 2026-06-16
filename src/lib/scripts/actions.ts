@@ -41,6 +41,7 @@ export async function generateScriptAction(input: {
       painPoint: input.painPoint,
       targetPersona: input.targetPersona,
       dataHook: input.dataHook,
+      formatHint: input.formatHint, // D: khung kịch bản (listicle/story/…) → Writer prompt
       lengthSec: input.lengthSec,
       sourceBrief: input.sourceBrief,
       sourceUrl: input.sourceUrl,

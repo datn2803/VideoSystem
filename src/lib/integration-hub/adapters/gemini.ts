@@ -38,7 +38,8 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         maxOutputTokens: isJson
           ? Math.max(input.maxTokens ?? 0, is3x ? 24576 : 8192)
           : grounded
-            ? Math.max(input.maxTokens ?? 0, is3x ? 8192 : 4096)
+            // 3.x: nới trần (thinking ăn token). 2.5/cũ: GIỮ NGUYÊN hành vi (input.maxTokens ?? 4096) — không hồi quy.
+            ? (is3x ? Math.max(input.maxTokens ?? 0, 8192) : (input.maxTokens ?? 4096))
             : (input.maxTokens ?? 2048),
         responseMimeType: isJson ? "application/json" : undefined,
       };
@@ -102,7 +103,8 @@ export function makeGeminiAdapter(opts: { apiKey: string; model?: string }): LLM
         citations = list.length ? list : undefined;
       }
       const usage = data.usageMetadata || { promptTokenCount: 0, candidatesTokenCount: 0 };
-      const price = PRICING[model] || PRICING["gemini-2.0-flash"];
+      // Model lạ chưa có trong PRICING: 3.x → ước theo 3.5-flash (gần đúng hơn); cũ → 2.0-flash.
+      const price = PRICING[model] || (model.startsWith("gemini-3") ? PRICING["gemini-3.5-flash"] : PRICING["gemini-2.0-flash"]);
       // Output GỒM thinking tokens (3.x tách thoughtsTokenCount riêng) → cộng vào để tính phí ĐÚNG.
       const outTokens = usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0);
       const costUsd =

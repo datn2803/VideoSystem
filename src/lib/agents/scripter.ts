@@ -207,6 +207,9 @@ QUY TẮC trường storyboard (xương sống cảnh — content-graph):
     • mini {title,stats:[{value,unit,label}]} · pills {title,items:["…","…"]}
     • compare {leftTitle,leftItems,rightTitle,rightItems} · flow {title,steps:["…"]} · principle (node text)
   Xen node data giữa các node point theo đúng thứ tự đọc. Loại nào KHÔNG hợp chủ đề → BỎ (đừng gượng ép).
+  ⭐ NGUỒN trên cảnh data: node data có SỐ THẬT (có nguồn trong FACT BRIEF) → THÊM "displaySource" (vd
+  'VnExpress 2025') vào data của node đó (vd data:{value,unit,label,displaySource}). Số ước tính/ví dụ
+  (không nguồn) → KHÔNG đặt displaySource. Đây là dòng nguồn nhỏ hiện dưới cảnh data trên video.
 - durationSec mỗi node 3-8; TỔNG ≈ ${lengthSec}s.
 - edges: CHỈ "sequence" nối node liền kề theo thứ tự đọc (n-1 edge cho n node). KHÔNG cycle, không self-edge.`;
 }

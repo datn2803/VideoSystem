@@ -54,8 +54,9 @@ export function buildGraphScenes(
     scenes.push({ id: ps.id, intent: spec.intent, vars: spec.vars });
     // A2 — weight theo LỜI ĐỌC (khớp giọng, hết "cảnh trôi nhanh hơn giọng"):
     //  - node text (có lời): weight = SỐ TỪ → cảnh giữ trên màn đúng lâu bằng lúc voice đọc ý đó.
-    //  - node data (donut/bars/trend/bignum — KHÔNG lời): weight ≈ 0 → chỉ chiếm khe ngắn (alignByWeights
-    //    ép tối thiểu ~2.2s để kịp đọc số), KHÔNG ăn thời gian của các cảnh có lời.
+    //  - node data (donut/bars/trend/bignum — KHÔNG lời): weight ≈ 0 → chỉ chiếm khe NGẮN, KHÔNG ăn
+    //    thời gian cảnh có lời. alignByWeights cho cảnh data ~tối thiểu (≈2.2s) KHI đủ chỗ; nếu graph
+    //    quá nhiều cảnh so với độ dài audio thì mọi cảnh co đều dưới mức đó (tổng luôn = độ dài audio).
     const spokenWords = node.kind === "text" ? String(node.text || "").trim().split(/\s+/).filter(Boolean).length : 0;
     sceneSpecs.push({ id: ps.id, weight: node.kind === "text" ? Math.max(1, spokenWords) : 0.01 });
   }
