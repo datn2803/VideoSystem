@@ -15,7 +15,7 @@ const OUT = resolve(tmpdir(), "_graph-harness.html");
 // 14 cảnh — đủ archetype (Phase 1.1: thêm donut/trend/before_after/mini/pills/principle).
 const scenes = [
   { id: "hook", intent: "hook", vars: { hook_keyword: "Lãng phí", hook_line1: "Bạn đang mất hàng giờ", hook_line2: "mỗi ngày mà không hề biết" } },
-  { id: "stat", intent: "bignum", vars: { bignum_value: "65", bignum_unit: "giờ", bignum_label: "MỖI THÁNG" } },
+  { id: "stat", intent: "bignum", vars: { bignum_value: "65", bignum_unit: "giờ", bignum_label: "MỖI THÁNG", source: "VnExpress 2025" } },
   { id: "donut", intent: "donut", vars: { donut: JSON.stringify({ value: "72", unit: "%", label: "tự động hoá được (ví dụ)" }) } },
   { id: "bars", intent: "bars", vars: { data_bars: JSON.stringify([{ label: "Thủ công", value: "40", unit: "giờ" }, { label: "Tự động", value: "8", unit: "giờ" }]), bars_title: "So sánh thời gian" } },
   { id: "trend", intent: "trend", vars: { trend: JSON.stringify({ label: "Tăng trưởng (ví dụ)", points: ["10", "22", "38", "60"] }) } },

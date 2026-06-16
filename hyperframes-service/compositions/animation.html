@@ -406,6 +406,10 @@
       .scene.gcta .e2 .e2hl { color: var(--accent2); }
       .scene.gcta .e3 { color: var(--sub); font-weight: 700; font-size: 44px; margin-top: 44px; display: flex; align-items: center; justify-content: center; gap: 14px; }
       .scene.gcta .e3 svg { width: 54px; height: 54px; }
+      /* D4 — dòng nguồn nhỏ, mờ dưới cảnh data (graph mode); KHÔNG che nội dung, chỉ hiện khi có displaySource */
+      .srcline { color: var(--sub); opacity: 0.5; font-weight: 500; font-size: 26px; letter-spacing: 0.3px; flex: 0 0 auto; }
+      .scene.left .srcline { margin-top: 16px; text-align: right; }
+      .scene.center .srcline { margin-top: 18px; text-align: center; }
 
       /* ── SKIN theo BrandKit.styleVariant (html[data-skin]) — Phase 2.
          classic = default, KHÔNG rule nào ở đây đụng vào. Tham khảo bố cục gallery
@@ -1149,6 +1153,8 @@
           const sv = (scene && scene.vars) || {};
           const fn = RENDERERS[scene && scene.intent] || renderPoints;
           const animate = fn(host, sv) || function () {};
+          // D4 — dòng NGUỒN nhỏ, mờ dưới cảnh data (từ sv.source = displaySource). Không số nguồn → không hiện.
+          if (sv.source && String(sv.source).trim()) host.appendChild(mk("div", "srcline", "Nguồn: " + String(sv.source).trim()));
           root.appendChild(host);
           built.push({ id: (scene && scene.id) || ("gs" + i), host, animate });
         });

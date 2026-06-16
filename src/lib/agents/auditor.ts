@@ -76,10 +76,13 @@ function buildPrompt(scriptText: string, wordBudget?: number): string {
 A) COMPLIANCE — theo các quy tắc ngành ngân hàng Việt Nam:
 ${BANKING_RULES_VN.map((r, i) => `${i + 1}. [${r.severity.toUpperCase()}] ${r.description}`).join("\n")}
 
-B) BIÊN TẬP (Editor) — chấm chất lượng:
-- hook: 3-5s đầu có đủ mạnh để dừng lướt không? (số sốc / câu hỏi / phản trực giác)
-- mật độ data: mỗi ý chính có gắn 1 con số/bằng chứng cụ thể không?
-${wordBudget ? `- độ dài: read script nên ≤ ${wordBudget} từ (≈video ngắn).` : ""}
+B) BIÊN TẬP (Editor) — chấm chất lượng + bổ sung kiểm (PHẦN D, trả issue cụ thể nếu CHƯA đạt):
+- HOOK: 3s đầu thuộc 1 kiểu mạnh (số sốc/câu hỏi/phản trực giác/vào thẳng)? (chấm hookScore 1-5)
+- MẬT ĐỘ CỤ THỂ: MỖI ý chính có 1 ví dụ nhỏ HOẶC 1 số thật? Đếm ý 'chay' không dẫn chứng → issue 'thiếu cụ thể' (severity medium) cho từng ý.
+- SÁO RỖNG: có cụm cấm KHÔNG kèm dẫn chứng ('giải pháp hữu hiệu','tối ưu công việc','vô cùng quan trọng','thay đổi cuộc chơi','bùng nổ')? → issue 'sáo rỗng' (low) cho từng cụm + đề nghị thay bằng cụ thể.
+- NGUỒN: mỗi số/khẳng định quan trọng có nguồn (displaySource) hoặc được ghi '(ước tính)'/'(ví dụ)'? Số 'trần trụi' không nguồn không nhãn → issue 'số không nguồn' (high) — buộc bịa/sai.
+- CTA: có ĐÚNG 1 hành động rõ (comment/follow/nhắn tin)? Mơ hồ/nhiều CTA → issue 'CTA không rõ' (medium).
+${wordBudget ? `- ĐỘ DÀI: read script ≤ ${wordBudget} từ? Vượt → issue 'quá dài' (medium) + đề nghị cắt câu nào.` : ""}
 
 SCRIPT CẦN ĐÁNH GIÁ:
 =====

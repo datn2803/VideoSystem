@@ -126,6 +126,11 @@ export function sceneSpecForNode(node: GraphNode, _kit: BrandKit | null, _theme:
     archetype = "points";
   }
 
+  // PHẦN D4 — dòng NGUỒN nhỏ dưới cảnh data: lấy displaySource từ node.data (Writer xuất; số ước tính → rỗng).
+  if (["bignum", "bars", "donut", "trend", "before_after", "mini"].includes(archetype) && d.displaySource != null && String(d.displaySource).trim()) {
+    vars.source = String(d.displaySource).trim().slice(0, 40);
+  }
+
   return { intent: archetype, vars, durationSec: dur };
 }
 

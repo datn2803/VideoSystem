@@ -221,4 +221,15 @@ const spec = (node: N) => sceneSpecForNode(node, null, "2");
   eq(spec({ id: "dz2", kind: "data", frameIntent: "donut", data: { value: "  " } }).intent, "points", "donut value toàn space → points");
 }
 
+// 30) D4: node data có displaySource → vars.source (cảnh data hiện dòng nguồn); ước tính → không source
+{
+  const r = spec({ id: "s", kind: "data", frameIntent: "data-big", data: { value: "65", unit: "%", displaySource: "VnExpress 2025" } });
+  eq(r.vars.source, "VnExpress 2025", "displaySource → vars.source (bignum)");
+  const r2 = spec({ id: "s2", kind: "data", frameIntent: "donut", data: { value: "70", unit: "%", label: "x (ước tính)" } });
+  ok(!("source" in r2.vars), "không displaySource → KHÔNG vars.source (số ước tính)");
+  // points (không phải cảnh data-viz) → không gắn source dù có displaySource
+  const r3 = spec({ id: "s3", kind: "text", text: "ý chính" });
+  ok(!("source" in r3.vars), "cảnh chữ → không source");
+}
+
 done("sceneSpecForNode");
