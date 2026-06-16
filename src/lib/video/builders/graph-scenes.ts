@@ -28,10 +28,11 @@ export type GraphSceneSpec = { id: string; weight: number };
  * (undefined/""/"0"/"true" đều TẮT). Đặt ở module thuần này để unit-test được
  * (c3-animation kéo deps nặng nên khó test trực tiếp).
  *
- * ⚠ CHƯA dùng được end-to-end (tính tới Part 2): builder đã nối nhưng:
- *   - Part 3 (animation.html chế độ mảng-cảnh-động) CHƯA làm → bật cờ giờ = video gần RỖNG.
- *   - Part 4 (renderHash gồm storyboard) CHƯA làm → sửa cảnh sẽ KHÔNG re-render (trả cache cũ).
- * → ĐỪNG đặt GRAPH_DRIVEN_C3=1 ở production cho tới khi Part 3+4 xong & nghiệm thu render thật.
+ * Trạng thái: Part 1–4 ĐÃ XONG (builder + animation.html chế độ mảng-cảnh-động +
+ * renderHash gồm storyboard). Nghiệm thu offline (tsc + 90/90 test) + headless ĐẠT.
+ * ⚠ Trước khi đặt GRAPH_DRIVEN_C3=1 ở production PHẢI: (1) scp animation.html mới lên VPS
+ *   + docker compose up -d --build (composition cũ chưa có nhánh graph → bật cờ = video hỏng);
+ *   (2) nghiệm thu render thật §5.3 (BLUEPRINT_GRAPH_DRIVEN.md). Chưa làm 2 bước đó thì để cờ TẮT.
  */
 export function graphDrivenEnabled(): boolean {
   return process.env.GRAPH_DRIVEN_C3 === "1";
