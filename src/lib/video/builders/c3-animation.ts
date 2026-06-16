@@ -390,15 +390,18 @@ function buildAnimationVariables(
 
 /** Cache key C3 (Phase 3): input ổn định đổi là hash đổi → render lại đúng;
  *  trùng → trả video cũ (tiết kiệm 10-20 phút render VPS + không tạo draft mới).
- *  Gồm musicId (thêm/xoá nhạc = video mới). LOẠI storyboard khỏi content: studio
- *  sửa storyboard hiện CHƯA chảy vào video chính (chỉ preview cảnh lẻ) — để trong
- *  hash chỉ tổ phá cache vô ích (re-render ra video y hệt). */
-function hashAnimationRender(scriptId: string, audioId: string | undefined, musicId: string | undefined, content: ScriptResult, tokens: string, theme: string): string {
-  const stable = { ...content, storyboard: undefined };
-  return crypto
-    .createHash("sha256")
-    .update(`${RENDER_PIPELINE_VERSION}::${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(stable)}::${tokens}::${theme}`)
-    .digest("hex");
+ *  Gồm musicId (thêm/xoá nhạc = video mới).
+ *  - graphDriven=false (cờ TẮT): LOẠI storyboard khỏi content — storyboard KHÔNG chảy
+ *    vào video chính (chỉ preview/QC) → để trong hash chỉ phá cache vô ích.
+ *  - graphDriven=true (Part 4 §3.4): storyboard QUYẾT định video → GIỮ trong hash để
+ *    sửa cảnh trong Scene Studio là render MỚI, không trả video cũ. Cờ cũng vào key
+ *    → bật/tắt cờ bust cache (graph-on vs variantPrompts là 2 video khác nhau). */
+function hashAnimationRender(scriptId: string, audioId: string | undefined, musicId: string | undefined, content: ScriptResult, tokens: string, theme: string, graphDriven: boolean): string {
+  const stable = graphDriven ? content : { ...content, storyboard: undefined };
+  // Key graph-OFF giữ NGUYÊN dạng cũ (byte-identical) → KHÔNG bust cache video đã render cho
+  // người không dùng cờ. Graph-ON: stable đã gồm storyboard + thêm hậu tố "::graph" để tách hẳn.
+  const base = `${RENDER_PIPELINE_VERSION}::${scriptId}::${audioId || ""}::${musicId || ""}::${JSON.stringify(stable)}::${tokens}::${theme}`;
+  return crypto.createHash("sha256").update(graphDriven ? base + "::graph" : base).digest("hex");
 }
 
 export async function buildAnimation(input: {
@@ -433,12 +436,18 @@ export async function buildAnimation(input: {
     themeForTopic(profile?.industry || "", (script.script.hook || script.script.cta || "x").trim())
   );
 
+  // Graph-driven (sau cờ): tính SỚM để (1) đưa storyboard vào renderHash, (2) chọn nhánh dựng.
+  // Chỉ áp khi render hyperframes (mock/creatomate không dùng storyboard).
+  const useGraph = mode === "hyperframes" && graphDrivenEnabled() && isValidGraph(script.script.storyboard);
+
   // Nhạc nền (Phase 5): tìm TRƯỚC hash — có/không nhạc là 2 video khác nhau.
   const music = audios.find((a) => a.part === "music");
 
   // ── Cost-guard cache (Phase 3): cùng script content + audio + nhạc + BrandKit →
-  //    trả video cũ, KHÔNG re-render VPS (tiết kiệm 10-20 phút). force → bỏ cache. ──
-  const renderHash = hashAnimationRender(input.scriptId, audio?.id, music?.id, script.script, tokensJson, themeFallback);
+  //    trả video cũ, KHÔNG re-render VPS (tiết kiệm 10-20 phút). force → bỏ cache.
+  //    Graph-on (Part 4 §3.4): storyboard QUYẾT định video → đưa vào hash (sửa cảnh = render mới).
+  //    Cờ graph cũng vào hash → bật/tắt cờ là bust cache (graph-on vs off = 2 video khác). ──
+  const renderHash = hashAnimationRender(input.scriptId, audio?.id, music?.id, script.script, tokensJson, themeFallback, useGraph);
   if (mode === "hyperframes" && !input.force) {
     const cached = (await videoStore.byScript(input.scriptId)).find(
       (v) => v.concept === "animation" && v.status === "done" && v.renderHash === renderHash && !!v.outputStoragePath
@@ -479,10 +488,9 @@ export async function buildAnimation(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 18.5;
-      // Graph-driven (sau cờ): storyboard hợp lệ → mảng cảnh động; else → variantPrompts (fallback).
-      // Bọc try: BẤT KỲ lỗi nào ở nhánh graph → rơi về đường cũ (giữ đúng "graph hỏng → fallback an
-      // toàn", không để render fail). Nhánh cũ lỗi thì ném tiếp như trước (catch ngoài đánh failed).
-      const useGraph = graphDrivenEnabled() && isValidGraph(script.script.storyboard);
+      // Graph-driven (sau cờ): useGraph tính ở scope ngoài (đã vào renderHash). Bọc try:
+      // BẤT KỲ lỗi nào ở nhánh graph → rơi về đường cũ (giữ "graph hỏng → fallback an toàn",
+      // không để render fail). Nhánh cũ lỗi thì ném tiếp như trước (catch ngoài đánh failed).
       let animVars: Record<string, unknown>;
       let sceneSpecs: SceneSpec[];
       try {
