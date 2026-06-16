@@ -1,5 +1,17 @@
 import type { ProviderMeta } from "./types";
 
+// Danh sách model Gemini (dùng chung cho dropdown `model` việc-nhẹ + `writerModel` khâu-viết).
+// 3.x ở trên (đề xuất); 2.x/1.5 giữ để không vỡ config cũ. Giá /1M token (in/out).
+const GEMINI_MODELS = [
+  { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (mạnh nhất, viết tốt — $2/$12)" },
+  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (nhanh + thông minh — $1.5/$9)" },
+  { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite (rẻ nhất — $0.25/$1.5)" },
+  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (free, cũ)" },
+  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (free)" },
+  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (free)" },
+  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro (cũ)" },
+];
+
 export const PROVIDER_CATALOG: ProviderMeta[] = [
   // ── LLM ──
   {
@@ -34,19 +46,20 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { key: "apiKey", label: "API Key", type: "password", required: true, placeholder: "AIza..." },
       {
         key: "model",
-        label: "Model",
+        label: "Model (việc nhẹ: chiến lược/biên tập/sanitize)",
         type: "select",
         required: false,
-        options: [
-          { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (free, đề xuất)" },
-          { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite (free, nhanh nhất)" },
-          { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash (free, nhanh)" },
-          { value: "gemini-2.0-flash-thinking-exp", label: "Gemini 2.0 Flash Thinking" },
-          { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-        ],
+        options: GEMINI_MODELS,
+      },
+      {
+        key: "writerModel",
+        label: "Writer model (khâu VIẾT + nghiên cứu — để trống = Gemini 3.5 Flash, GA ổn định; chọn 3.1 Pro nếu cần mạnh hơn, có retry+fallback)",
+        type: "select",
+        required: false,
+        options: GEMINI_MODELS,
       },
     ],
-    defaultConfig: { model: "gemini-2.5-flash" },
+    defaultConfig: { model: "gemini-3.5-flash", writerModel: "gemini-3.5-flash" },
   },
   {
     name: "deepseek",

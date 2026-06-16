@@ -244,13 +244,14 @@ Nỗi đau: ${pain || "N/A"}
 Tìm 6-8 dữ kiện thật MỚI NHẤT kèm năm + nguồn (ưu tiên VN). Nêu tên công cụ/sản phẩm THẬT nếu hợp.
 Đánh dấu [HOOK] cho 1-2 số sốc.`;
   try {
-    const r = await llm.complete({
-      model, // B2: Gemini 3.1 Pro (grounded + chất lượng) — từ config Integration Hub
+    // Retry lỗi tạm (503/429) 2 lượt; hỏng hẳn → catch dưới trả brief rỗng (best-effort, không phá viết script).
+    const r = await llmWithRetry(() => llm.complete({
+      model, // B2: model "pro/writer" (grounded + chất lượng) — từ config Integration Hub
       system,
       messages: [{ role: "user", content: user }],
       grounded: true,
       maxTokens: 1536,
-    });
+    }), "Fact Researcher", 2);
     await recordLLMUsage(r.costUsd, r.tokensIn, r.tokensOut);
     const sources = r.citations ?? [];
     let brief = r.text || "";
@@ -291,6 +292,30 @@ export function parseScriptJson(text: string): Partial<ScriptResult> | null {
 
 // Nhãn anti-fab hợp lệ trên label số liệu (đã có nguồn thật thì không cần).
 const ESTIMATE_RE = /ước tính|ví dụ|minh hoạ|minh họa|tham khảo|~/i;
+
+// Lỗi TẠM của LLM (quá tải/giới hạn) → đáng retry. Lỗi CỐ ĐỊNH (400 prompt sai, 401/403 key) → KHÔNG.
+const TRANSIENT_LLM_RE = /\b(429|500|502|503|504)\b|unavailable|overloaded|rate.?limit|resource_exhausted|exhausted|timeout|deadline|temporar/i;
+
+/** Gọi LLM có RETRY khi lỗi TẠM (503/UNAVAILABLE/429/overloaded…) — backoff luỹ thừa (0.6s,1.2s,2.4s).
+ *  Lỗi KHÔNG tạm → ném NGAY (đừng phí lượt + tiền). Hết lượt vẫn lỗi → ném lỗi cuối (caller xử). */
+async function llmWithRetry<T>(fn: () => Promise<T>, label: string, tries: number): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!TRANSIENT_LLM_RE.test(msg)) throw e; // lỗi cố định → ném ngay
+      if (i < tries - 1) {
+        const wait = 600 * Math.pow(2, i);
+        console.warn(`[scripter] ${label} lỗi tạm (thử ${i + 1}/${tries}, chờ ${wait}ms): ${msg.slice(0, 140)}`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 /**
  * Làm sạch storyboard LLM trả về thành ContentGraph hợp lệ (best-effort):
@@ -409,9 +434,9 @@ export async function generateScript(input: {
 
   // Tầng 2: Script Writer (JSON, no-grounding) — dùng fact brief + khoá word-budget.
   const llm = await hub.llm();
-  const runWriter = () =>
+  const runWriter = (model?: string) =>
     llm.complete({
-      model: writerModel, // B2: Gemini 3.1 Pro — khâu viết quyết định chất lượng
+      model, // writerModel; undefined → model BASE (config.model, vd gemini-3.5-flash)
       system: SYSTEM,
       messages: [
         {
@@ -423,19 +448,29 @@ export async function generateScript(input: {
       responseFormat: "json",
     });
 
-  // Retry 1 lần khi parse hỏng (giống planner/strategist). Model yếu (flash-lite) hay trả prose/JSON-vỡ ở lần đầu.
-  let result = await runWriter();
-  await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
-  let parsed = parseScriptJson(result.text);
-  let writerCost = result.costUsd;
-  if (!parsed) {
-    console.error("[scripter] Writer parse JSON hỏng, raw:", result.text?.slice(0, 800));
-    result = await runWriter();
-    await recordLLMUsage(result.costUsd, result.tokensIn, result.tokensOut);
-    writerCost += result.costUsd;
-    parsed = parseScriptJson(result.text);
-    if (!parsed) console.error("[scripter] retry vẫn hỏng:", result.text?.slice(0, 800));
+  // Writer: RETRY lỗi tạm (503/UNAVAILABLE/429/overloaded) có backoff; model viết VẪN hỏng (hoặc JSON vỡ)
+  // → FALLBACK model BASE (config.model, vd gemini-3.5-flash GA ổn định) → gen script KHÔNG chết vì model quá tải.
+  let writerCost = 0;
+  const tryWriter = async (model?: string) => {
+    try {
+      const r = await llmWithRetry(() => runWriter(model), "Writer(" + (model || "base") + ")", 3);
+      await recordLLMUsage(r.costUsd, r.tokensIn, r.tokensOut);
+      writerCost += r.costUsd;
+      return { text: r.text, parsed: parseScriptJson(r.text) };
+    } catch (e) {
+      console.error("[scripter] Writer lỗi sau retry (model=" + (model || "base") + "):", e instanceof Error ? e.message : e);
+      return null;
+    }
+  };
+
+  let attempt = await tryWriter(writerModel);
+  if (attempt && !attempt.parsed) console.error("[scripter] Writer parse JSON hỏng, raw:", attempt.text?.slice(0, 800));
+  // Model viết chết HOẶC JSON vỡ → thử lại trên model BASE (nếu writerModel === base thì là 1 lượt nữa).
+  if (!attempt || !attempt.parsed) {
+    const base = await tryWriter(undefined);
+    if (base) attempt = base;
   }
+  const parsed = attempt?.parsed ?? null;
 
   // Nguồn số liệu = citations THẬT từ Fact Researcher (không nhờ Writer tự đẻ URL → tránh bịa link).
   // Năm: best-effort parse 20xx từ tiêu đề nguồn (C3 — UI script hiện nguồn + năm + link).
@@ -449,7 +484,7 @@ export async function generateScript(input: {
   // Thà báo lỗi rõ để người dùng tạo lại / đổi model — caller (generateScriptAction) đã bắt & hiện message.
   if (!parsed) {
     throw new Error(
-      "Writer không trả JSON hợp lệ sau 2 lần thử (model yếu với JSON phức tạp). Thử lại, hoặc đổi model LLM sang gemini-2.5-flash cho ổn định."
+      "Writer không tạo được JSON hợp lệ (đã retry lỗi tạm + fallback model base). Gemini có thể đang quá tải (503) — thử lại sau, hoặc đổi Writer model sang gemini-3.5-flash trong Integration Hub."
     );
   }
 
