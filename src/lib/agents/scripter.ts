@@ -19,18 +19,20 @@ export type ScriptResult = {
       visualCues: string[];
       voiceOver: string;
       // C3 v4.1 — nội dung RIÊNG cho từng archetype bento (tuỳ chọn → backward-compat).
+      // PHẦN D4: displaySource?: nguồn NGẮN (vd 'VnExpress 2025') hiện dòng nhỏ dưới cảnh data; số
+      // không có nguồn (ước tính/ví dụ) → để trống.
       heroSubject?: string;
-      bigStat?: { value: string; unit: string; label: string };
+      bigStat?: { value: string; unit: string; label: string; displaySource?: string };
       bars?: { label: string; value: string; unit: string }[];
       pills?: { text: string }[];
       compare?: { leftTitle: string; leftItems: string[]; rightTitle: string; rightItems: string[] };
       principle?: string;
       callout?: string;
       // C3 v5 — data-viz đa dạng (số chạy, NON-READ minh hoạ body). Tuỳ chọn → backward-compat.
-      donut?: { value: string; unit: string; label: string };
-      beforeAfter?: { fromValue: string; fromLabel: string; toValue: string; toLabel: string; unit: string };
+      donut?: { value: string; unit: string; label: string; displaySource?: string };
+      beforeAfter?: { fromValue: string; fromLabel: string; toValue: string; toLabel: string; unit: string; displaySource?: string };
       miniStats?: { value: string; unit: string; label: string }[];
-      trend?: { label: string; points: string[] };
+      trend?: { label: string; points: string[]; displaySource?: string };
       // C3 v2 — sơ đồ QUY TRÌNH (pills dọc + mũi tên). 2-4 bước NGẮN. Tuỳ chọn → backward-compat.
       flow?: { title?: string; steps: string[] };
       // C3 v2 — POINT SCENES giàu data: mỗi điểm = thẻ HƯỚNG DẪN (tiêu đề bước + cách làm + số liệu hỗ trợ).
@@ -50,14 +52,35 @@ export type ScriptResult = {
   costUsd: number;
 };
 
-const SYSTEM = `Bạn là content writer chuyên ngành tài chính ngân hàng tại Việt Nam, viết content cho TikTok/Reels.
-Đặc trưng phong cách:
-- Tự nhiên, gần gũi, không sáo rỗng
-- Hook 3-5 giây thật mạnh, dùng số liệu cụ thể hoặc câu hỏi gây tò mò
-- Body có data, có ví dụ thực tế, có insight chuyên môn
-- CTA rõ ràng, mời tương tác chứ không spam quảng cáo
-- Tone: chuyên nghiệp + đáng tin + tôn trọng người xem
-- TUYỆT ĐỐI không hứa lợi nhuận cụ thể, không nói "an toàn 100%", không so sánh tiêu cực với ngân hàng khác`;
+// PHẦN D — Writer prompt (PROMPTS_SCRIPT_ENGINE #2): CONCRETE + ĐA DẠNG mọi content. Dùng nháy đơn
+// trong ví dụ để không vỡ chuỗi template. Compliance ngân hàng cũ GIỮ ở cuối (additive, CLAUDE.md).
+const SYSTEM = `Bạn là biên kịch video ngắn (TikTok/Reels) tiếng Việt số 1 — vừa HẤP DẪN vừa CHÍNH XÁC.
+Viết kịch bản ĐỌC (read-script) + dữ liệu dựng hình, theo chủ đề và FACT BRIEF cho sẵn.
+
+QUY TẮC CỨNG (không vi phạm):
+1) ĐỘ DÀI: read-script (hook+body+cta) ≤ 90 giây = wordBudget từ (caller truyền). Nhắm SÁT trần để tối đa thông tin. Tự đếm từ; KHÔNG vượt.
+2) HOOK ≤ 3 giây (1-2 câu đầu): mở bằng MỘT trong các kiểu — số sốc THẬT / câu hỏi nhức nhối / khẳng định phản trực giác / vào thẳng tình huống. CẤM chào hỏi, CẤM 'hôm nay mình nói về…', CẤM định nghĩa lề mề.
+3) CỤ THỂ — CẤM CHUNG CHUNG: mọi danh từ chung phải cụ thể hoá (tên thật, con số, ví dụ). CẤM cụm sáo rỗng nếu không kèm dẫn chứng: 'giải pháp hữu hiệu', 'tối ưu công việc', 'vô cùng quan trọng', 'thay đổi cuộc chơi', 'bùng nổ'. MỖI ý chính phải có 1 VÍ DỤ NHỎ dễ hiểu HOẶC 1 SỐ THẬT.
+4) SỐ LIỆU & NGUỒN: chỉ dùng số CÓ trong FACT BRIEF. Mỗi số/khẳng định quan trọng kèm displaySource ngắn (vd 'VnExpress 2025') + ghi vào mảng sources {claim,url,year}. Số tự suy/minh hoạ (không có trong brief) PHẢI ghi '(ước tính)' hoặc '(ví dụ)'. TUYỆT ĐỐI không bịa số.
+5) NHỊP: 1 ý / 1 cảnh; mỗi 3-5 giây có điểm mới; kết mạnh (peak-end) rồi CTA.
+6) TONE — chọn hợp chủ đề/ngành (KHÔNG cố định): tài chính/nghiêm túc → điềm đạm, uy tín; công cụ/AI/công nghệ → năng động, hào hứng; sức khoẻ/đời sống → gần gũi, ấm. Luôn nói như người đi làm có kinh nghiệm: câu ngắn, đọc lên nghe tự nhiên, không dịch sượng, không trang trọng quá.
+7) CTA: 1 lời kêu gọi RÕ, 1 hành động — chọn hợp mục tiêu video (comment 1 từ khoá / follow / nhắn tin).
+8) Nhiều người xem KHÔNG bật tiếng → ý then chốt phải nằm ở phần hiện hình (keyMessages/data), không chỉ trong lời.
+
+CHỌN KHUNG theo format_hint (caller truyền; rỗng → tự chọn khung HỢP NHẤT với chủ đề):
+- listicle ('Top N'): mỗi mục = Tên cụ thể + Cách chạy (1 câu) + Ví dụ nhỏ + 1 số thật (kèm nguồn).
+- story: nhân vật/tình huống thật → xung đột → bước ngoặt (số/bài học) → chốt.
+- mythbust: 'Nhiều người tưởng X' → sự thật + bằng chứng số → điều ĐÚNG nên làm.
+- how-to: 3-4 bước NGẮN, mỗi bước 1 hành động cụ thể + mẹo/số.
+- news: chuyện gì + MỚI cỡ nào (ngày/số) + vì sao liên quan người xem + góc nhìn.
+- compare: A vs B trên 2-3 tiêu chí cụ thể (số) → nên chọn gì.
+KHUNG CHUNG mọi loại: Hook → Bối cảnh/why-now → LÕI (theo format) → Bằng chứng (số+nguồn) → CTA.
+
+ĐẦU RA: CHỈ JSON theo schema (caller cấp schema chi tiết). Trong CHUỖI dùng nháy đơn '…' thay nháy kép (tránh vỡ JSON).
+- animation + storyboard: số liệu LẤY TỪ FACT BRIEF; mỗi cảnh data kèm displaySource (chuỗi nguồn ngắn).
+- storyboard nodes đa dạng (data-big/donut/data-bars/trend/before-after/mini/pills/compare/flow) đúng số thật.
+
+COMPLIANCE (GIỮ — chủ đề tài chính/ngân hàng): TUYỆT ĐỐI không hứa lợi nhuận cụ thể, không nói 'an toàn 100%', không so sánh tiêu cực với đối thủ.`;
 
 function buildPrompt(
   profile: ProfileRecord,
@@ -66,28 +89,21 @@ function buildPrompt(
   persona: string,
   lengthSec: number,
   wordBudget: number,
-  factBrief: string
+  factBrief: string,
+  formatHint: string,
+  dataHook: string
 ): string {
   const factSection = factBrief.trim()
     ? `\nFACT BRIEF (số liệu nghiên cứu — ƯU TIÊN dùng các số trong đây; số nào KHÔNG có trong brief mà tự suy thì PHẢI ghi "ước tính"/"ví dụ"):\n"""\n${factBrief.trim()}\n"""\n`
     : `\n(Không có fact brief số liệu thật — số nào đưa ra phải gắn nhãn "ước tính"/"ví dụ", TUYỆT ĐỐI không bịa trích dẫn nghiên cứu.)\n`;
-  return `Profile chuyên gia:
-- Tên: ${profile.name}
-- Vị trí: ${profile.role || "Personal Banker"}
-- Năm kinh nghiệm: ${profile.expertise?.yearsExp || "N/A"}
-- Sản phẩm phụ trách: ${(profile.expertise?.products || []).join(", ") || "N/A"}
-- USP: ${profile.usp || "N/A"}
-- Tone: ${profile.tone?.voice || "professional"}
-
-Chủ đề video: ${topic}
-Pain point cần giải quyết: ${pain}
-Target persona: ${persona}
-Độ dài mục tiêu: ${lengthSec} giây
+  return `Profile: tên ${profile.name}, vai trò ${profile.role || "chuyên gia"}, sản phẩm ${(profile.expertise?.products || []).join(", ") || "N/A"}, đối tượng ${persona}, tone gợi ý ${profile.tone?.voice || "tự chọn theo chủ đề"}, USP ${profile.usp || "N/A"}.
+Chủ đề: ${topic}
+format_hint: ${formatHint || "(tự chọn khung HỢP NHẤT với chủ đề: listicle/story/mythbust/how-to/news/compare)"}
+Góc data: ${dataHook || pain || topic}
+Nỗi đau: ${pain}
 ${factSection}
-KHUNG KỊCH BẢN BẮT BUỘC: HOOK (3-5s, số sốc/câu hỏi/phản trực giác) → VẤN ĐỀ (nỗi đau) → GIẢI PHÁP → BẰNG CHỨNG (số THẬT từ fact brief) → CTA loop.
-⚠ RÀNG BUỘC ĐỘ DÀI (đòn bẩy chính): tổng read script "hook + body + cta" ≤ ${wordBudget} TỪ (≈${lengthSec}s đọc). Viết SÚC TÍCH, cắt chữ thừa — KHÔNG vượt ngân sách từ.
-
-Hãy viết script chi tiết cho video này, đồng thời cung cấp prompt cho 3 phong cách dựng video khác nhau.
+Ngân sách từ: ${wordBudget} (≈ ${lengthSec}s, nhắm SÁT 90s để tối đa thông tin — KHÔNG vượt).
+Viết kịch bản theo ĐÚNG quy tắc cứng + khung của format_hint (Hook ≤3s → bối cảnh/why-now → LÕI theo format → bằng chứng số+nguồn → CTA). 1 ý/cảnh; ý then chốt hiện ở keyMessages/data (sound-off).
 
 ⚠ ĐỊNH DẠNG ĐẦU RA (BẮT BUỘC — sai là HỎNG cả hệ thống):
 - Trả về DUY NHẤT 1 JSON object hợp lệ. KHÔNG kèm bất kỳ chữ nào trước/sau, KHÔNG markdown, KHÔNG giải thích, KHÔNG ghi suy nghĩ.
@@ -113,16 +129,16 @@ Schema:
       "visualCues": ["gợi ý icon"],
       "voiceOver": "(KHÔNG dùng để đọc — C3 đọc CHUNG read script hook+body+cta. Để '' )",
       "heroSubject": "1 cụm NGẮN mô tả nhân vật/chủ thể minh hoạ 3D (vd 'trợ lý AI cho founder')",
-      "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN (vd 'ƯỚC TÍNH TIẾT KIỆM')"},
+      "bigStat": {"value": "80", "unit": "%", "label": "NHÃN NGẮN (vd 'ƯỚC TÍNH TIẾT KIỆM')", "displaySource": "nguồn ngắn vd 'VnExpress 2025' — để '' nếu là ước tính/ví dụ"},
       "bars": [{"label": "Cách cũ", "value": "30", "unit": "%"}, {"label": "Với AI", "value": "75", "unit": "%"}, {"label": "Tối ưu", "value": "90", "unit": "%"}],
       "pills": [{"text": ".."}, {"text": ".."}, {"text": ".."}, {"text": ".."}],
       "compare": {"leftTitle": "Cách cũ", "leftItems": ["..", ".."], "rightTitle": "Với AI", "rightItems": ["..", ".."]},
       "principle": "1 câu nguyên tắc cốt lõi đắt giá (≤12 từ)",
       "callout": "1 insight nhấn mạnh (≤16 từ)",
-      "donut": {"value": "70", "unit": "%", "label": "NHÃN NGẮN (số % KHÁC bigStat)"},
-      "beforeAfter": {"fromValue": "8", "fromLabel": "Cách cũ", "toValue": "1", "toLabel": "Với AI", "unit": "giờ"},
+      "donut": {"value": "70", "unit": "%", "label": "NHÃN NGẮN (số % KHÁC bigStat)", "displaySource": "nguồn ngắn hoặc '' nếu ước tính"},
+      "beforeAfter": {"fromValue": "8", "fromLabel": "Cách cũ", "toValue": "1", "toLabel": "Với AI", "unit": "giờ", "displaySource": "nguồn ngắn hoặc ''"},
       "miniStats": [{"value": "3", "unit": "x", "label": "Nhanh hơn"}, {"value": "60", "unit": "%", "label": "Tiết kiệm"}, {"value": "24", "unit": "/7", "label": "Hoạt động"}, {"value": "5", "unit": "phút", "label": "Cài đặt"}],
-      "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"]},
+      "trend": {"label": "Tăng trưởng", "points": ["20", "45", "70", "95"], "displaySource": "nguồn ngắn hoặc ''"},
       "flow": {"title": "QUY TRÌNH", "steps": ["Bước 1 ngắn", "Bước 2 ngắn", "Bước 3 (đích)"]},
       "points": [{"title": "Tên bước NGẮN (≤7 từ)", "detail": "Cách làm/giải thích cụ thể DẠY người xem (≤22 từ)", "stat": {"value": "60", "unit": "%", "label": "nhãn ngắn (ví dụ)"}}]
     }
@@ -244,9 +260,10 @@ Tìm 6-8 dữ kiện thật MỚI NHẤT kèm năm + nguồn (ưu tiên VN). Nê
   }
 }
 
-// ~2.5 từ/giây đọc TV → 60s≈150, 90s≈225, 30s≈75 từ (khớp blueprint).
+// ~2.5 từ/giây đọc TV → 60s≈150, 90s≈225 từ. TRẦN CỨNG 90s (kẹp lengthSec ≤ 90) — blueprint D0
+// "nhắm 210-230 từ, trần cứng 90s": video dài hơn vẫn chỉ ~225 từ read-script.
 export function wordBudgetFor(lengthSec: number): number {
-  return Math.max(60, Math.round(lengthSec * 2.5));
+  return Math.max(60, Math.round(Math.min(90, lengthSec) * 2.5));
 }
 
 // Parse JSON script CHẮC TAY: bóc markdown fence, cắt phần thừa TRƯỚC `{` / SAU `}` (thinking/prose
@@ -367,6 +384,8 @@ export async function generateScript(input: {
   targetPersona: string;
   lengthSec?: number;
   dataHook?: string; // góc data từ ContentTopic (Part 3) → định hướng Fact Researcher
+  /** PHẦN D: khung kịch bản (listicle/story/mythbust/how-to/news/compare). Rỗng → Writer tự chọn. */
+  formatHint?: string;
   /** Phase 4 "dán link → video": Markdown bài nguồn (đã fetch + chặn SSRF) — ghép vào fact brief. */
   sourceBrief?: string;
   /** URL bài nguồn (để ghi vào sources — số liệu truy được về link). */
@@ -394,7 +413,7 @@ export async function generateScript(input: {
       messages: [
         {
           role: "user",
-          content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec, wordBudget, fact.brief),
+          content: buildPrompt(input.profile, input.topic, input.painPoint, input.targetPersona, lengthSec, wordBudget, fact.brief, input.formatHint || "", input.dataHook || ""),
         },
       ],
       maxTokens: 6500, // đủ chỗ cho JSON giàu data-viz (donut/beforeAfter/miniStats/trend...) — KHÔNG làm dài video, chỉ tránh cắt JSON
