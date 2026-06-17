@@ -20,9 +20,11 @@ import { getOrCreateBrandKit } from "@/lib/design/director";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-// ElevenLabs đồng bộ & nhanh, nhưng full script dài có thể tốn thời gian → nới timeout cho an toàn.
-// 60s là tối đa của Vercel Hobby (mặc định chỉ 10s).
-export const maxDuration = 60;
+// Server actions (sinh ảnh C2 + TTS + dispatch render) chạy trong route này → cần đủ giờ.
+// C2 ACCURATE (BLUEPRINT_C2_V2): ảnh quality medium/high chậm hơn → nâng maxDuration lên 300s
+// (mặc định mới của Vercel trên mọi plan; Fluid/Pro hỗ trợ). Sinh ảnh vẫn SONG SONG (Promise.all).
+// Plan thấp hơn sẽ tự clamp xuống mức cho phép — không phá C2 cũ (vốn xong <60s).
+export const maxDuration = 300;
 export default async function ScriptDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const record = await scriptStore.get(id);
