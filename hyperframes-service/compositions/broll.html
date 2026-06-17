@@ -5,6 +5,7 @@
     {"id":"duration","type":"number","label":"Tổng thời lượng (giây) — khớp voice-over","default":12},
     {"id":"bg_type","type":"enum","label":"Loại nền","default":"image","options":[{"value":"image","label":"Ảnh"},{"value":"video","label":"Video"}]},
     {"id":"bg_urls","type":"string","label":"Danh sách URL nền (JSON mảng string)","default":"[]"},
+    {"id":"bg_types","type":"string","label":"Loại mỗi nền image|video (JSON mảng string, song song bg_urls)","default":"[]"},
     {"id":"shot_durations","type":"string","label":"Thời lượng từng clip (JSON mảng số)","default":"[]"},
     {"id":"voice_url","type":"string","label":"URL voice-over (mp3/wav)","default":""},
     {"id":"caption_groups","type":"string","label":"Caption karaoke (JSON [{start,end,words:[{text,start,end}]}])","default":"[]"},
@@ -68,8 +69,8 @@
         filter: contrast(1.08) saturate(1.12) brightness(0.98);
         will-change: transform, opacity;
       }
-      /* Footage stills start hidden; GSAP crossfades each in on its data-start. */
-      #bglayer img.bg { opacity: 0; }
+      /* Footage (img tĩnh + video Pexels) start hidden; GSAP crossfades each in on its data-start. */
+      #bglayer img.bg, #bglayer video.bg { opacity: 0; }
 
       /* ── Cinematic overlay stack (decorative, always-on, no data-* = CSS-owned) ── */
       /* Color-grade tint: tối góc + ám accent rượu-vang nhẹ → tông MagentX. */
@@ -258,12 +259,17 @@
       // src + timing). Here we only read them to build the crossfade/Ken-Burns
       // timeline. shot_durations drives the per-image windows the service stamped.
       const bgHost = document.getElementById("bglayer");
-      const clipEls = Array.from(bgHost.querySelectorAll("img.bg"));
+      // C2 HYBRID: nền có thể là <img> (ảnh AI + Ken-Burns) HOẶC <video> (clip Pexels thật).
+      const clipEls = Array.from(bgHost.querySelectorAll("img.bg, video.bg"));
       const clipInfo = clipEls.map((el) => ({
         sel: "#" + el.id,
         start: parseFloat(el.getAttribute("data-start")) || 0,
         dur: parseFloat(el.getAttribute("data-duration")) || 0,
+        isVideo: el.tagName === "VIDEO",
       }));
+      // Frame-stepping điều khiển video qua currentTime (render-engine) → KHÔNG để tự phát
+      // (tránh video trôi frame giữa các lần seek). Engine sẽ seek + chờ 'seeked' mỗi frame.
+      clipEls.forEach((el) => { if (el.tagName === "VIDEO") { try { el.pause(); } catch (e) {} } });
 
       // ── Captions ──
       // Prefer caption_groups (karaoke, word-synced from Whisper); else fall back
@@ -398,21 +404,25 @@
         const fadeIn = type === 0 ? 0.08 : type === 3 ? 0.45 : 0.16;
         tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: fadeIn, ease: "power2.out" }, c.start);
 
-        if (type === 1) {
-          // ZOOM-PUNCH: phóng to giật vào rồi trôi chậm
-          tl.fromTo(sel, { scale: 1.32, xPercent: 0, yPercent: 0 }, { scale: 1.14, duration: 0.45, ease: "power3.out" }, c.start);
-          tl.to(sel, { scale: 1.2, duration: Math.max(0.1, c.dur - 0.45), ease: "none" }, c.start + 0.45);
-        } else if (type === 2) {
-          // SLIDE/WHIP: trượt ngang vào rồi pan nhẹ ngược lại
-          const dir = i % 2 === 0 ? 1 : -1;
-          tl.fromTo(sel, { scale: 1.14, xPercent: dir * 15, yPercent: 0 }, { xPercent: dir * 3, duration: 0.5, ease: "power3.out" }, c.start);
-          tl.to(sel, { xPercent: -dir * 3, duration: Math.max(0.1, c.dur - 0.5), ease: "none" }, c.start + 0.5);
-        } else if (type === 3) {
-          // CROSSFADE + zoom-out chậm
-          tl.fromTo(sel, { scale: 1.18, xPercent: 0, yPercent: 0 }, { scale: 1.06, duration: c.dur, ease: "none" }, c.start);
-        } else {
-          // CUT + zoom-in chậm
-          tl.fromTo(sel, { scale: 1.05, xPercent: 0, yPercent: 0 }, { scale: 1.16, duration: c.dur, ease: "none" }, c.start);
+        // Ken-Burns (zoom/pan) CHỈ cho ẢNH TĨNH — <video> Pexels đã có chuyển động riêng,
+        // chỉ cần crossfade opacity (đè transform lên video sẽ rung/giật + crop thừa).
+        if (!c.isVideo) {
+          if (type === 1) {
+            // ZOOM-PUNCH: phóng to giật vào rồi trôi chậm
+            tl.fromTo(sel, { scale: 1.32, xPercent: 0, yPercent: 0 }, { scale: 1.14, duration: 0.45, ease: "power3.out" }, c.start);
+            tl.to(sel, { scale: 1.2, duration: Math.max(0.1, c.dur - 0.45), ease: "none" }, c.start + 0.45);
+          } else if (type === 2) {
+            // SLIDE/WHIP: trượt ngang vào rồi pan nhẹ ngược lại
+            const dir = i % 2 === 0 ? 1 : -1;
+            tl.fromTo(sel, { scale: 1.14, xPercent: dir * 15, yPercent: 0 }, { xPercent: dir * 3, duration: 0.5, ease: "power3.out" }, c.start);
+            tl.to(sel, { xPercent: -dir * 3, duration: Math.max(0.1, c.dur - 0.5), ease: "none" }, c.start + 0.5);
+          } else if (type === 3) {
+            // CROSSFADE + zoom-out chậm
+            tl.fromTo(sel, { scale: 1.18, xPercent: 0, yPercent: 0 }, { scale: 1.06, duration: c.dur, ease: "none" }, c.start);
+          } else {
+            // CUT + zoom-in chậm
+            tl.fromTo(sel, { scale: 1.05, xPercent: 0, yPercent: 0 }, { scale: 1.16, duration: c.dur, ease: "none" }, c.start);
+          }
         }
 
         // ra: fade ngắn chồng nhẹ với cảnh sau (giữ luôn có hình → không hở đen).
@@ -442,6 +452,38 @@
 
       // Pad the timeline to the full duration so playback doesn't end early.
       tl.to({}, { duration: 0.001 }, Math.max(0, total - 0.001));
+
+      // ── C2 HYBRID: hook cho render-engine (frame-stepping) ĐỒNG BỘ <video> mỗi frame ──
+      // Engine set tl.time(t) RỒI gọi `await window.__prepareFrame(t)` TRƯỚC screenshot. Với mỗi
+      // video đang trong cửa sổ hiển thị: currentTime = clamp/loop(t − data-start), chờ 'seeked'
+      // (+ 1 rAF để frame được paint). KHÔNG có hook (engine CLI / comp khác) → video đứng hình →
+      // video b-roll BẮT BUỘC chạy engine playwright. Idempotent + timeout-guard (không treo render).
+      const __vids = clipEls.filter((el) => el.tagName === "VIDEO");
+      if (__vids.length) {
+        window.__prepareFrame = async (t) => {
+          const tasks = [];
+          for (const vid of __vids) {
+            const start = parseFloat(vid.getAttribute("data-start")) || 0;
+            const dur = parseFloat(vid.getAttribute("data-duration")) || 0;
+            const local = t - start;
+            if (local < -0.3 || local > dur + 0.3) continue; // ngoài cửa sổ (+ rìa crossfade) → bỏ
+            let ct = Math.max(0, local);
+            const vd = vid.duration;
+            if (vd && isFinite(vd) && vd > 0) ct = (ct > vd ? ct % vd : ct); // loop nếu clip < cửa sổ
+            if (vd && isFinite(vd) && vd > 0) ct = Math.min(ct, Math.max(0, vd - 0.05)); // tránh mép cuối
+            if (Math.abs((vid.currentTime || 0) - ct) < 0.012) continue; // đã đúng frame → khỏi seek
+            tasks.push(new Promise((resolve) => {
+              let done = false;
+              const fin = () => { if (done) return; done = true; vid.removeEventListener("seeked", fin); resolve(); };
+              vid.addEventListener("seeked", fin, { once: true });
+              try { vid.currentTime = ct; } catch (e) { fin(); }
+              setTimeout(fin, 500); // guard: 'seeked' không bắn → đừng treo vòng render
+            }));
+          }
+          if (tasks.length) await Promise.all(tasks);
+          await new Promise((r) => requestAnimationFrame(() => r())); // chờ 1 frame được paint
+        };
+      }
 
       window.__timelines["main"] = tl;
     </script>
