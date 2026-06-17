@@ -39,6 +39,29 @@ export function makeOpenAIImageAdapter(opts: { apiKey: string; modelId?: string;
       if (!b64) throw new Error("OpenAI Image: response thiếu b64_json");
       return { imageBase64: b64, mimeType: "image/png", costUsd: estimateCost(effModel, size) };
     },
+    // C2 ACCURATE: dùng /v1/images/edits với 1 ảnh tham chiếu (logo brand thật) →
+    // ghép logo THẬT vào cảnh thay vì để AI vẽ lại (méo/sai). gpt-image hỗ trợ edits.
+    async generateFromReference({ prompt, referencePng, referenceMime, quality: qOverride }): Promise<ImageResult> {
+      const effModel = model.includes("gpt-image") ? model : "gpt-image-1";
+      const form = new FormData();
+      form.append("model", effModel);
+      form.append("prompt", prompt);
+      form.append("n", "1");
+      form.append("size", size);
+      if (effModel.includes("gpt-image")) form.append("quality", qOverride || quality);
+      const refBytes = new Uint8Array(referencePng);
+      form.append("image", new Blob([refBytes], { type: referenceMime || "image/png" }), "reference.png");
+      const res = await fetch("https://api.openai.com/v1/images/edits", {
+        method: "POST",
+        headers: { authorization: `Bearer ${opts.apiKey}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error(`OpenAI Image edit error ${res.status}: ${await res.text()}`);
+      const data = (await res.json()) as { data?: { b64_json?: string }[] };
+      const b64 = data.data?.[0]?.b64_json;
+      if (!b64) throw new Error("OpenAI Image edit: response thiếu b64_json");
+      return { imageBase64: b64, mimeType: "image/png", costUsd: estimateCost(effModel, size) };
+    },
     async testConnection() {
       const t0 = Date.now();
       try {

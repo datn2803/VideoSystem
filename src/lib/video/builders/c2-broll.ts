@@ -4,6 +4,7 @@ import { decryptSecret } from "@/lib/integration-hub/vault";
 import { getOrCreateBrandKit } from "@/lib/design/director";
 import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { hub } from "@/lib/integration-hub/hub";
+import { recordLLMUsage } from "@/lib/agents/usage";
 import { footageStore } from "@/lib/footage/storage";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
@@ -14,6 +15,16 @@ import { getEngine } from "../engine";
 import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage, recordExtraUsage } from "../cost-guard";
 import { withRetry, pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { RENDER_PIPELINE_VERSION } from "../render-version";
+import type { ImageProvider } from "@/lib/integration-hub/types";
+import {
+  isC2Accurate,
+  c2AccurateQuality,
+  planShotsAccurate,
+  suffixFor,
+  fetchBrandLogo,
+  brandScenePrompt,
+  type ShotPlan,
+} from "./c2-accurate";
 
 async function pickImageProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
@@ -139,12 +150,42 @@ type BrollImagesResult = {
   firstError?: string;
 };
 
+/**
+ * Sinh 1 shot ảnh. C2 ACCURATE: shot 'brand' có domain + adapter hỗ trợ edits →
+ * ghép LOGO THẬT (reference) thay vì để AI vẽ lại (méo/sai). Lỗi/không logo →
+ * generate() thường (fullPrompt đã kèm suffix phù hợp nhánh). C2 cũ: plan=undefined.
+ */
+async function generateShot(
+  adapter: ImageProvider,
+  plan: ShotPlan | undefined,
+  fullPrompt: string,
+  quality: string | undefined
+): Promise<{ imageBase64: string; mimeType: string }> {
+  if (plan?.imageType === "brand" && plan.domain && adapter.generateFromReference) {
+    const logo = await fetchBrandLogo(plan.domain);
+    if (logo) {
+      try {
+        return await adapter.generateFromReference({
+          prompt: brandScenePrompt(plan.entity || ""),
+          referencePng: logo.buffer,
+          referenceMime: logo.contentType,
+          quality,
+        });
+      } catch (e) {
+        console.error("[c2-accurate] logo edits fail → fallback AI:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+  return adapter.generate({ prompt: fullPrompt, quality });
+}
+
 async function generateBrollImages(
   scriptId: string,
   topic: string,
   voiceOver: string,
   shotList: { note: string; durationSec: number }[],
-  totalDur: number
+  totalDur: number,
+  factHint = ""
 ): Promise<BrollImagesResult> {
   const imageProvider = await pickImageProvider();
   // Cost-guard (Phase 3): ảnh AI là PAID → chỉ khi RENDER_MODE=live (compat RENDER_LIVE=1).
@@ -164,6 +205,33 @@ async function generateBrollImages(
   await assertDailyCap(count * perImgUsd, `${count} ảnh b-roll`);
   const hints = shotList.map((s) => (s.note || "").trim()).filter(Boolean);
   const prompts = await planShotPrompts(topic, voiceOver, hints, count);
+  // C2 ACCURATE (sau cờ): bộ điều phối imageType + prompt bám entity/số (writerModel).
+  // Lỗi điều phối (LLM/hub) → revert HOÀN TOÀN về C2 cũ (prompts[] + suffix cũ + quality cũ).
+  let accurate = isC2Accurate();
+  let accQuality = accurate ? c2AccurateQuality() : undefined;
+  let plans: ShotPlan[] | null = null;
+  if (accurate) {
+    try {
+      const directorLlm = await hub.llm();
+      const writerModel = await hub.llmWriterModel();
+      plans = await planShotsAccurate({
+        topic,
+        scriptText: voiceOver,
+        factHint,
+        segments: splitIntoSegments(voiceOver, count),
+        fallbackPrompts: prompts,
+        count,
+        llm: directorLlm,
+        writerModel,
+        onUsage: recordLLMUsage,
+      });
+    } catch (e) {
+      console.error("[c2-accurate] điều phối lỗi → fallback C2 cũ:", e instanceof Error ? e.message : e);
+      accurate = false;
+      accQuality = undefined;
+      plans = null;
+    }
+  }
   const cache = await kvRead<Record<string, string>>(IMG_CACHE_KEY, {});
   const even = totalDur / count;
 
@@ -173,13 +241,16 @@ async function generateBrollImages(
   type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number; error?: string };
   const results = await Promise.all(
     Array.from({ length: count }, (_, i) => i).map(async (i): Promise<Shot | null> => {
-      const prompt = `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
-      const h = hashImage(scriptId, i, prompt, model);
+      const plan = plans?.[i];
+      const fullPrompt = plan ? `${plan.prompt}${suffixFor(plan.imageType)}` : `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
+      // accurate → hash kèm biến thể (imageType/domain/quality) để KHÔNG đụng cache ảnh C2 cũ.
+      const hashInput = accurate ? `${fullPrompt}|acc:${plan?.imageType}:${plan?.domain || ""}:${accQuality}` : fullPrompt;
+      const h = hashImage(scriptId, i, hashInput, model);
       let url = cache[h];
       let fresh: string | undefined;
       if (!url) {
         try {
-          const img = await withRetry(() => imgAdapter.generate({ prompt }), 1);
+          const img = await withRetry(() => generateShot(imgAdapter, plan, fullPrompt, accQuality), 1);
           url = await blobUpload({
             bucket: "broll-images",
             filename: `${scriptId}-${i}-${h.slice(0, 8)}${extFromMime(img.mimeType)}`,
@@ -437,8 +508,13 @@ export async function buildBroll(input: {
       const whisperEst = ((duration || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006);
       const useWhisper = isLive() && !!voiceUrlRaw && !!openaiKey;
       if (useWhisper) await assertDailyCap(whisperEst, "Whisper C2");
+      // C2 ACCURATE: entity/số THẬT cho director = sources (claim) + dataPoints (số minh hoạ).
+      const factHint = [
+        ...(script.script.sources || []).map((s) => s.claim),
+        ...((script.script.variantPrompts.animation?.dataPoints || []) as string[]),
+      ].filter(Boolean).join(" · ");
       const [imgResult, words] = await Promise.all([
-        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration),
+        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration, factHint),
         useWhisper ? transcribeWords(voiceUrlRaw, openaiKey!) : Promise.resolve(null),
       ]);
       if (words) await recordExtraUsage("openai-whisper", whisperEst);
@@ -545,7 +621,11 @@ export async function buildBroll(input: {
         script.script.caption ||
         "";
       const seconds = script.script.estimatedDurationSec || 30;
-      const imgResult = await generateBrollImages(input.scriptId, topic, captionSource, shotList, seconds);
+      const factHint = [
+        ...(script.script.sources || []).map((s) => s.claim),
+        ...((script.script.variantPrompts.animation?.dataPoints || []) as string[]),
+      ].filter(Boolean).join(" · ");
+      const imgResult = await generateBrollImages(input.scriptId, topic, captionSource, shotList, seconds, factHint);
       const useAI = imgResult.intended;
 
       if (useAI) {

@@ -124,6 +124,9 @@ export interface ImageResult {
 
 export interface ImageProvider {
   generate(input: { prompt: string; transparent?: boolean; quality?: string }): Promise<ImageResult>;
+  /** Sinh ảnh DÙNG 1 ảnh tham chiếu (vd logo brand thật) qua /v1/images/edits — C2 ACCURATE.
+   *  Optional (additive): adapter cũ không có → caller fallback generate() thường. */
+  generateFromReference?(input: { prompt: string; referencePng: Buffer; referenceMime?: string; quality?: string }): Promise<ImageResult>;
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
 }
 
