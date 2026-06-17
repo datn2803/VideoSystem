@@ -10,6 +10,7 @@ import {
   brandScenePrompt,
   parseShotPlans,
   fetchBrandLogo,
+  resolveBrandDomain,
   planShotsAccurate,
   SUFFIX_NOTEXT,
   SUFFIX_TEXT,
@@ -171,6 +172,39 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   });
   eq(p2.map((p) => p.imageType), ["concept", "concept", "concept"], "LLM lỗi → toàn concept");
   eq(p2[0].prompt, "FB0", "LLM lỗi → prompt fallback cũ");
+}
+
+// ── 8) resolveBrandDomain (async, mock fetchImpl) ─────────────────────────
+{
+  const saveSecret = process.env.LOGODEV_SECRET;
+  const guard = (async () => { throw new Error("KHÔNG được fetch"); }) as unknown as typeof fetch;
+
+  // (a) known-hit → KHÔNG fetch
+  delete process.env.LOGODEV_SECRET;
+  eq(await resolveBrandDomain("SePay", { fetchImpl: guard }), "sepay.vn", "known-hit → sepay.vn (không fetch)");
+  // (b) đã là domain → giữ, KHÔNG fetch
+  eq(await resolveBrandDomain("acme-widgets.io", { fetchImpl: guard }), "acme-widgets.io", "đã là domain → giữ");
+
+  // (c) search-hit (có LOGODEV_SECRET) → domain top từ Logo.dev
+  process.env.LOGODEV_SECRET = "sk_test";
+  const fSearch = (async (url: string) => {
+    if (String(url).includes("api.logo.dev/search")) return { ok: true, json: async () => [{ name: "Spotify", domain: "spotify.com" }, { name: "x", domain: "x.io" }] };
+    throw new Error("unexpected " + url);
+  }) as unknown as typeof fetch;
+  eq(await resolveBrandDomain("SpotifyXyz", { fetchImpl: fSearch }), "spotify.com", "search-hit → domain[0]");
+
+  // (d) search-miss (có key, search rỗng) → heuristic '.com' (KHÔNG probe .vn)
+  const fMiss = (async (url: string) => {
+    if (String(url).includes("api.logo.dev/search")) return { ok: true, json: async () => [] }; // miss
+    throw new Error("heuristic .com KHÔNG được fetch ngoài search: " + url);
+  }) as unknown as typeof fetch;
+  eq(await resolveBrandDomain("TimeasVN", { fetchImpl: fMiss }), "timeasvn.com", "search-miss → heuristic .com (không probe .vn)");
+
+  // (e) không key → heuristic '.com', KHÔNG fetch gì
+  delete process.env.LOGODEV_SECRET;
+  eq(await resolveBrandDomain("GlobalCorpZz", { fetchImpl: guard }), "globalcorpzz.com", "không key → heuristic .com (không fetch)");
+
+  if (saveSecret === undefined) delete process.env.LOGODEV_SECRET; else process.env.LOGODEV_SECRET = saveSecret;
 }
 
 done("c2-accurate");

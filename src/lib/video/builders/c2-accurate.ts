@@ -55,7 +55,7 @@ export function suffixFor(imageType: ImageType): string {
 }
 
 // Brand phổ biến → domain chuẩn (ưu tiên trước heuristic). Mở rộng dễ, KHÔNG hard-code chủ đề.
-const KNOWN_DOMAINS: Record<string, string> = {
+export const KNOWN_DOMAINS: Record<string, string> = {
   sepay: "sepay.vn",
   "make.com": "make.com",
   make: "make.com",
@@ -82,6 +82,24 @@ const KNOWN_DOMAINS: Record<string, string> = {
   zapier: "zapier.com",
   n8n: "n8n.io",
   slack: "slack.com",
+  // Brand Việt / ngành hay gặp (đối chiếu domain thật; cái nào search/heuristic lo được thì khỏi cần ở đây).
+  tiki: "tiki.vn",
+  kiotviet: "kiotviet.vn",
+  sapo: "sapo.vn",
+  haravan: "haravan.com",
+  misa: "misa.com.vn",
+  viettel: "viettel.com.vn",
+  zalopay: "zalopay.vn",
+  grab: "grab.com",
+  be: "be.com.vn",
+  techcombank: "techcombank.com.vn",
+  vpbank: "vpbank.com.vn",
+  acb: "acb.com.vn",
+  bidv: "bidv.com.vn",
+  tpbank: "tpb.vn",
+  tpb: "tpb.vn",
+  sacombank: "sacombank.com.vn",
+  vietcombank: "vietcombank.com.vn",
 };
 
 /** Suy domain từ tên brand: known-map → nếu đã là domain → giữ → else thử '.com'. */
@@ -92,6 +110,62 @@ export function guessDomain(entity: string | undefined): string | null {
   if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(e)) return e; // đã là domain
   const slug = e.replace(/[^a-z0-9]/g, "");
   return slug ? `${slug}.com` : null; // 1 từ → thử .com (best-effort)
+}
+
+// ── resolveBrandDomain: phủ logo cho brand BẤT KỲ (không chỉ trong KNOWN_DOMAINS) ──
+const domainCache = new Map<string, string>(); // entity(lowercased) → domain (trong process)
+let warnedNoSecret = false;
+
+/**
+ * Resolve domain cho brand BẤT KỲ (mục: nâng ĐỘ PHỦ logo). Thứ tự, best-effort, KHÔNG throw:
+ *  1) KNOWN_DOMAINS  2) entity đã là domain  3) Logo.dev Search (LOGODEV_SECRET sk_, lấy domain top)
+ *  4) heuristic: '<slug>.vn' nếu domain tồn tại → else '<slug>.com'.
+ * Cache entity→domain trong process. `fetchImpl` tiêm để unit-test offline. Lỗi/không key/không kết quả → bước kế.
+ */
+export async function resolveBrandDomain(
+  entity: string | undefined,
+  opts: { fetchImpl?: typeof fetch } = {}
+): Promise<string | null> {
+  const raw = (entity || "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  const cached = domainCache.get(key);
+  if (cached) return cached;
+  const fetchImpl = opts.fetchImpl || fetch;
+  const set = (d: string) => { domainCache.set(key, d); return d; };
+
+  // 1) danh bạ
+  if (KNOWN_DOMAINS[key]) return set(KNOWN_DOMAINS[key]);
+  // 2) đã là domain
+  if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(key)) return set(key);
+  // 3) Logo.dev Search (secret sk_) — docs+live verified: GET api.logo.dev/search?q=, header Authorization: Bearer sk_.
+  // strategy=match (exact/near-exact) — KHỚP brand chính xác; default 'typeahead' ưu tiên prefix-phổ-biến nên
+  // sai brand (vd 'coolmate' → 'Cool Material' thay vì Coolmate). Lấy domain top.
+  const secret = process.env.LOGODEV_SECRET || process.env.LOGO_DEV_SECRET;
+  if (secret) {
+    try {
+      const res = await fetchImpl(`https://api.logo.dev/search?q=${encodeURIComponent(raw)}&strategy=match`, {
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+      if (res.ok) {
+        const arr = (await res.json()) as unknown;
+        const top = Array.isArray(arr)
+          ? (arr.find((x) => x && typeof x === "object" && typeof (x as { domain?: unknown }).domain === "string" && (x as { domain: string }).domain) as { domain: string } | undefined)
+          : undefined;
+        if (top?.domain) return set(top.domain.trim().toLowerCase());
+      }
+    } catch {
+      /* rơi xuống heuristic */
+    }
+  } else if (!warnedNoSecret) {
+    warnedNoSecret = true;
+    console.info("[c2-accurate] LOGODEV_SECRET trống → bỏ qua Logo.dev Search, dùng KNOWN/heuristic.");
+  }
+  // 4) heuristic: mặc định '.com' (an toàn nhất cho brand lạ). Brand '.vn'/TLD đặc thù (.app/.me…)
+  //    đã do KNOWN_DOMAINS + Logo.dev Search lo (chính xác). KHÔNG probe '.vn' vì domain parked
+  //    hay trả 200 → false-positive (vd spotify.vn). Không key + brand lạ → '.com' là phỏng đoán an toàn nhất.
+  const slug = key.replace(/[^a-z0-9]/g, "");
+  return slug ? set(`${slug}.com`) : null;
 }
 
 /**
@@ -181,8 +255,10 @@ export async function planShotsAccurate(ctx: {
   llm: DirectorLLM;
   writerModel: string;
   onUsage?: (costUsd: number, tokensIn: number, tokensOut: number) => void | Promise<void>;
+  /** Tiêm fetch cho resolveBrandDomain (test offline). Mặc định global fetch. */
+  fetchImpl?: typeof fetch;
 }): Promise<ShotPlan[]> {
-  const { topic, scriptText, factHint, segments, fallbackPrompts, count, llm, writerModel, onUsage } = ctx;
+  const { topic, scriptText, factHint, segments, fallbackPrompts, count, llm, writerModel, onUsage, fetchImpl } = ctx;
   const concepts = (): ShotPlan[] =>
     Array.from({ length: count }, (_, i) => ({
       imageType: "concept" as const,
@@ -217,7 +293,18 @@ export async function planShotsAccurate(ctx: {
     if (onUsage && (res.costUsd || res.tokensIn || res.tokensOut)) {
       await onUsage(res.costUsd || 0, res.tokensIn || 0, res.tokensOut || 0);
     }
-    return parseShotPlans(res.text, count, fallbackPrompts);
+    const plans = parseShotPlans(res.text, count, fallbackPrompts);
+    // NÂNG ĐỘ PHỦ LOGO: resolve domain ASYNC cho shot 'brand' (KNOWN → đã-domain → Logo.dev Search → heuristic),
+    // vượt qua guessDomain sync trong parseShotPlans. Best-effort (không throw) → giữ plans dù resolve lỗi.
+    await Promise.all(
+      plans.map(async (p) => {
+        if (p.imageType === "brand" && p.entity) {
+          const d = await resolveBrandDomain(p.entity, { fetchImpl });
+          if (d) p.domain = d;
+        }
+      })
+    );
+    return plans;
   } catch {
     return concepts(); // an toàn: lỗi LLM → toàn bộ concept + prompt cũ
   }
