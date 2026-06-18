@@ -211,6 +211,20 @@ function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
   return html.replace(/(<div id="bglayer">)(\s*<\/div>)/, `$1${tags.join("")}</div>`);
 }
 
+// Worker-pool: chạy `fn(item)` với tối đa `limit` tác vụ ĐỒNG THỜI (kéo item kế khi 1 worker rảnh).
+// fn được bọc try/catch → 1 item lỗi KHÔNG làm chết worker / reject cả mẻ (giữ tính best-effort).
+async function mapWithConcurrency(items, limit, fn) {
+  let next = 0;
+  const n = Math.max(1, Math.min(limit, items.length));
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try { await fn(items[i], i); } catch { /* mỗi item đã best-effort bên trong */ }
+    }
+  };
+  await Promise.all(Array.from({ length: n }, worker));
+}
+
 // C2 HYBRID: tải clip Pexels (type "video") về FILE LOCAL cạnh entry HTML, đổi src sang tên file
 // tương đối → frame-stepping seek tức thì (remote video buffers/seeks mỗi frame = timeout/OOM trên
 // VPS 2-vCPU, đúng lý do trước đây chỉ dùng ảnh). Ảnh giữ URL remote (nhẹ, load ngay). Best-effort:
@@ -219,29 +233,49 @@ function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
 // CODEC (C2 HYBRID): Pexels phát H.264/MP4 mà Playwright Chromium KHÔNG decode được (không có
 // codec độc quyền) → <video> đứng hình. Vì vậy SAU khi tải về ta TRANSCODE → VP9/WebM (codec mở
 // Chromium decode+seek tốt) rồi mới dùng. maxDurationSec bound thời gian encode trên VPS.
+// TỐC ĐỘ: tải+transcode SONG SONG (mapWithConcurrency) thay vì for tuần tự — xem ghi chú trong hàm.
 async function downloadFootageVideos(bgUrls, bgTypes, destDir, id, maxDurationSec) {
   const urls = bgUrls.slice();
   const files = [];
+  // Chỉ những index là "video" + remote hợp lệ mới cần tải+transcode (ảnh AI giữ URL remote).
+  const targets = [];
   for (let i = 0; i < urls.length; i++) {
     if (bgTypes?.[i] !== "video") continue;
     const remote = urls[i];
     if (!remote || /^[.][/]/.test(String(remote))) continue; // rỗng / đã là path local → bỏ
+    targets.push(i);
+  }
+  if (targets.length === 0) return { urls, files };
+
+  // TỐC ĐỘ: TRƯỚC đây for-loop TUẦN TỰ (tải xong clip i mới sang i+1) → tổng = Σ(tải+transcode).
+  // GIỜ chạy SONG SONG (worker-pool, default 4 đồng thời, chỉnh qua BROLL_DL_CONCURRENCY) → tổng ≈
+  // mẻ chậm nhất. Mỗi worker xử lý 1 index RIÊNG: `urls[i]=` ghi index khác nhau, `files.push` là
+  // thao tác đồng bộ (event-loop đơn luồng) → KHÔNG đua dữ liệu. Thứ tự `urls` giữ NGUYÊN theo index.
+  // Lỗi 1 clip → riêng clip đó giữ URL remote (fallback), KHÔNG chặn cả mẻ.
+  const limit = Math.max(1, Math.min(6, Number(process.env.BROLL_DL_CONCURRENCY) || 4));
+  const t0 = Date.now();
+  await mapWithConcurrency(targets, limit, async (i) => {
+    const remote = urls[i];
+    const tDl0 = Date.now();
     try {
       const res = await fetch(remote);
-      if (!res.ok) continue;
+      if (!res.ok) return;
       const ct = res.headers.get("content-type") || "";
-      if (!ct.startsWith("video/")) continue; // không phải video → giữ remote
+      if (!ct.startsWith("video/")) return; // không phải video → giữ remote
       const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length < 1024) continue; // file rỗng/hỏng → giữ remote
+      if (buf.length < 1024) return; // file rỗng/hỏng → giữ remote
       const srcAbs = path.join(destDir, `.render-${id}-bg${i}.src.mp4`);
       await fs.writeFile(srcAbs, buf);
+      const dlMs = Date.now() - tDl0;
       // H.264 → VP9/WebM (xem transcodeToWebm). OK → dùng webm + dọn cả 2 file sau render.
       const webmName = `.render-${id}-bg${i}.webm`;
       const webmAbs = path.join(destDir, webmName);
+      const tTx0 = Date.now();
       try {
         await transcodeToWebm(srcAbs, webmAbs, maxDurationSec);
         urls[i] = webmName; // src tương đối — cùng thư mục entry HTML (same-origin file://)
         files.push(webmAbs, srcAbs);
+        console.log(`[broll-dl] bg${i} ok dl=${dlMs}ms tx=${Date.now() - tTx0}ms`);
       } catch (e) {
         // Transcode lỗi (hiếm): dọn CẢ mp4 nguồn LẪN webm dở (transcodeToWebm cũng tự dọn outAbs —
         // đây là lớp phòng vệ), GIỮ URL remote (best-effort — render không sập, dù clip remote H.264
@@ -253,7 +287,8 @@ async function downloadFootageVideos(bgUrls, bgTypes, destDir, id, maxDurationSe
     } catch (e) {
       console.error("[broll-video-dl-fail]", i, e?.message || e); // giữ remote, render vẫn chạy
     }
-  }
+  });
+  console.log(`[broll-dl] ${targets.length} clip(s) tải+transcode trong ${Date.now() - t0}ms (concurrency=${Math.min(limit, targets.length)})`);
   return { urls, files };
 }
 
@@ -322,6 +357,7 @@ async function renderTemplate({ template, variables, quality }) {
   //    Vẫn dùng bản HTML đã bake (ảnh b-roll tĩnh cần cho media); audio do engine
   //    tự mux từ variables.voice_url; duration đọc từ variables. ──
   if (RENDER_ENGINE === "playwright") {
+    const tRender0 = Date.now();
     try {
       await renderWithPlaywright({
         entryHtmlAbs: path.join(__dirname, compRel),
@@ -330,6 +366,7 @@ async function renderTemplate({ template, variables, quality }) {
         outFile,
         fps: RENDER_FPS,
       });
+      console.log(`[render-playwright] ${template} render trong ${Date.now() - tRender0}ms (fps=${RENDER_FPS})`);
       return { tmpDir, outFile };
     } catch (e) {
       console.error("[render-fail-playwright]", e?.message || e);

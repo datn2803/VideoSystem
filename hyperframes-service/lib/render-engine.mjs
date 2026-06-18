@@ -34,12 +34,24 @@ const ffmpegBin = () => process.env.FFMPEG_PATH || "ffmpeg";
  * @param {string} outAbs  file .webm đích
  * @param {number} [maxDurationSec]  giới hạn -t (bound thời gian encode; clip dài chỉ cần phần đầu)
  */
+// TỐC ĐỘ: hạ độ phân giải đích xuống HỘP 720×1280 (giữ DỌC 9:16). B-roll là NỀN cutaway
+// (object-fit:cover lên frame 1080×1920) → KHÔNG cần 1080 full. Ít pixel hơn ⇒ VP9 encode
+// nhanh hơn VÀ — quan trọng hơn — Chromium decode/seek mỗi frame NHẸ hơn nhiều (frame-stepping
+// set video.currentTime + chờ 'seeked' từng frame chính là nút cổ chai). force_original_aspect_ratio
+// =decrease + min(iw/ih,…) = vừa khít hộp, GIỮ tỉ lệ gốc (không méo), KHÔNG phóng to clip nhỏ;
+// force_divisible_by=2 đảm bảo dims CHẴN cho yuv420p (cần ffmpeg ≥4.4 — image render có 5.1). Tuỳ
+// chỉnh qua BROLL_WEBM_MAXH (default 1280; width tỉ lệ theo, cap 720).
+const brollMaxH = () => Math.max(360, Math.min(1920, Number(process.env.BROLL_WEBM_MAXH) || 1280));
 export async function transcodeToWebm(srcAbs, outAbs, maxDurationSec) {
+  const maxH = brollMaxH();
+  const maxW = Math.round((maxH * 720) / 1280 / 2) * 2; // giữ tỉ lệ hộp 9:16, dims chẵn
+  const vfScale = `scale=w='min(iw,${maxW})':h='min(ih,${maxH})':force_original_aspect_ratio=decrease:force_divisible_by=2`;
   const args = [
     "-y",
     ...(maxDurationSec && maxDurationSec > 0 ? ["-t", String(Math.min(600, maxDurationSec))] : []),
     "-i", srcAbs,
     "-an", // b-roll câm (engine tự mux voice_url riêng)
+    "-vf", vfScale, // hạ ~720×1280 (xem ghi chú trên) — encode + decode/seek nhẹ hơn
     "-c:v", "libvpx-vp9",
     "-b:v", "0", "-crf", "36", // CRF mode — nền draft, nhẹ
     "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1", // tốc độ ưu tiên (VPS yếu)
