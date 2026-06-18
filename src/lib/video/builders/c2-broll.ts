@@ -24,8 +24,14 @@ import {
   fetchBrandLogo,
   brandScenePrompt,
   type ShotPlan,
+  type ImageType,
 } from "./c2-accurate";
 import { isC2Hybrid, searchPexelsClip, toPexelsQuery } from "./pexels";
+
+// C2 HYBRID — loại cảnh THỬ Pexels (video THẬT) trước, miss/không key → fallback ảnh AI:
+//   real-scene (cảnh đời thực — MẶC ĐỊNH cho đa số chủ đề), concept (trừu tượng), product (vật/thiết bị).
+// app-ui / brand / chart → LUÔN ảnh AI (UI có chữ / logo brand / biểu đồ số — AI làm chuẩn hơn stock).
+const PEXELS_TYPES: ReadonlySet<ImageType> = new Set<ImageType>(["real-scene", "concept", "product"]);
 
 async function pickImageProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
@@ -232,6 +238,9 @@ async function generateBrollImages(
         llm: directorLlm,
         writerModel,
         onUsage: recordLLMUsage,
+        // HYBRID → đạo diễn ƯU TIÊN 'real-scene' (Pexels video thật mọi chủ đề).
+        // Pure accurate (C2_ACCURATE, hybrid off) → false → prompt director Y NGUYÊN bản cũ.
+        preferRealScene: hybrid,
       });
     } catch (e) {
       console.error("[c2-accurate] điều phối lỗi → fallback C2 cũ:", e instanceof Error ? e.message : e);
@@ -250,9 +259,11 @@ async function generateBrollImages(
   const results = await Promise.all(
     Array.from({ length: count }, (_, i) => i).map(async (i): Promise<Shot | null> => {
       const plan = plans?.[i];
-      // HYBRID: cảnh 'concept' → thử clip Pexels DỌC thật trước; có → dùng VIDEO (free, KHÔNG đốt tiền
-      // ảnh, KHÔNG cache blob vì link Pexels đã công khai); miss/không key → rơi xuống ảnh AI như cũ.
-      if (hybrid && plan?.imageType === "concept") {
+      // HYBRID: cảnh real-scene/concept/product → thử clip Pexels DỌC thật trước; có → dùng VIDEO
+      // (free, KHÔNG đốt tiền ảnh, KHÔNG cache blob vì link Pexels đã công khai); miss/không key →
+      // rơi xuống ảnh AI như cũ. app-ui/brand/chart KHÔNG vào đây → luôn ảnh AI (bên dưới).
+      if (hybrid && plan && PEXELS_TYPES.has(plan.imageType)) {
+        // Query lấy theo prompt TẢ CẢNH (chủ thể + hành động + bối cảnh); chèn entity nếu có.
         const query = toPexelsQuery(plan.entity ? `${plan.entity} ${plan.prompt}` : plan.prompt);
         const clip = await searchPexelsClip(query, { orientation: "portrait", apiKey: pexelsKey });
         if (clip?.url) {

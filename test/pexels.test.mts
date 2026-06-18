@@ -34,6 +34,31 @@ import { eq, ok, done } from "./assert.mjs";
   eq(toPexelsQuery(""), "", "rỗng → rỗng");
 }
 
+// ── 2b) toPexelsQuery — cảnh real-scene ĐA CHỦ ĐỀ (chủ thể + người + hành động) ──
+{
+  // Tài chính
+  const qFin = toPexelsQuery("a young Vietnamese woman reviewing monthly bills at a kitchen table");
+  ok(/woman/.test(qFin) && /(bills|kitchen|reviewing)/.test(qFin), "tài chính: giữ woman + chủ thể/hành động");
+  ok(!/\byoung\b/.test(qFin), "bỏ modifier chung 'young'");
+  ok(qFin.split(/\s+/).length <= 5, "tài chính: ≤5 từ");
+
+  // Sức khoẻ — có chỉ dẫn máy quay đầu prompt
+  const qHealth = toPexelsQuery("WIDE establishing shot of a person jogging through a city park at sunrise");
+  ok(/jogging/.test(qHealth) && /park/.test(qHealth), "sức khoẻ: giữ jogging + park");
+  ok(!/(wide|establishing|shot|through)/.test(qHealth), "sức khoẻ: bỏ chỉ dẫn máy quay/nối (wide/establishing/shot/through)");
+
+  // Kỹ năng / nấu ăn — EXTREME CLOSE-UP
+  const qSkill = toPexelsQuery("EXTREME CLOSE-UP of hands chopping fresh vegetables on a wooden board");
+  ok(/hands/.test(qSkill) && /(chopping|vegetables)/.test(qSkill), "kỹ năng: giữ hands + hành động");
+  ok(!/(extreme|close)/.test(qSkill), "kỹ năng: bỏ 'extreme'/'close'");
+
+  // dedupe — từ lặp KHÔNG phí slot
+  const qDup = toPexelsQuery("market market street food street vendor");
+  const w = qDup.split(/\s+/);
+  eq(w.length, new Set(w).size, "dedupe: không từ nào lặp trong query");
+  ok(/market/.test(qDup) && /street/.test(qDup) && /vendor/.test(qDup), "dedupe: vẫn giữ đủ chủ thể duy nhất");
+}
+
 // ── 3) pickPortraitFile — chọn mp4 DỌC gần 1080×1920, phạt 4K ─────────────
 {
   const files = [

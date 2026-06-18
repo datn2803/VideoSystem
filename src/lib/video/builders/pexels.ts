@@ -16,24 +16,41 @@ export function isC2Hybrid(): boolean {
   return process.env.C2_HYBRID === "1";
 }
 
-// Filler điện ảnh trong prompt đạo diễn → BỎ để query Pexels gọn, đúng CHỦ THỂ (không dính phong cách).
+// Filler trong prompt đạo diễn → BỎ để query Pexels gọn, đúng CHỦ THỂ (không dính phong cách/máy quay).
+// Mục tiêu: query còn lại ưu tiên DANH TỪ chủ thể + người + HÀNH ĐỘNG (tốt cho stock mọi chủ đề).
 const STOP: ReadonlySet<string> = new Set([
+  // mạo từ / giới từ / liên từ
   "a", "an", "the", "of", "in", "on", "with", "and", "or", "to", "for", "at", "by", "as", "is", "are",
+  "into", "onto", "from", "through", "across", "around", "behind", "between", "over", "under", "near",
+  "this", "that", "these", "those", "their", "his", "her", "its", "while", "during", "then", "than",
+  // phong cách / hậu kỳ điện ảnh
   "cinematic", "cinematographic", "photorealistic", "realistic", "photo", "photograph", "vertical",
   "composition", "dramatic", "directional", "lighting", "light", "shallow", "depth", "field", "bokeh",
   "moody", "cool", "warm", "toned", "tone", "color", "colour", "grade", "graded", "shot", "establishing",
   "broll", "professional", "high", "fidelity", "render", "rendered", "closeup", "macro", "slow", "motion",
   "modern", "scene", "background", "abstract", "detailed", "detail", "texture", "sharp", "focus", "studio",
+  // chỉ dẫn MÁY QUAY / GÓC (không phải chủ thể)
+  "wide", "medium", "extreme", "close", "up", "angle", "view", "shots", "low", "top", "down",
+  "shoulder", "dynamic", "pov", "frame", "framing", "perspective", "aerial", "drone", "handheld",
+  // động từ "hiển thị"/nối + tính từ chung yếu cho stock
+  "showing", "shows", "show", "depicting", "symbolising", "symbolizing", "representing", "featuring",
+  "young", "old", "busy", "single", "various", "relevant", "symbolic", "beautiful", "stunning", "clean",
+  // từ chống-chữ (không phải chủ thể)
   "no", "readable", "text", "captions", "caption", "watermark", "logo", "ui", "labels", "label", "interface",
 ]);
 
 /**
- * Prompt đạo diễn (tiếng Anh) → query Pexels NGẮN: bỏ filler điện ảnh, giữ ~5 từ chủ thể. PURE.
- * Rỗng sau lọc → rơi về 3 từ đầu của prompt gốc (vẫn có gì đó để tìm).
+ * Prompt TẢ CẢNH (tiếng Anh) → query Pexels NGẮN cho MỌI chủ đề: bỏ filler phong cách/máy quay,
+ * DEDUPE (giữ thứ tự), giữ ~5 từ chủ thể + người + hành động. PURE.
+ * Rỗng sau lọc (prompt toàn filler) → rơi về 3 từ đầu của prompt gốc (vẫn có gì đó để tìm).
  */
 export function toPexelsQuery(text: string): string {
   const norm = String(text || "").toLowerCase().replace(/9:16/g, " ").replace(/[^a-z0-9\s]/g, " ");
-  const words = norm.split(/\s+/).filter((w) => w && !STOP.has(w) && w.length > 1);
+  const seen = new Set<string>();
+  const words = norm
+    .split(/\s+/)
+    .filter((w) => w && !STOP.has(w) && w.length > 1)
+    .filter((w) => (seen.has(w) ? false : (seen.add(w), true))); // dedupe — khỏi phí slot cho từ lặp
   const picked = words.slice(0, 5).join(" ").trim();
   if (picked) return picked;
   return norm.split(/\s+/).filter(Boolean).slice(0, 3).join(" ");

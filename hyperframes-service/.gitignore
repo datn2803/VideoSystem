@@ -6,4 +6,7 @@ tmp/
 .DS_Store
 .imgcache/
 compositions/.imgs/
-compositions/.render-*.html
+# Temp render: entry HTML đã bake + clip Pexels transcode (.webm/.src.mp4) + bản copy .pw-* của engine.
+# Production tự xoá trong finally; ignore phòng render crash để KHÔNG lỡ commit file tạm.
+compositions/.render-*
+compositions/.pw-*

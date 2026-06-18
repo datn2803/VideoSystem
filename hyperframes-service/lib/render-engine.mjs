@@ -18,6 +18,50 @@ import crypto from "node:crypto";
 // Đọc TẠI THỜI ĐIỂM GỌI (không chốt lúc import — caller/test có thể set env sau import).
 const ffmpegBin = () => process.env.FFMPEG_PATH || "ffmpeg";
 
+/**
+ * C2 HYBRID — transcode clip Pexels (H.264/MP4) → VP9/WebM.
+ *
+ * VÌ SAO BẮT BUỘC: Playwright Chromium là bản open-source KHÔNG kèm codec độc quyền
+ * (H.264/AAC). Pexels chỉ phát H.264 MP4 → thẻ <video> báo MEDIA_ERR_SRC_NOT_SUPPORTED
+ * (readyState 0, canPlayType('avc1')="" ) → frame-stepping screenshot ra khung ĐỨNG HÌNH/đen.
+ * VP9 trong WebM là codec MỞ mà Chromium decode + seek tốt → clip CHẠY khi seek currentTime.
+ * (đã verify: chromium headless decode webm readyState=4, seeked OK; mp4 H.264 errCode=4.)
+ *
+ * Bỏ audio (b-roll câm — voice mux riêng). CRF + realtime/cpu-used cao để encode NHANH trên
+ * VPS 2-vCPU (chất lượng đủ cho NỀN draft). Lỗi → throw (caller best-effort xử lý).
+ *
+ * @param {string} srcAbs  file nguồn (mp4 H.264 đã tải về local)
+ * @param {string} outAbs  file .webm đích
+ * @param {number} [maxDurationSec]  giới hạn -t (bound thời gian encode; clip dài chỉ cần phần đầu)
+ */
+export async function transcodeToWebm(srcAbs, outAbs, maxDurationSec) {
+  const args = [
+    "-y",
+    ...(maxDurationSec && maxDurationSec > 0 ? ["-t", String(Math.min(600, maxDurationSec))] : []),
+    "-i", srcAbs,
+    "-an", // b-roll câm (engine tự mux voice_url riêng)
+    "-c:v", "libvpx-vp9",
+    "-b:v", "0", "-crf", "36", // CRF mode — nền draft, nhẹ
+    "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1", // tốc độ ưu tiên (VPS yếu)
+    "-pix_fmt", "yuv420p",
+    outAbs,
+  ];
+  try {
+    await new Promise((resolve, reject) => {
+      const ff = spawn(ffmpegBin(), args, { stdio: ["ignore", "ignore", "pipe"] });
+      let err = "";
+      ff.stderr.on("data", (c) => { err += c.toString("utf8"); if (err.length > 4000) err = err.slice(-4000); });
+      ff.on("error", (e) => reject(new Error(`ffmpeg webm spawn: ${e.message} (FFMPEG_PATH?)`)));
+      ff.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg webm exit ${code}: ${err.slice(-800)}`))));
+    });
+  } catch (e) {
+    // ffmpeg ghi header webm rất sớm → lỗi-exit hoặc bị kill (OOM/timeout VPS) để lại file DỞ.
+    // Tự dọn outAbs để KHÔNG rò đĩa, rồi ném tiếp (caller best-effort fallback URL remote).
+    await fs.rm(outAbs, { force: true }).catch(() => {});
+    throw e;
+  }
+}
+
 /** Tải voice-over về file tạm (ffmpeg mux). Lỗi → null (video câm vẫn render). */
 async function downloadVoice(url, tmpDir) {
   if (!url || !String(url).trim()) return null;

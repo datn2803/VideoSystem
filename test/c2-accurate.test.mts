@@ -174,6 +174,80 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   eq(p2[0].prompt, "FB0", "LLM lỗi → prompt fallback cũ");
 }
 
+// ── 9) real-scene (C2 HYBRID): type hợp lệ + suffix NO-TEXT + parse ────────
+{
+  ok(suffixFor("real-scene") === SUFFIX_NOTEXT, "real-scene → suffix NO-TEXT (cảnh thực, không chữ)");
+  ok(/no readable text/i.test(suffixFor("real-scene")), "real-scene suffix CẤM chữ (như concept)");
+  // parseShotPlans NHẬN real-scene (không rớt về concept fallback)
+  const rs = parseShotPlans(
+    JSON.stringify([
+      { imageType: "real-scene", prompt: "a busy evening street food market" },
+      { imageType: "app-ui", entity: "Make.com", prompt: "Make.com editor" },
+    ]),
+    2,
+    ["fb0", "fb1"]
+  );
+  eq(rs[0].imageType, "real-scene", "parseShotPlans GIỮ real-scene (không fallback concept)");
+  eq(rs[0].prompt, "a busy evening street food market", "real-scene giữ prompt tả cảnh");
+  eq(rs[0].domain, undefined, "real-scene KHÔNG có domain");
+  eq(rs[1].imageType, "app-ui", "app-ui song song vẫn giữ");
+}
+
+// ── 10) preferRealScene gate prompt director (HYBRID vs accurate cũ) ───────
+{
+  let capturedSystem = "";
+  let capturedUser = "";
+  const captureLlm: DirectorLLM = {
+    complete: async (req) => {
+      capturedSystem = req.system || "";
+      capturedUser = req.messages?.[0]?.content || "";
+      return {
+        text: JSON.stringify([
+          { imageType: "real-scene", prompt: "a woman jogging in a park at sunrise" },
+          { imageType: "app-ui", entity: "Make.com", prompt: "Make.com editor showing modules" },
+        ]),
+      };
+    },
+  };
+  const base = {
+    topic: "Sức khoẻ", scriptText: "Chạy bộ mỗi sáng", factHint: "",
+    segments: ["Chạy bộ", "Theo dõi app"], fallbackPrompts: ["f0", "f1"], count: 2,
+    llm: captureLlm, writerModel: "x",
+  };
+
+  // (a) preferRealScene=true → director ƯU TIÊN real-scene; giữ phân loại trả về
+  const pHybrid = await planShotsAccurate({ ...base, preferRealScene: true });
+  ok(/real-scene/.test(capturedSystem), "HYBRID: system prompt CÓ nhắc 'real-scene'");
+  ok(/MẶC ĐỊNH/.test(capturedSystem), "HYBRID: real-scene là MẶC ĐỊNH cho đa số cảnh");
+  ok(/MẶC ĐỊNH|real-scene/.test(capturedUser), "HYBRID: user prompt cũng hướng real-scene");
+  eq(pHybrid[0].imageType, "real-scene", "HYBRID: giữ real-scene từ director");
+  eq(pHybrid[1].imageType, "app-ui", "HYBRID: app-ui vẫn AI (không ép real-scene)");
+
+  // (b) preferRealScene mặc định (false) → prompt director Y NGUYÊN bản cũ.
+  // HARD INVARIANT: pin CHÍNH XÁC TỪNG BYTE (không chỉ substring) — system+user được ráp từ mảnh
+  // dùng CHUNG với nhánh hybrid (sysIntro/sysOutro/preamble), nên chỉnh các mảnh đó có thể vô tình
+  // làm TRÔI prompt accurate cũ mà substring-check vẫn xanh. OLD_* là BẢN SAO ĐỘC LẬP của prompt cũ.
+  const OLD_SYSTEM =
+    "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video dọc 9:16. Với MỖI cảnh, làm 2 việc: (1) PHÂN LOẠI imageType, (2) viết PROMPT ảnh tiếng Anh CỤ THỂ bám ĐÚNG entity (tên brand/tool/sản phẩm) và SỐ thật trong lời — TUYỆT ĐỐI không chung chung kiểu 'glowing app interface'. " +
+    "imageType — ƯU TIÊN cảnh ĐANG DÙNG (màn hình/thao tác/thiết bị thật) hơn là chỉ logo: " +
+    "'app-ui' = câu mô tả DÙNG phần mềm/app/màn hình/thiết bị-có-màn-hình (kể cả Apple Watch hiện nhịp tim, điện thoại hiện thông báo) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool (vd 'the Make.com scenario editor showing connected modules and a Google Sheets row being filled', 'a phone showing a +500,000đ bank payment notification', 'an Apple Watch face showing 128 bpm heart rate while running'). " +
+    "'product' = THIẾT BỊ/vật phẩm vật lý đang dùng (vd đồng hồ trên cổ tay khi chạy bộ, máy POS quẹt thẻ) → ảnh sản phẩm realistic trong bối cảnh dùng. " +
+    "'brand' = CHỈ khi trọng tâm là NHẬN DIỆN thương hiệu/logo — câu giới thiệu/nhắc TÊN công ty mà KHÔNG mô tả thao tác/màn hình cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). ĐỪNG chọn brand nếu câu đang nói VỀ DÙNG sản phẩm — khi đó chọn app-ui/product. " +
+    "'chart' = số liệu/biểu đồ → biểu đồ trong bối cảnh, có nhãn số đúng. " +
+    "'concept' = cảm xúc/trừu tượng → b-roll điện ảnh KHÔNG chữ. " +
+    "Chỉ trả JSON: mảng object {imageType, entity, domain, prompt} đúng thứ tự, KHÔNG giải thích.";
+  const OLD_USER =
+    `CHỦ ĐỀ: Sức khoẻ\n\nKỊCH BẢN (đọc để lấy entity/số):\n"""Chạy bộ mỗi sáng"""\n\n` +
+    `CÁC CẢNH (đoạn lời tương ứng):\n1. Chạy bộ\n2. Theo dõi app\n\n` +
+    `Trả JSON mảng ĐÚNG 2 object {imageType, entity, domain, prompt}. Mỗi prompt bám entity/số của đoạn lời đó; brand → entity+domain; app-ui → mô tả UI có chữ đúng tool; concept → cảnh điện ảnh không chữ.`;
+  capturedSystem = "";
+  capturedUser = "";
+  await planShotsAccurate({ ...base });
+  ok(!/real-scene/.test(capturedSystem), "ACCURATE cũ: system prompt KHÔNG nhắc real-scene");
+  eq(capturedSystem, OLD_SYSTEM, "ACCURATE cũ: system prompt Y NGUYÊN TỪNG BYTE bản cũ");
+  eq(capturedUser, OLD_USER, "ACCURATE cũ: user prompt Y NGUYÊN TỪNG BYTE bản cũ");
+}
+
 // ── 8) resolveBrandDomain (async, mock fetchImpl) ─────────────────────────
 {
   const saveSecret = process.env.LOGODEV_SECRET;
