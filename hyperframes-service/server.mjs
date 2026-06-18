@@ -23,7 +23,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { assessFrame } from "./lib/vision.mjs";
-import { renderWithPlaywright } from "./lib/render-engine.mjs";
+import { renderWithPlaywright, transcodeToWebm } from "./lib/render-engine.mjs";
 
 const execFileP = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -215,7 +215,11 @@ function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
 // tương đối → frame-stepping seek tức thì (remote video buffers/seeks mỗi frame = timeout/OOM trên
 // VPS 2-vCPU, đúng lý do trước đây chỉ dùng ảnh). Ảnh giữ URL remote (nhẹ, load ngay). Best-effort:
 // clip nào tải lỗi → giữ URL remote (giảm chất chứ KHÔNG sập). Trả { urls, files(để xoá) }.
-async function downloadFootageVideos(bgUrls, bgTypes, destDir, id) {
+//
+// CODEC (C2 HYBRID): Pexels phát H.264/MP4 mà Playwright Chromium KHÔNG decode được (không có
+// codec độc quyền) → <video> đứng hình. Vì vậy SAU khi tải về ta TRANSCODE → VP9/WebM (codec mở
+// Chromium decode+seek tốt) rồi mới dùng. maxDurationSec bound thời gian encode trên VPS.
+async function downloadFootageVideos(bgUrls, bgTypes, destDir, id, maxDurationSec) {
   const urls = bgUrls.slice();
   const files = [];
   for (let i = 0; i < urls.length; i++) {
@@ -229,11 +233,23 @@ async function downloadFootageVideos(bgUrls, bgTypes, destDir, id) {
       if (!ct.startsWith("video/")) continue; // không phải video → giữ remote
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length < 1024) continue; // file rỗng/hỏng → giữ remote
-      const fname = `.render-${id}-bg${i}.mp4`;
-      const abs = path.join(destDir, fname);
-      await fs.writeFile(abs, buf);
-      urls[i] = fname; // src tương đối — cùng thư mục entry HTML (same-origin file://)
-      files.push(abs);
+      const srcAbs = path.join(destDir, `.render-${id}-bg${i}.src.mp4`);
+      await fs.writeFile(srcAbs, buf);
+      // H.264 → VP9/WebM (xem transcodeToWebm). OK → dùng webm + dọn cả 2 file sau render.
+      const webmName = `.render-${id}-bg${i}.webm`;
+      const webmAbs = path.join(destDir, webmName);
+      try {
+        await transcodeToWebm(srcAbs, webmAbs, maxDurationSec);
+        urls[i] = webmName; // src tương đối — cùng thư mục entry HTML (same-origin file://)
+        files.push(webmAbs, srcAbs);
+      } catch (e) {
+        // Transcode lỗi (hiếm): dọn CẢ mp4 nguồn LẪN webm dở (transcodeToWebm cũng tự dọn outAbs —
+        // đây là lớp phòng vệ), GIỮ URL remote (best-effort — render không sập, dù clip remote H.264
+        // có thể vẫn không decode). Log để truy vết.
+        console.error("[broll-webm-transcode-fail]", i, e?.message || e);
+        await fs.rm(srcAbs, { force: true }).catch(() => {});
+        await fs.rm(webmAbs, { force: true }).catch(() => {});
+      }
     } catch (e) {
       console.error("[broll-video-dl-fail]", i, e?.message || e); // giữ remote, render vẫn chạy
     }
@@ -283,7 +299,7 @@ async function renderTemplate({ template, variables, quality }) {
         // C2 HYBRID: tải clip Pexels về local TRƯỚC khi bake (frame-stepping seek remote = stall/timeout
         // trên VPS); ảnh AI giữ URL remote (nhẹ). Không có video → bỏ qua (ảnh thuần như cũ).
         if (bgTypes.some((t) => t === "video")) {
-          const dl = await downloadFootageVideos(bgUrls, bgTypes, COMP_DIR, id);
+          const dl = await downloadFootageVideos(bgUrls, bgTypes, COMP_DIR, id, durSec);
           bgUrls = dl.urls;
           tempVideoFiles = dl.files;
         }

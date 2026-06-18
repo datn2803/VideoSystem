@@ -4,7 +4,10 @@
 // THIẾT KẾ: module KHÔNG import singleton nặng (hub/usage) — `llm` được TIÊM vào
 // planShotsAccurate → mọi hàm còn lại là PURE → unit-test offline không cần env/DB.
 
-export type ImageType = "brand" | "app-ui" | "product" | "concept" | "chart";
+// 'real-scene' (C2 HYBRID): cảnh ĐỜI THỰC quay được bằng máy quay — người/hành động/bối cảnh/
+// vật phổ thông cho MỌI chủ đề. Đây là LOẠI ƯU TIÊN cho Pexels (video THẬT) khi preferRealScene.
+// AI fallback của nó dùng suffix NO-TEXT (như concept) vì là cảnh thực, không có UI/chữ.
+export type ImageType = "brand" | "app-ui" | "product" | "concept" | "chart" | "real-scene";
 
 export type ShotPlan = {
   imageType: ImageType;
@@ -28,7 +31,7 @@ export type DirectorLLM = {
   }) => Promise<{ text: string; costUsd?: number; tokensIn?: number; tokensOut?: number }>;
 };
 
-const IMAGE_TYPES: ReadonlySet<string> = new Set(["brand", "app-ui", "product", "concept", "chart"]);
+const IMAGE_TYPES: ReadonlySet<string> = new Set(["brand", "app-ui", "product", "concept", "chart", "real-scene"]);
 
 /** Cờ bật C2 ACCURATE (mặc định TẮT → giữ C2 cũ). */
 export function isC2Accurate(): boolean {
@@ -49,9 +52,9 @@ export const SUFFIX_NOTEXT =
 export const SUFFIX_TEXT =
   ". Realistic high-fidelity render, vertical 9:16 composition, crisp studio lighting, photorealistic, ACCURATE legible on-screen text and interface labels rendered correctly, clean modern UI, modern Vietnamese context, sharp focus, no watermark.";
 
-/** Chọn suffix theo imageType (concept = no-text; còn lại = cho phép chữ). */
+/** Chọn suffix theo imageType (concept + real-scene = no-text cảnh thực; còn lại = cho phép chữ). */
 export function suffixFor(imageType: ImageType): string {
-  return imageType === "concept" ? SUFFIX_NOTEXT : SUFFIX_TEXT;
+  return imageType === "concept" || imageType === "real-scene" ? SUFFIX_NOTEXT : SUFFIX_TEXT;
 }
 
 // Brand phổ biến → domain chuẩn (ưu tiên trước heuristic). Mở rộng dễ, KHÔNG hard-code chủ đề.
@@ -257,26 +260,47 @@ export async function planShotsAccurate(ctx: {
   onUsage?: (costUsd: number, tokensIn: number, tokensOut: number) => void | Promise<void>;
   /** Tiêm fetch cho resolveBrandDomain (test offline). Mặc định global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * C2 HYBRID (mặc định false): đạo diễn ƯU TIÊN 'real-scene' cho ĐA SỐ cảnh (→ Pexels video thật).
+   * TẮT (pure C2 ACCURATE) → giữ NGUYÊN prompt cũ (không nhắc real-scene) → behavior y nguyên.
+   */
+  preferRealScene?: boolean;
 }): Promise<ShotPlan[]> {
   const { topic, scriptText, factHint, segments, fallbackPrompts, count, llm, writerModel, onUsage, fetchImpl } = ctx;
+  const preferRealScene = !!ctx.preferRealScene;
   const concepts = (): ShotPlan[] =>
     Array.from({ length: count }, (_, i) => ({
       imageType: "concept" as const,
       prompt: (fallbackPrompts[i] || fallbackPrompts[0] || "").trim() || "cinematic b-roll establishing shot",
     }));
+  // Phần GIỚI THIỆU + phần KẾT (JSON-only) GIỮ NGUYÊN cho cả 2 chế độ.
+  const sysIntro =
+    "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video dọc 9:16. Với MỖI cảnh, làm 2 việc: (1) PHÂN LOẠI imageType, (2) viết PROMPT ảnh tiếng Anh CỤ THỂ bám ĐÚNG entity (tên brand/tool/sản phẩm) và SỐ thật trong lời — TUYỆT ĐỐI không chung chung kiểu 'glowing app interface'. ";
+  const sysOutro = "Chỉ trả JSON: mảng object {imageType, entity, domain, prompt} đúng thứ tự, KHÔNG giải thích.";
+  // PURE C2 ACCURATE (preferRealScene=false) — văn bản Y NGUYÊN bản cũ (không phá C2 cũ).
+  const typesAccurate =
+    "imageType — ƯU TIÊN cảnh ĐANG DÙNG (màn hình/thao tác/thiết bị thật) hơn là chỉ logo: " +
+    "'app-ui' = câu mô tả DÙNG phần mềm/app/màn hình/thiết bị-có-màn-hình (kể cả Apple Watch hiện nhịp tim, điện thoại hiện thông báo) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool (vd 'the Make.com scenario editor showing connected modules and a Google Sheets row being filled', 'a phone showing a +500,000đ bank payment notification', 'an Apple Watch face showing 128 bpm heart rate while running'). " +
+    "'product' = THIẾT BỊ/vật phẩm vật lý đang dùng (vd đồng hồ trên cổ tay khi chạy bộ, máy POS quẹt thẻ) → ảnh sản phẩm realistic trong bối cảnh dùng. " +
+    "'brand' = CHỈ khi trọng tâm là NHẬN DIỆN thương hiệu/logo — câu giới thiệu/nhắc TÊN công ty mà KHÔNG mô tả thao tác/màn hình cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). ĐỪNG chọn brand nếu câu đang nói VỀ DÙNG sản phẩm — khi đó chọn app-ui/product. " +
+    "'chart' = số liệu/biểu đồ → biểu đồ trong bối cảnh, có nhãn số đúng. " +
+    "'concept' = cảm xúc/trừu tượng → b-roll điện ảnh KHÔNG chữ. ";
+  // C2 HYBRID (preferRealScene=true) — ƯU TIÊN 'real-scene' cho ĐA SỐ cảnh (→ Pexels video thật, mọi chủ đề).
+  const typesHybrid =
+    "imageType — MẶC ĐỊNH chọn 'real-scene' cho ĐA SỐ cảnh minh hoạ, áp dụng cho MỌI chủ đề (tài chính, sức khoẻ, kỹ năng, nấu ăn, du lịch, đời sống, kinh doanh...): " +
+    "'real-scene' = cảnh ĐỜI THỰC quay được bằng máy quay — người thật/biểu cảm/hành động/bối cảnh/địa điểm/vật phổ thông (vd 'a young Vietnamese woman reviewing monthly bills at a kitchen table with a calculator', 'a person jogging through a city park at sunrise', 'hands chopping fresh vegetables on a wooden cutting board', 'a crowded evening street food market', 'two colleagues discussing over coffee in a bright modern office'). prompt = câu tiếng Anh TẢ CẢNH gồm CHỦ THỂ + HÀNH ĐỘNG + BỐI CẢNH, KHÔNG chữ. ĐÂY LÀ LỰA CHỌN MẶC ĐỊNH — phần lớn cảnh nên là 'real-scene'. " +
+    "CHỈ chọn các loại dưới đây khi cảnh quay người/đời-thực THỰC SỰ không thể hiện được điều cần nói: " +
+    "'app-ui' = câu BẮT BUỘC phải thấy màn hình/giao diện app/phần mềm CỤ THỂ (vd thao tác trong Make.com, thông báo chuyển khoản +500.000đ trên điện thoại) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool. " +
+    "'brand' = trọng tâm là NHẬN DIỆN logo MỘT thương hiệu cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). " +
+    "'chart' = cần biểu đồ/số liệu CỤ THỂ → biểu đồ có nhãn số đúng. " +
+    "'product' = MỘT thiết bị/vật phẩm cụ thể làm CHỦ THỂ CHÍNH (vd Apple Watch hiện 128 bpm, máy POS quẹt thẻ); nếu chỉ là vật thường trong cảnh thì để 'real-scene'. " +
+    "'concept' = cảm xúc/ý trừu tượng KHÔNG quay bằng cảnh thực được → b-roll điện ảnh KHÔNG chữ. " +
+    "Mỗi prompt là câu tiếng Anh tả cảnh, dùng cho CẢ tìm video stock LẪN sinh ảnh AI. ";
   try {
     const segBlock = segments.map((s, i) => `${i + 1}. ${s || topic}`).join("\n");
     const res = await llm.complete({
       model: writerModel,
-      system:
-        "Bạn là ĐẠO DIỄN HÌNH ẢNH cho video dọc 9:16. Với MỖI cảnh, làm 2 việc: (1) PHÂN LOẠI imageType, (2) viết PROMPT ảnh tiếng Anh CỤ THỂ bám ĐÚNG entity (tên brand/tool/sản phẩm) và SỐ thật trong lời — TUYỆT ĐỐI không chung chung kiểu 'glowing app interface'. " +
-        "imageType — ƯU TIÊN cảnh ĐANG DÙNG (màn hình/thao tác/thiết bị thật) hơn là chỉ logo: " +
-        "'app-ui' = câu mô tả DÙNG phần mềm/app/màn hình/thiết bị-có-màn-hình (kể cả Apple Watch hiện nhịp tim, điện thoại hiện thông báo) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool (vd 'the Make.com scenario editor showing connected modules and a Google Sheets row being filled', 'a phone showing a +500,000đ bank payment notification', 'an Apple Watch face showing 128 bpm heart rate while running'). " +
-        "'product' = THIẾT BỊ/vật phẩm vật lý đang dùng (vd đồng hồ trên cổ tay khi chạy bộ, máy POS quẹt thẻ) → ảnh sản phẩm realistic trong bối cảnh dùng. " +
-        "'brand' = CHỈ khi trọng tâm là NHẬN DIỆN thương hiệu/logo — câu giới thiệu/nhắc TÊN công ty mà KHÔNG mô tả thao tác/màn hình cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). ĐỪNG chọn brand nếu câu đang nói VỀ DÙNG sản phẩm — khi đó chọn app-ui/product. " +
-        "'chart' = số liệu/biểu đồ → biểu đồ trong bối cảnh, có nhãn số đúng. " +
-        "'concept' = cảm xúc/trừu tượng → b-roll điện ảnh KHÔNG chữ. " +
-        "Chỉ trả JSON: mảng object {imageType, entity, domain, prompt} đúng thứ tự, KHÔNG giải thích.",
+      system: sysIntro + (preferRealScene ? typesHybrid : typesAccurate) + sysOutro,
       messages: [
         {
           role: "user",
@@ -284,7 +308,9 @@ export async function planShotsAccurate(ctx: {
             `CHỦ ĐỀ: ${topic}\n\nKỊCH BẢN (đọc để lấy entity/số):\n"""${scriptText.slice(0, 1800)}"""\n\n` +
             (factHint.trim() ? `ENTITY/SỐ THẬT (ưu tiên bám):\n"""${factHint.slice(0, 1200)}"""\n\n` : "") +
             `CÁC CẢNH (đoạn lời tương ứng):\n${segBlock}\n\n` +
-            `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. Mỗi prompt bám entity/số của đoạn lời đó; brand → entity+domain; app-ui → mô tả UI có chữ đúng tool; concept → cảnh điện ảnh không chữ.`,
+            (preferRealScene
+              ? `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. MẶC ĐỊNH 'real-scene' (tả cảnh người/hành động/bối cảnh đời thực); app-ui/brand/chart CHỈ khi thật cần UI app/logo brand/biểu đồ; mỗi prompt là câu tiếng Anh tả cảnh dùng cho CẢ video stock LẪN ảnh AI.`
+              : `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. Mỗi prompt bám entity/số của đoạn lời đó; brand → entity+domain; app-ui → mô tả UI có chữ đúng tool; concept → cảnh điện ảnh không chữ.`),
         },
       ],
       maxTokens: 1400,
