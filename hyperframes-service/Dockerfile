@@ -37,11 +37,19 @@ RUN npx playwright install chromium
 # Copy the project (compositions, assets, vendor, server)
 COPY . .
 
-# ── Smoke render at build time — auto-downloads the pinned Chromium on first run ──
-# `hyperframes render` itself fetches the bundled Chromium if missing (there is NO
-# `browser install` subcommand in 0.6.63). FAIL THE BUILD if the pipeline
-# (Chromium download / fonts / gsap / Vietnamese) is broken.
-RUN npx --yes hyperframes@0.6.63 render . \
+# ── Smoke render at build time — FAIL THE BUILD nếu pipeline (Chromium / fonts / gsap /
+#    tiếng Việt) hỏng. Dùng engine CLI `hyperframes` (tự tải Chromium bundled trên amd64).
+#    ⚠ arm64 (vd Mac Apple Silicon chạy local): hyperframes 0.6.63 KHÔNG có "Chrome Headless
+#    Shell" cho ARM64 → cài system `chromium` (tên gói Debian, KHÔNG phải chromium-browser) + trỏ
+#    HYPERFRAMES_BROWSER_PATH. Nhánh `if arm64` KHÔNG chạy trên amd64 → VPS giữ hành vi CŨ y nguyên.
+#    (Runtime thật dùng RENDER_ENGINE=playwright với Chromium của Playwright đã cài ở trên — arm64 OK.)
+RUN ARCH="$(dpkg --print-architecture)"; \
+    if [ "$ARCH" = "arm64" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends chromium && rm -rf /var/lib/apt/lists/* && \
+      export HYPERFRAMES_BROWSER_PATH="$(command -v chromium)" && \
+      echo "[build] arm64 → smoke-render dùng system chromium: $HYPERFRAMES_BROWSER_PATH"; \
+    fi; \
+    npx --yes hyperframes@0.6.63 render . \
          --composition compositions/animation.html \
          --quality draft \
          --variables '{"hook_keyword":"BUILD TEST ố ữ ệ"}' \

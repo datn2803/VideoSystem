@@ -1,5 +1,6 @@
-# HyperFrames render service — Phase 1 deploy (IP + token, no Traefik/TLS).
-# Port 8080 mapped straight out; does NOT touch the existing traefik-traefik-1 container.
+# HyperFrames render service — chạy Docker LOCAL trên Mac, expose cho app Vercel qua
+# Cloudflare Tunnel (cloudflared). Bản deploy VPS cũ (IP + token, cổng 8080): xem DEPLOY.md — vẫn dùng được.
+# Cả 2 service ở CÙNG network mặc định của compose → cloudflared gọi hf-render qua http://hf-render:8080.
 services:
   hf-render:
     build: .
@@ -9,12 +10,26 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
-    # 2 vCPU box: the service already serializes renders (single-render mutex),
-    # but cap container resources so a render never starves the host / Traefik.
+    # Máy Mac mạnh hơn VPS 2-vCPU → NỚI trần (frame-stepping <video> Pexels nặng hơn ảnh tĩnh).
+    # Service vẫn serialize render (single-render mutex) nên 1 job không bao giờ tranh tài nguyên với job khác.
     deploy:
       resources:
         limits:
-          cpus: "1.8"
-          memory: 3g
-    # Chromium headless needs more shared memory than Docker's 64MB default.
+          cpus: "4"
+          memory: 6g
+    # Chromium headless cần nhiều shared memory hơn mặc định 64MB của Docker.
     shm_size: "1gb"
+
+  # Cloudflare Tunnel — đưa hf-render ra Internet cho app Vercel gọi (KHÔNG mở port router/NAT).
+  # Tunnel "remote-managed": tạo trên Cloudflare Zero Trust › Networks › Tunnels, đặt PUBLIC HOSTNAME
+  # trỏ về service http://hf-render:8080 (tên service trên compose network), rồi copy token vào
+  # CLOUDFLARE_TUNNEL_TOKEN trong .env (compose tự đọc .env để nội suy ${...}). Chi tiết: RUN_LOCAL.md.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: hf-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    depends_on:
+      - hf-render

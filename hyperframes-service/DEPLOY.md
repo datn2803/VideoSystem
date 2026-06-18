@@ -1,5 +1,8 @@
 # Deploy — HyperFrames Render Service (Phase 1 + 2 async)
 
+> 💡 **Cách khác — chạy LOCAL trên Mac + Cloudflare Tunnel** (không cần VPS): xem [`RUN_LOCAL.md`](RUN_LOCAL.md).
+> Tài liệu VPS bên dưới GIỮ LÀM THAM KHẢO (vẫn deploy được lên VPS như cũ).
+
 Deploy lên **VPS Hostinger** đã có sẵn Docker + Traefik. Đi đường **đơn giản nhất: IP + token, cổng 8080, KHÔNG domain/TLS/Traefik**. App gọi `http://76.13.223.45:8080` kèm Bearer token.
 
 > **PHASE 2 — service nay là ASYNC.** `POST /render` trả ngay `202 {jobId}`, render chạy nền; app **poll** `GET /jobs/:jobId` tới khi `done` rồi lấy `url`. (Vì render ~40-120s > giới hạn ~60s của Vercel → không thể gọi đồng bộ.)
