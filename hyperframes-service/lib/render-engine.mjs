@@ -129,9 +129,12 @@ export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, o
       });
     for (let i = 0; i < totalFrames; i++) {
       const t = Math.min(duration - 0.0001, i / fps);
-      await page.evaluate((tt) => {
+      await page.evaluate(async (tt) => {
         const tl = window.__timelines.main;
         tl.time(tt, false);
+        // C2 HYBRID: broll có <video> khai báo __prepareFrame → seek video + chờ 'seeked' TRƯỚC
+        // screenshot (nếu không, <video> ĐỨNG HÌNH khi frame-step). Comp khác không có hook → bỏ qua.
+        if (typeof window.__prepareFrame === "function") await window.__prepareFrame(tt);
       }, t);
       const shot = await page.screenshot(
         frameFmt === "mjpeg" ? { type: "jpeg", quality: 90 } : { type: "png" }

@@ -156,8 +156,13 @@ function patchComposition(html, durationSec, voiceUrl) {
 // frame → timeout/OOM on a 2-vCPU VPS), and Ken Burns gives them motion. Each
 // image is sequential — cumulative start, its own data-duration. Last image
 // extends to cover any rounding gap so footage never cuts to gradient early.
-function injectBrollImages(html, bgUrls, shotDurations, totalDur) {
+function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
   if (!Array.isArray(bgUrls) || bgUrls.length === 0) return html; // no footage → template gradient fallback
+  // bgTypes song song bgUrls ("image"|"video"). Thiếu/cũ (payload C2 trước HYBRID) → coi TẤT CẢ
+  // là "image" → hành vi <img> cũ y nguyên (backward-compat tuyệt đối).
+  let types = Array.isArray(bgTypes) && bgTypes.length === bgUrls.length
+    ? bgTypes.map((t) => (t === "video" ? "video" : "image"))
+    : bgUrls.map(() => "image");
   // Resolve per-image durations: use shotDurations if valid, else split evenly.
   let durs = Array.isArray(shotDurations) && shotDurations.length === bgUrls.length
     ? shotDurations.map((d) => Number(d)).map((d) => (Number.isFinite(d) && d > 0 ? d : 0))
@@ -166,36 +171,74 @@ function injectBrollImages(html, bgUrls, shotDurations, totalDur) {
     const even = totalDur / bgUrls.length;
     durs = bgUrls.map(() => even);
   }
-  // Khử ẢNH TRÙNG (cùng src liền kề — cache có thể trả cùng URL cho 2 shot) → gộp
-  // vào clip trước (cộng dồn duration) thay vì tạo 2 <img> trùng src/timing. Giữ
-  // NGUYÊN tổng thời lượng; chỉ bỏ phần media-discovery trùng.
+  // Khử nền TRÙNG (cùng src liền kề — cache có thể trả cùng URL cho 2 shot) → gộp duration
+  // vào clip trước. Giữ type của clip được GIỮ LẠI (src trùng nên type trùng). Tổng thời lượng KHÔNG đổi.
   {
     const u = [];
     const ud = [];
+    const ut = [];
     for (let i = 0; i < bgUrls.length; i++) {
       if (u.length && u[u.length - 1] === bgUrls[i]) {
         ud[ud.length - 1] += durs[i];
       } else {
         u.push(bgUrls[i]);
         ud.push(durs[i]);
+        ut.push(types[i]);
       }
     }
     bgUrls = u;
     durs = ud;
+    types = ut;
   }
   let start = 0;
   const tags = bgUrls.map((url, i) => {
     const isLast = i === bgUrls.length - 1;
-    // last image holds to the end (cover rounding); others use their own dur.
+    // last clip holds to the end (cover rounding); others use their own dur.
     const dur = isLast ? Math.max(0.1, totalDur - start) : durs[i];
     const s = Math.round(start * 1000) / 1000;
     const d = Math.round(dur * 1000) / 1000;
     start += durs[i];
     // track-index i so overlapping crossfade tails layer correctly.
-    return `<img id="bgv${i}" class="bg clip" data-bg-index="${i}" data-start="${s}" data-duration="${d}" data-track-index="${i}" src="${escAttr(url)}">`;
+    const common = `id="bgv${i}" class="bg clip" data-bg-index="${i}" data-start="${s}" data-duration="${d}" data-track-index="${i}"`;
+    // C2 HYBRID: clip Pexels → <video> (muted/playsinline/preload=auto; frame-stepping điều khiển qua
+    // currentTime + __prepareFrame chờ 'seeked'). Ảnh AI → <img> + Ken-Burns như cũ.
+    if (types[i] === "video") {
+      return `<video ${common} muted playsinline preload="auto" src="${escAttr(url)}"></video>`;
+    }
+    return `<img ${common} src="${escAttr(url)}">`;
   });
-  // Insert the image tags inside #bglayer (replace its empty body).
+  // Insert the footage tags inside #bglayer (replace its empty body).
   return html.replace(/(<div id="bglayer">)(\s*<\/div>)/, `$1${tags.join("")}</div>`);
+}
+
+// C2 HYBRID: tải clip Pexels (type "video") về FILE LOCAL cạnh entry HTML, đổi src sang tên file
+// tương đối → frame-stepping seek tức thì (remote video buffers/seeks mỗi frame = timeout/OOM trên
+// VPS 2-vCPU, đúng lý do trước đây chỉ dùng ảnh). Ảnh giữ URL remote (nhẹ, load ngay). Best-effort:
+// clip nào tải lỗi → giữ URL remote (giảm chất chứ KHÔNG sập). Trả { urls, files(để xoá) }.
+async function downloadFootageVideos(bgUrls, bgTypes, destDir, id) {
+  const urls = bgUrls.slice();
+  const files = [];
+  for (let i = 0; i < urls.length; i++) {
+    if (bgTypes?.[i] !== "video") continue;
+    const remote = urls[i];
+    if (!remote || /^[.][/]/.test(String(remote))) continue; // rỗng / đã là path local → bỏ
+    try {
+      const res = await fetch(remote);
+      if (!res.ok) continue;
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.startsWith("video/")) continue; // không phải video → giữ remote
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 1024) continue; // file rỗng/hỏng → giữ remote
+      const fname = `.render-${id}-bg${i}.mp4`;
+      const abs = path.join(destDir, fname);
+      await fs.writeFile(abs, buf);
+      urls[i] = fname; // src tương đối — cùng thư mục entry HTML (same-origin file://)
+      files.push(abs);
+    } catch (e) {
+      console.error("[broll-video-dl-fail]", i, e?.message || e); // giữ remote, render vẫn chạy
+    }
+  }
+  return { urls, files };
 }
 
 // ── core render: returns { tmpDir, outFile } ; caller cleans up tmpDir ──
@@ -218,6 +261,7 @@ async function renderTemplate({ template, variables, quality }) {
   // ALLOWED_TEMPLATES, so it can never escape compositions/.
   let compRel = `compositions/${template}.html`;
   let tempEntryAbs = null;
+  let tempVideoFiles = []; // C2 HYBRID: clip Pexels tải về local → xoá sau render (cả 2 nhánh engine)
 
   // animation + broll: bake duration + voice src into a temp copy kept INSIDE
   // compositions/ (so the template's ../assets and ../vendor relative URLs still
@@ -225,8 +269,8 @@ async function renderTemplate({ template, variables, quality }) {
   if (template === "animation" || template === "broll") {
     const dur = Number(variables?.duration);
     const hasVoice = variables?.voice_url && String(variables.voice_url).trim();
-    // broll also carries footage clips (bg_urls) → inject static <video> tags.
-    const bgUrls = template === "broll" ? safeJsonArray(variables?.bg_urls) : [];
+    // broll also carries footage clips (bg_urls) → inject static <img>/<video> tags.
+    let bgUrls = template === "broll" ? safeJsonArray(variables?.bg_urls) : [];
     const needsBake = (Number.isFinite(dur) && dur > 0) || hasVoice || bgUrls.length > 0;
     if (needsBake) {
       const src = await fs.readFile(path.join(COMP_DIR, `${template}.html`), "utf8");
@@ -235,7 +279,15 @@ async function renderTemplate({ template, variables, quality }) {
       let patched = patchComposition(src, durSec, hasVoice ? variables.voice_url : "");
       if (template === "broll" && bgUrls.length > 0) {
         const shotDurations = safeJsonArray(variables?.shot_durations);
-        patched = injectBrollImages(patched, bgUrls, shotDurations, durSec);
+        const bgTypes = safeJsonArray(variables?.bg_types);
+        // C2 HYBRID: tải clip Pexels về local TRƯỚC khi bake (frame-stepping seek remote = stall/timeout
+        // trên VPS); ảnh AI giữ URL remote (nhẹ). Không có video → bỏ qua (ảnh thuần như cũ).
+        if (bgTypes.some((t) => t === "video")) {
+          const dl = await downloadFootageVideos(bgUrls, bgTypes, COMP_DIR, id);
+          bgUrls = dl.urls;
+          tempVideoFiles = dl.files;
+        }
+        patched = injectBrollImages(patched, bgUrls, bgTypes, shotDurations, durSec);
       }
       // animation: bake ảnh cutout hero vào static src (media pass scan compile-time →
       // runtime setAttribute là quá muộn). Rỗng → giữ src="" → runtime JS tự remove imgHero.
@@ -268,6 +320,7 @@ async function renderTemplate({ template, variables, quality }) {
       throw e;
     } finally {
       if (tempEntryAbs) await fs.rm(tempEntryAbs, { force: true }).catch(() => {});
+      for (const f of tempVideoFiles) await fs.rm(f, { force: true }).catch(() => {}); // C2 HYBRID: xoá clip tạm
     }
   }
 
@@ -307,6 +360,7 @@ async function renderTemplate({ template, variables, quality }) {
     throw e;
   } finally {
     if (tempEntryAbs) await fs.rm(tempEntryAbs, { force: true }).catch(() => {});
+    for (const f of tempVideoFiles) await fs.rm(f, { force: true }).catch(() => {}); // C2 HYBRID: xoá clip tạm
   }
 
   return { tmpDir, outFile };

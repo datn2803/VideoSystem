@@ -25,6 +25,7 @@ import {
   brandScenePrompt,
   type ShotPlan,
 } from "./c2-accurate";
+import { isC2Hybrid, searchPexelsClip, toPexelsQuery } from "./pexels";
 
 async function pickImageProvider() {
   const providers = (await store.listProviders()).filter((p) => p.kind === "image" && p.enabled);
@@ -142,7 +143,8 @@ async function planShotPrompts(topic: string, voiceOver: string, hints: string[]
  * broll-images (public) → URL công khai cho service tải từ xa.
  */
 type BrollImagesResult = {
-  images: { url: string; durationSec: number }[];
+  /** type: "image" (ảnh AI + Ken-Burns, mặc định) | "video" (clip Pexels thật, C2 HYBRID). */
+  images: { url: string; durationSec: number; type: "image" | "video" }[];
   /** Có ý định sinh ảnh không (RENDER_LIVE=1 + có provider). Phân biệt với chế độ gradient cố ý. */
   intended: boolean;
   /** Số ảnh lỗi + message lỗi đầu tiên — để buildBroll báo draft.error rõ ràng. */
@@ -185,7 +187,8 @@ async function generateBrollImages(
   voiceOver: string,
   shotList: { note: string; durationSec: number }[],
   totalDur: number,
-  factHint = ""
+  factHint = "",
+  opts: { allowVideo?: boolean } = {}
 ): Promise<BrollImagesResult> {
   const imageProvider = await pickImageProvider();
   // Cost-guard (Phase 3): ảnh AI là PAID → chỉ khi RENDER_MODE=live (compat RENDER_LIVE=1).
@@ -205,9 +208,14 @@ async function generateBrollImages(
   await assertDailyCap(count * perImgUsd, `${count} ảnh b-roll`);
   const hints = shotList.map((s) => (s.note || "").trim()).filter(Boolean);
   const prompts = await planShotPrompts(topic, voiceOver, hints, count);
+  // C2 HYBRID (sau cờ C2_HYBRID, CHỈ khi caller cho phép video = path hyperframes): cảnh 'concept'
+  // → clip Pexels VIDEO THẬT, miss → ảnh AI như cũ. Hybrid CẦN bộ điều phối để phân loại concept
+  // → bật 'accurate' kèm theo (brand/app-ui/chart vẫn ảnh AI bám entity). Key Pexels: env (hoặc Hub sau).
+  const hybrid = !!opts.allowVideo && isC2Hybrid();
+  const pexelsKey = process.env.PEXELS_API_KEY || process.env.PEXELS_KEY || undefined;
   // C2 ACCURATE (sau cờ): bộ điều phối imageType + prompt bám entity/số (writerModel).
   // Lỗi điều phối (LLM/hub) → revert HOÀN TOÀN về C2 cũ (prompts[] + suffix cũ + quality cũ).
-  let accurate = isC2Accurate();
+  let accurate = isC2Accurate() || hybrid;
   let accQuality = accurate ? c2AccurateQuality() : undefined;
   let plans: ShotPlan[] | null = null;
   if (accurate) {
@@ -238,10 +246,19 @@ async function generateBrollImages(
   // QUAN TRỌNG: sinh ảnh SONG SONG (Promise.all) thay vì tuần tự.
   // 5 ảnh GPT Image tuần tự (~20s/ảnh) > 60s → Vercel function timeout
   // ("An unexpected response..."). Song song → ~tổng ≈ thời gian 1 ảnh.
-  type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number; error?: string };
+  type Shot = { idx: number; hash: string; url: string; fresh?: string; durationSec: number; error?: string; type: "image" | "video" };
   const results = await Promise.all(
     Array.from({ length: count }, (_, i) => i).map(async (i): Promise<Shot | null> => {
       const plan = plans?.[i];
+      // HYBRID: cảnh 'concept' → thử clip Pexels DỌC thật trước; có → dùng VIDEO (free, KHÔNG đốt tiền
+      // ảnh, KHÔNG cache blob vì link Pexels đã công khai); miss/không key → rơi xuống ảnh AI như cũ.
+      if (hybrid && plan?.imageType === "concept") {
+        const query = toPexelsQuery(plan.entity ? `${plan.entity} ${plan.prompt}` : plan.prompt);
+        const clip = await searchPexelsClip(query, { orientation: "portrait", apiKey: pexelsKey });
+        if (clip?.url) {
+          return { idx: i, hash: `pex:${i}`, url: clip.url, durationSec: Math.round(even * 100) / 100, type: "video" };
+        }
+      }
       const fullPrompt = plan ? `${plan.prompt}${suffixFor(plan.imageType)}` : `${prompts[i]}${BROLL_STYLE_SUFFIX}`;
       // accurate → hash kèm biến thể (imageType/domain/quality) để KHÔNG đụng cache ảnh C2 cũ.
       const hashInput = accurate ? `${fullPrompt}|acc:${plan?.imageType}:${plan?.domain || ""}:${accQuality}` : fullPrompt;
@@ -262,12 +279,12 @@ async function generateBrollImages(
           // 1 ảnh lỗi → bỏ shot đó (không kéo sập cả video), NHƯNG lộ lý do:
           const msg = e instanceof Error ? e.message : String(e);
           console.error("[broll-image-fail]", i, msg);
-          return { idx: i, hash: h, url: "", durationSec: 0, error: msg };
+          return { idx: i, hash: h, url: "", durationSec: 0, error: msg, type: "image" };
         }
       }
       const abs = toAbsoluteUrl(url);
-      if (!abs) return { idx: i, hash: h, url: "", durationSec: 0, error: "URL ảnh rỗng sau upload" };
-      return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(even * 100) / 100 };
+      if (!abs) return { idx: i, hash: h, url: "", durationSec: 0, error: "URL ảnh rỗng sau upload", type: "image" };
+      return { idx: i, hash: h, url: abs, fresh, durationSec: Math.round(even * 100) / 100, type: "image" };
     })
   );
 
@@ -288,7 +305,7 @@ async function generateBrollImages(
   const ok = results.filter((r): r is Shot => r != null && !!r.url);
   const errors = results.filter((r): r is Shot => r != null && !r.url && !!r.error);
   return {
-    images: ok.sort((a, b) => a.idx - b.idx).map((r) => ({ url: r.url, durationSec: r.durationSec })),
+    images: ok.sort((a, b) => a.idx - b.idx).map((r) => ({ url: r.url, durationSec: r.durationSec, type: r.type })),
     intended: true,
     failed: errors.length,
     firstError: errors[0]?.error,
@@ -514,7 +531,8 @@ export async function buildBroll(input: {
         ...((script.script.variantPrompts.animation?.dataPoints || []) as string[]),
       ].filter(Boolean).join(" · ");
       const [imgResult, words] = await Promise.all([
-        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration, factHint),
+        // allowVideo: chỉ path hyperframes mới nhận clip Pexels (sau cờ C2_HYBRID). Creatomate giữ ảnh.
+        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration, factHint, { allowVideo: true }),
         useWhisper ? transcribeWords(voiceUrlRaw, openaiKey!) : Promise.resolve(null),
       ]);
       if (words) await recordExtraUsage("openai-whisper", whisperEst);
@@ -531,6 +549,9 @@ export async function buildBroll(input: {
 
       const bgUrls = imgResult.images.map((c) => c.url);
       const shotDurations = imgResult.images.map((c) => c.durationSec);
+      // bg_types song song bg_urls: "image" (ảnh AI) | "video" (clip Pexels). Rỗng/cũ → service coi all "image".
+      const bgTypes = imgResult.images.map((c) => c.type);
+      const hasVideo = bgTypes.includes("video");
 
       // Caption karaoke ĐỒNG BỘ audio: Whisper word-level → nhóm 3-5 từ.
       // Lỗi/thiếu key → fallback caption_lines chia đều (bên dưới).
@@ -559,8 +580,9 @@ export async function buildBroll(input: {
 
       const variables: Record<string, unknown> = {
         duration,
-        bg_type: "image", // ảnh AI + Ken Burns
+        bg_type: "image", // (legacy enum — composition đọc per-clip qua bg_types bên dưới)
         bg_urls: JSON.stringify(bgUrls),
+        bg_types: JSON.stringify(bgTypes), // C2 HYBRID: loại mỗi nền (image|video) song song bg_urls
         shot_durations: JSON.stringify(shotDurations),
         voice_url: voiceUrl,
         // caption_groups: karaoke sync (ưu tiên); caption_lines: fallback chia đều.
@@ -577,7 +599,7 @@ export async function buildBroll(input: {
         status: "rendering",
         progress: 10,
         providerJobId: job.jobId,
-        providerName: bgUrls.length ? "hyperframes+gpt-image" : "hyperframes",
+        providerName: bgUrls.length ? (hasVideo ? "hyperframes+gpt-image+pexels" : "hyperframes+gpt-image") : "hyperframes",
         costUsd: 0,
       }))!;
     } catch (e) {
