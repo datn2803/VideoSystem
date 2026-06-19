@@ -121,6 +121,10 @@ export interface RenderProvider {
     c2Url: string;
     cutawaySegments: { start: number; dur: number }[];
     durationSec?: number;
+    /** PHASE 2: lớp chữ chạy suốt — caption karaoke (Whisper groups) + keyword IN HOA + màu nhấn. */
+    captionGroups?: { start: number; end: number; words: { text: string; start: number; end: number }[] }[];
+    keywords?: { text: string; start: number; dur: number }[];
+    accentColor?: string;
   }): Promise<JobResult>;
 }
 

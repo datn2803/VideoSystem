@@ -102,10 +102,14 @@ async function downloadVoice(url, tmpDir) {
  * @param {number} [o.fps=24]
  * @returns {Promise<{ outFile: string }>}
  */
-export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, outFile, fps = 24 }) {
+export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, outFile, fps = 24, alpha = false }) {
   const { chromium } = await import("playwright");
   const vars = variables ?? {};
   const draft = quality === "draft";
+  // ALPHA (C4 phase2): render lớp chữ TRONG SUỐT → screenshot PNG có alpha (omitBackground) →
+  // QTRLE (QuickTime Animation, argb) trong .MOV — LOSSLESS, GIỮ alpha. KHÔNG mux voice (lớp câm).
+  // ⚠ KHÔNG dùng VP9/VP8 alpha: ffmpeg libvpx của image render (Debian 5.1.x) ÂM THẦM rớt alpha
+  //   (yuva420p → yuv420p). qtrle giữ alpha chắc + RLE nén tốt vùng trong suốt. Comp PHẢI nền trong suốt.
   const duration = Math.min(600, Math.max(1, Number(vars.duration) || 18.5));
   const totalFrames = Math.max(1, Math.round(duration * fps));
 
@@ -124,7 +128,7 @@ export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, o
   let browser;
   let ffmpeg;
   try {
-    const voiceFile = await downloadVoice(vars.voice_url, tmpDir);
+    const voiceFile = alpha ? null : await downloadVoice(vars.voice_url, tmpDir);
 
     browser = await chromium.launch({
       headless: true,
@@ -143,25 +147,40 @@ export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, o
     if (!hasTimeline) throw new Error("Composition không expose window.__timelines.main — không seek được");
 
     // ffmpeg: nhận frame qua stdin (image2pipe), mux voice nếu có, cắt đúng duration.
-    const frameFmt = draft ? "mjpeg" : "png";
-    const args = [
-      "-y",
-      "-f", "image2pipe",
-      "-vcodec", frameFmt === "mjpeg" ? "mjpeg" : "png",
-      "-framerate", String(fps),
-      "-i", "-",
-      ...(voiceFile ? ["-i", voiceFile] : []),
-      "-map", "0:v",
-      ...(voiceFile ? ["-map", "1:a", "-c:a", "aac", "-b:a", "160k"] : []),
-      "-c:v", "libx264",
-      "-preset", draft ? "veryfast" : "medium",
-      "-crf", draft ? "23" : "20",
-      "-pix_fmt", "yuv420p",
-      "-movflags", "+faststart",
-      "-r", String(fps),
-      "-t", String(duration),
-      outFile,
-    ];
+    // ALPHA: frame PNG (giữ alpha) → libvpx-vp9 yuva420p WebM TRONG SUỐT, KHÔNG voice/faststart.
+    const frameFmt = alpha ? "png" : draft ? "mjpeg" : "png";
+    const args = alpha
+      ? [
+          "-y",
+          "-f", "image2pipe",
+          "-vcodec", "png",
+          "-framerate", String(fps),
+          "-i", "-",
+          "-an",
+          "-c:v", "qtrle", // QuickTime Animation RLE — lossless, GIỮ alpha (argb) chắc trên mọi build
+          "-pix_fmt", "argb",
+          "-r", String(fps),
+          "-t", String(duration),
+          outFile, // .mov
+        ]
+      : [
+          "-y",
+          "-f", "image2pipe",
+          "-vcodec", frameFmt === "mjpeg" ? "mjpeg" : "png",
+          "-framerate", String(fps),
+          "-i", "-",
+          ...(voiceFile ? ["-i", voiceFile] : []),
+          "-map", "0:v",
+          ...(voiceFile ? ["-map", "1:a", "-c:a", "aac", "-b:a", "160k"] : []),
+          "-c:v", "libx264",
+          "-preset", draft ? "veryfast" : "medium",
+          "-crf", draft ? "23" : "20",
+          "-pix_fmt", "yuv420p",
+          "-movflags", "+faststart",
+          "-r", String(fps),
+          "-t", String(duration),
+          outFile,
+        ];
     ffmpeg = spawn(ffmpegBin(), args, { stdio: ["pipe", "ignore", "pipe"] });
     let ffErr = "";
     ffmpeg.stderr.on("data", (c) => { ffErr += c.toString("utf8"); if (ffErr.length > 8000) ffErr = ffErr.slice(-8000); });
@@ -193,7 +212,9 @@ export async function renderWithPlaywright({ entryHtmlAbs, variables, quality, o
         if (typeof window.__prepareFrame === "function") await window.__prepareFrame(tt);
       }, t);
       const shot = await page.screenshot(
-        frameFmt === "mjpeg" ? { type: "jpeg", quality: 90 } : { type: "png" }
+        alpha
+          ? { type: "png", omitBackground: true } // alpha: bỏ nền trắng mặc định → PNG có kênh trong suốt
+          : frameFmt === "mjpeg" ? { type: "jpeg", quality: 90 } : { type: "png" }
       );
       await writeFrame(shot);
     }
