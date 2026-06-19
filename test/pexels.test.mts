@@ -7,6 +7,7 @@ import {
   toPexelsQuery,
   pickPortraitFile,
   searchPexelsClip,
+  isOffTopicClip,
 } from "../src/lib/video/builders/pexels.ts";
 import { eq, ok, done } from "./assert.mjs";
 
@@ -126,6 +127,47 @@ const mkFetch = (route: (url: string) => { ok?: boolean; body?: unknown }) =>
   eq((await searchPexelsClip("forest path ENV", { fetchImpl: fEnv }))?.url, "https://v/e.mp4", "key từ env → hit");
 
   if (saveKey === undefined) delete process.env.PEXELS_API_KEY; else process.env.PEXELS_API_KEY = saveKey;
+}
+
+// ── 5) isOffTopicClip — gate relevance (C): bỏ clip phong-cảnh/đời-sống LẠC query ──
+{
+  const Q = (s: string) => new Set(toPexelsQuery(s).split(/\s+/));
+  // query về công việc/tiền, clip phong-cảnh không người → LẠC
+  ok(isOffTopicClip("aerial view of city skyline", Q("person managing money at office desk")), "aerial city → lạc query công việc");
+  ok(isOffTopicClip("luxury yachts at dubai marina", Q("person reviewing financial report laptop")), "yacht/marina → lạc query tài chính");
+  ok(isOffTopicClip("ocean waves at sunset beach", Q("accountant entering numbers spreadsheet")), "ocean/beach → lạc query kế toán");
+  // clip có người làm việc, chia sẻ chủ thể → GIỮ
+  ok(!isOffTopicClip("woman working on office using computer", Q("person working office computer")), "office/computer → KHỚP, giữ");
+  ok(!isOffTopicClip("person using a calculator", Q("accountant using calculator desk")), "calculator → khớp chủ thể, giữ");
+  // query CHỦ ĐÍCH về biển/du lịch → clip biển KHÔNG bị loại (scenery có trong query)
+  ok(!isOffTopicClip("people relaxing on the beach", Q("people relaxing on the beach vacation")), "câu nói VỀ biển → clip biển GIỮ (scenery ∈ query)");
+  // slug rỗng (API thiếu url) → KHÔNG loại (backward-compat)
+  ok(!isOffTopicClip("", Q("anything here")), "slug rỗng → không loại");
+}
+
+// ── 6) searchPexelsClip — gate (C) bỏ clip lạc, chọn clip khớp; toàn lạc → null (fallback AI) ──
+{
+  const mk = (videos: unknown[]) =>
+    (async () => ({ ok: true, json: async () => ({ videos }) })) as unknown as typeof fetch;
+  const F = [{ link: "https://v/p.mp4", file_type: "video/mp4", width: 1080, height: 1920 }];
+
+  // top-1 là cảnh biển LẠC, top-2 là người làm việc → chọn top-2 (bỏ qua clip lạc)
+  const fSkip = mk([
+    { url: "https://www.pexels.com/video/ocean-waves-at-sunset-111/", duration: 10, video_files: [{ link: "https://v/ocean.mp4", file_type: "video/mp4", width: 1080, height: 1920 }] },
+    { url: "https://www.pexels.com/video/woman-working-on-laptop-in-office-222/", duration: 8, video_files: F },
+  ]);
+  eq((await searchPexelsClip("person working office laptop SKIP", { fetchImpl: fSkip, apiKey: "k" }))?.url, "https://v/p.mp4", "bỏ clip biển lạc → chọn clip người làm việc");
+
+  // TẤT CẢ là cảnh phong-cảnh lạc → null → caller fallback ảnh AI
+  const fAllBad = mk([
+    { url: "https://www.pexels.com/video/aerial-city-skyline-1/", duration: 9, video_files: [{ link: "https://v/a.mp4", file_type: "video/mp4", width: 1080, height: 1920 }] },
+    { url: "https://www.pexels.com/video/luxury-yacht-marina-2/", duration: 9, video_files: [{ link: "https://v/b.mp4", file_type: "video/mp4", width: 1080, height: 1920 }] },
+  ]);
+  eq(await searchPexelsClip("accountant managing money desk ALLBAD", { fetchImpl: fAllBad, apiKey: "k" }), null, "toàn cảnh lạc → null (fallback ảnh AI)");
+
+  // không có url (API cũ/thiếu) → KHÔNG loại (giữ hành vi cũ) — chọn clip đầu
+  const fNoUrl = mk([{ duration: 12, video_files: F }]);
+  eq((await searchPexelsClip("forest path NOURL", { fetchImpl: fNoUrl, apiKey: "k" }))?.url, "https://v/p.mp4", "thiếu url → không loại (backward-compat)");
 }
 
 done("pexels");
