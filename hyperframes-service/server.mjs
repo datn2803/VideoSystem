@@ -509,6 +509,92 @@ async function storeOutput(outFile, template) {
   return { url: `${SELF_PUBLIC_URL}/files/${name}`, durationSec, sizeBytes: stat.size };
 }
 
+// ── C4 AUTO-EDITOR (Phase 1): ghép C1 talking-head NỀN + cutaway b-roll C2 ──
+// C1 nền + AUDIO C1 = master (giọng khớp môi). Cutaway C2 (TẮT TIẾNG, scale-cover 1080×1920) hiện
+// FULL-FRAME tại các đoạn cutaway_segments rồi cắt về mặt C1 (jump-cut). overlay enable=between(t,…)
+// → đè C2 đúng cửa sổ; C2 -stream_loop để cutaway luôn có nội dung; OUTPUT bound theo C1 (-t realDur).
+// ⚠ duration THẬT lấy từ C1 bằng ffprobe (KHÔNG tính từ frame) → audio KHÔNG lệch tiếng.
+async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint }) {
+  const id = crypto.randomBytes(8).toString("hex");
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "compose-"));
+  try {
+    const c1File = path.join(tmpDir, "c1.mp4");
+    const c2File = path.join(tmpDir, "c2.mp4");
+    const outFile = path.join(tmpDir, `auto-editor-${id}.mp4`);
+
+    // Tải có TIMEOUT (AbortController) + chặn file quá lớn: render-lock serialize → 1 tải treo CHẶN cả
+    // hàng; tránh hang vô hạn / OOM trên VPS 2-vCPU. (COMPOSE_DL_TIMEOUT_MS override; default 120s.)
+    const dl = async (url, dest) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), Number(process.env.COMPOSE_DL_TIMEOUT_MS) || 120_000);
+      try {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(`tải ${url} HTTP ${res.status}`);
+        const len = Number(res.headers.get("content-length") || 0);
+        if (len > 600 * 1024 * 1024) throw new Error(`file quá lớn (${Math.round(len / 1e6)}MB): ${url}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length < 1024) throw new Error(`file rỗng/hỏng: ${url}`);
+        await fs.writeFile(dest, buf);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    await dl(c1Url, c1File);
+    await dl(c2Url, c2File);
+
+    // Duration THẬT từ C1 (master). Thiếu → dùng hint của app; vẫn không có → lỗi (tránh đoán sai).
+    const realDur = (await probeDuration(c1File)) || Number(durationHint) || 0;
+    if (!(realDur > 0)) throw new Error("Không đọc được duration C1 (ffprobe) — không thể ghép.");
+
+    // Lọc + clamp cutaway theo duration THẬT (bỏ đoạn vượt biên / quá ngắn).
+    const segs = (Array.isArray(cutawaySegments) ? cutawaySegments : [])
+      .map((s) => ({ start: Number(s?.start), dur: Number(s?.dur) }))
+      .filter((s) => Number.isFinite(s.start) && Number.isFinite(s.dur) && s.dur > 0 && s.start >= 0.2)
+      .map((s) => ({ start: s.start, end: Math.min(realDur - 0.15, s.start + s.dur) }))
+      .filter((s) => s.end - s.start >= 0.4)
+      .sort((a, b) => a.start - b.start);
+
+    const fps = RENDER_FPS;
+    const W = 1080, H = 1920;
+    const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${fps}`;
+    let filter;
+    if (segs.length) {
+      // overlay enable: TỔNG các between(t,…) — between trả 0/1, sum ≠ 0 trong BẤT KỲ cửa sổ nào → bật
+      // (idiom ffmpeg đúng; '+' là cộng số học, KHÔNG phải ';'). Đã verify render thật nhiều cutaway.
+      const expr = segs.map((s) => `between(t,${s.start.toFixed(2)},${s.end.toFixed(2)})`).join("+");
+      filter =
+        `[0:v]${scaleCrop}[base];` +
+        `[1:v]${scaleCrop}[cut];` +
+        `[base][cut]overlay=enable='${expr}'[vout]`;
+    } else {
+      // Không có cutaway hợp lệ → chỉ chuẩn hoá C1 9:16 (vẫn ra video + audio C1).
+      filter = `[0:v]${scaleCrop}[vout]`;
+    }
+    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway (fps=${fps})`);
+
+    const args = [
+      "-y",
+      "-i", c1File,
+      "-stream_loop", "-1", "-i", c2File, // C2 lặp vô hạn → cutaway luôn có nội dung; OUTPUT bound theo C1
+      "-filter_complex", filter,
+      "-map", "[vout]",
+      "-map", "0:a?", // AUDIO = C1 (master, khớp môi); '?' = C1 không tiếng thì bỏ qua (không lỗi)
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+      "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+      "-r", String(fps),
+      "-t", String(realDur), // CHỐT độ dài = C1 (master) → audio không lệch
+      "-c:a", "aac", "-b:a", "160k",
+      outFile,
+    ];
+    await execFileP("ffmpeg", args, { timeout: RENDER_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 });
+    return { tmpDir, outFile };
+  } catch (e) {
+    console.error("[compose-fail]", e?.stderr || e?.message || e);
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {}); // LỖI → dọn tmp ngay (tránh leak /tmp)
+    throw e;
+  }
+}
+
 // ── Bearer auth (constant-time) ──
 function checkAuth(req) {
   if (!RENDER_TOKEN) return { ok: false, code: 500, error: "RENDER_TOKEN chưa cấu hình trên server" };
@@ -560,6 +646,46 @@ app.post("/render", (req, res) => {
     try {
       const { url, durationSec, sizeBytes } = await storeOutput(outFile, template);
       setJob(jobId, { status: "done", url, durationSec, sizeBytes, qcReport: result.report || undefined });
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }).catch((e) => {
+    setJob(jobId, { status: "failed", error: e instanceof Error ? e.message : String(e) });
+  });
+
+  return res.status(202).json({ jobId });
+});
+
+// POST /compose { c1_url, c2_url, cutaway_segments:[{start,dur}], duration? } → 202 { jobId }
+// C4 AUTO-EDITOR (Phase 1): ghép C1 nền + cutaway C2. ASYNC như /render; poll GET /jobs/:id (chung).
+app.post("/compose", (req, res) => {
+  const auth = checkAuth(req);
+  if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });
+
+  const { c1_url, c2_url, cutaway_segments, duration } = req.body || {};
+  if (typeof c1_url !== "string" || !/^https?:\/\//i.test(c1_url))
+    return res.status(400).json({ ok: false, error: "c1_url phải là URL http(s)" });
+  if (typeof c2_url !== "string" || !/^https?:\/\//i.test(c2_url))
+    return res.status(400).json({ ok: false, error: "c2_url phải là URL http(s)" });
+  if (cutaway_segments != null && !Array.isArray(cutaway_segments))
+    return res.status(400).json({ ok: false, error: "cutaway_segments phải là mảng [{start,dur}]" });
+
+  pruneJobs();
+  const jobId = crypto.randomUUID();
+  setJob(jobId, { status: "queued", createdAt: Date.now() });
+
+  // Background — mutex withRenderLock serialize (2 vCPU) như /render.
+  withRenderLock(async () => {
+    setJob(jobId, { status: "rendering" });
+    const { tmpDir, outFile } = await composeAutoEditor({
+      c1Url: c1_url,
+      c2Url: c2_url,
+      cutawaySegments: cutaway_segments || [],
+      durationHint: duration,
+    });
+    try {
+      const { url, durationSec, sizeBytes } = await storeOutput(outFile, "auto-editor");
+      setJob(jobId, { status: "done", url, durationSec, sizeBytes });
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }

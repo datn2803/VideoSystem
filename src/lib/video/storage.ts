@@ -1,7 +1,8 @@
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { blobUpload, blobDelete } from "@/lib/backend/blob-store";
 
-export type ConceptKind = "talking" | "broll" | "animation";
+// "auto-editor" (C4) = GHÉP C1 talking-head nền + cutaway b-roll C2 (additive — không phá 3 concept cũ).
+export type ConceptKind = "talking" | "broll" | "animation" | "auto-editor";
 export type RenderStatus = "queued" | "rendering" | "done" | "failed";
 
 export type VideoDraftRecord = {

@@ -7,7 +7,7 @@ import { ShieldCheck, ShieldAlert, ShieldX, Flame, Play, ArrowRight, Loader2, Fi
 import { moveToReviewAction, markExportedAction } from "@/lib/review/actions";
 import { ReviewModal } from "./review-modal";
 
-type Concept = "talking" | "broll" | "animation";
+type Concept = "talking" | "broll" | "animation" | "auto-editor";
 type Draft = {
   id: string;
   concept: Concept;
@@ -128,7 +128,8 @@ function ReviewCard({ item, onClick }: { item: ReviewItem; onClick: () => void }
   const [isPending, startTransition] = useTransition();
   const state = item.reviewState || "draft";
   const allDone = item.drafts.length > 0 && item.drafts.every((d) => d.status === "done");
-  const someDone = item.drafts.filter((d) => d.status === "done").length;
+  // Đếm 3 BASE concept (bỏ C4 auto-editor) → giữ hiển thị "/3" đúng như trước khi thêm C4.
+  const someDone = item.drafts.filter((d) => d.status === "done" && d.concept !== "auto-editor").length;
   const firstDraft = item.drafts.find((d) => d.status === "done" && d.outputUrl);
 
   const handleSendToReview = (e: React.MouseEvent) => {

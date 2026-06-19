@@ -1,6 +1,7 @@
 import { buildTalkingHead, pollTalkingJob } from "./builders/c1-talking";
 import { buildBroll, pollBrollJob } from "./builders/c2-broll";
 import { buildAnimation, pollAnimationJob } from "./builders/c3-animation";
+import { buildAutoEditor, pollAutoEditorJob } from "./builders/c4-auto-editor";
 import { scriptStore } from "@/lib/scripts/storage";
 import { videoStore, type ConceptKind, type VideoDraftRecord } from "./storage";
 
@@ -29,6 +30,8 @@ export async function buildConcept(
   if (concept === "talking") return buildTalkingHead({ scriptId, audioId, force });
   if (concept === "broll") return buildBroll({ scriptId, audioId, force });
   if (concept === "animation") return buildAnimation({ scriptId, audioId, force });
+  // C4: ghép C1+C2 đã render (PHỤ THUỘC 2 concept kia xong trước — KHÔNG nằm trong buildAll song song).
+  if (concept === "auto-editor") return buildAutoEditor({ scriptId, audioId, force });
   throw new Error(`Unknown concept: ${concept}`);
 }
 
@@ -79,5 +82,6 @@ export async function pollDraft(draftId: string): Promise<VideoDraftRecord | und
   if (draft.concept === "talking") return pollTalkingJob(draftId);
   if (draft.concept === "broll") return pollBrollJob(draftId);
   if (draft.concept === "animation") return pollAnimationJob(draftId);
+  if (draft.concept === "auto-editor") return pollAutoEditorJob(draftId);
   return draft;
 }

@@ -114,6 +114,14 @@ export interface RenderProvider {
   poll(jobId: string): Promise<JobStatus>;
   listTemplates(): Promise<{ id: string; name: string; thumbnail?: string }[]>;
   testConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
+  /** C4 AUTO-EDITOR (additive, optional): ghép C1 nền + cutaway b-roll C2 qua endpoint /compose
+   *  của render-service. Provider không hỗ trợ (mock/creatomate) → undefined → caller fallback. */
+  compose?(input: {
+    c1Url: string;
+    c2Url: string;
+    cutawaySegments: { start: number; dur: number }[];
+    durationSec?: number;
+  }): Promise<JobResult>;
 }
 
 export interface ImageResult {

@@ -39,6 +39,20 @@ export function makeHyperframesAdapter(opts: { serviceUrl: string; apiKey: strin
       return { status, outputUrl: d.url, error: d.error };
     },
 
+    // C4 AUTO-EDITOR: POST /compose → 202 { jobId }; poll dùng CHUNG /jobs/:jobId ở trên.
+    async compose({ c1Url, c2Url, cutawaySegments, durationSec }): Promise<JobResult> {
+      if (!base) throw new Error("HyperFrames: thiếu Service URL (config.serviceUrl)");
+      const res = await fetch(`${base}/compose`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ c1_url: c1Url, c2_url: c2Url, cutaway_segments: cutawaySegments, duration: durationSec }),
+      });
+      if (!res.ok) throw new Error(`HyperFrames compose ${res.status}: ${await res.text()}`);
+      const d = (await res.json()) as { jobId?: string };
+      if (!d.jobId) throw new Error("HyperFrames compose: response thiếu jobId");
+      return { jobId: d.jobId };
+    },
+
     async listTemplates() {
       return [
         { id: "animation", name: "Animation (motion graphics)" },

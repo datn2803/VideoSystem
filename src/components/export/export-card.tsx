@@ -3,12 +3,12 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Download, Copy, Check, Loader2, Mic, Film, Sparkles, CheckCircle2 } from "lucide-react";
+import { Download, Copy, Check, Loader2, Mic, Film, Sparkles, Scissors, CheckCircle2 } from "lucide-react";
 import { markAllExportedAction } from "@/lib/export/actions";
 import { PLATFORM_META } from "@/lib/export/caption-localizer";
 import type { Platform } from "@/lib/export/storage";
 
-type Concept = "talking" | "broll" | "animation";
+type Concept = "talking" | "broll" | "animation" | "auto-editor";
 type Draft = {
   id: string;
   concept: Concept;
@@ -27,6 +27,7 @@ const CONCEPT_META: Record<Concept, { label: string; icon: typeof Mic; color: st
   talking: { label: "C1 Talking", icon: Mic, color: "bg-blue-100 text-blue-600" },
   broll: { label: "C2 B-roll", icon: Film, color: "bg-emerald-100 text-emerald-600" },
   animation: { label: "C3 Animation", icon: Sparkles, color: "bg-purple-100 text-purple-600" },
+  "auto-editor": { label: "C4 Auto-Editor", icon: Scissors, color: "bg-rose-100 text-rose-600" },
 };
 
 export function ExportCard({
@@ -70,7 +71,7 @@ export function ExportCard({
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold">{topic}</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              {drafts.length}/3 concept · Sẵn sàng upload lên TikTok / Facebook / YouTube Shorts
+              {drafts.filter((d) => d.concept !== "auto-editor").length}/3 concept · Sẵn sàng upload lên TikTok / Facebook / YouTube Shorts
             </p>
           </div>
           {isExported ? (

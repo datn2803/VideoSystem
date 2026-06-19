@@ -56,7 +56,9 @@ export default async function ScriptDetailPage({ params }: { params: Promise<{ i
   const defaultSpeed = Number.isFinite(cfgSpeed) ? cfgSpeed : undefined;
   const hasAvatarProvider = allProviders.some((p) => p.kind === "avatar" && p.enabled);
   const hasRenderProvider = allProviders.some((p) => p.kind === "render" && p.enabled);
-  const doneCount = drafts.filter((d) => d.status === "done").length;
+  // Gate gửi-duyệt tính trên 3 BASE concept (talking/broll/animation) — KHÔNG tính C4 auto-editor
+  // (composition phụ, render sau) → GIỮ NGUYÊN ngưỡng "đủ 3 concept" như trước khi thêm C4.
+  const doneCount = drafts.filter((d) => d.status === "done" && d.concept !== "auto-editor").length;
 
   return (
     <>
