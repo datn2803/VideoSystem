@@ -220,6 +220,10 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   ok(/real-scene/.test(capturedSystem), "HYBRID: system prompt CÓ nhắc 'real-scene'");
   ok(/MẶC ĐỊNH/.test(capturedSystem), "HYBRID: real-scene là MẶC ĐỊNH cho đa số cảnh");
   ok(/MẶC ĐỊNH|real-scene/.test(capturedUser), "HYBRID: user prompt cũng hướng real-scene");
+  // ĐỘ KHỚP LỜI: hybrid prompt phải BUỘC bám chủ thể+hành động của câu + CẤM cảnh phong cảnh/aerial lạc.
+  ok(/BÁM ĐÚNG Ý/.test(capturedSystem) && /CHỦ THỂ/.test(capturedSystem), "HYBRID: buộc bám Ý đoạn lời (chủ thể+hành động)");
+  ok(/aerial/i.test(capturedSystem), "HYBRID: CẤM cảnh aerial/phong cảnh chung chung (chống lạc đề)");
+  ok(/aerial|phong cảnh/.test(capturedUser), "HYBRID: user prompt nhắc tránh cảnh lạc");
   eq(pHybrid[0].imageType, "real-scene", "HYBRID: giữ real-scene từ director");
   eq(pHybrid[1].imageType, "app-ui", "HYBRID: app-ui vẫn AI (không ép real-scene)");
 

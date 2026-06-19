@@ -288,7 +288,9 @@ export async function planShotsAccurate(ctx: {
   // C2 HYBRID (preferRealScene=true) — ƯU TIÊN 'real-scene' cho ĐA SỐ cảnh (→ Pexels video thật, mọi chủ đề).
   const typesHybrid =
     "imageType — MẶC ĐỊNH chọn 'real-scene' cho ĐA SỐ cảnh minh hoạ, áp dụng cho MỌI chủ đề (tài chính, sức khoẻ, kỹ năng, nấu ăn, du lịch, đời sống, kinh doanh...): " +
-    "'real-scene' = cảnh ĐỜI THỰC quay được bằng máy quay — người thật/biểu cảm/hành động/bối cảnh/địa điểm/vật phổ thông (vd 'a young Vietnamese woman reviewing monthly bills at a kitchen table with a calculator', 'a person jogging through a city park at sunrise', 'hands chopping fresh vegetables on a wooden cutting board', 'a crowded evening street food market', 'two colleagues discussing over coffee in a bright modern office'). prompt = câu tiếng Anh TẢ CẢNH gồm CHỦ THỂ + HÀNH ĐỘNG + BỐI CẢNH, KHÔNG chữ. ĐÂY LÀ LỰA CHỌN MẶC ĐỊNH — phần lớn cảnh nên là 'real-scene'. " +
+    "'real-scene' = cảnh ĐỜI THỰC quay được bằng máy quay, NHƯNG PHẢI BÁM ĐÚNG Ý ĐOẠN LỜI: từ câu, rút ra CHỦ THỂ (ai/cái gì) + HÀNH ĐỘNG (đang làm gì) + BỐI CẢNH liên quan TRỰC TIẾP nội dung, rồi tả 1 cảnh CỤ THỂ có người THẬT đang thao tác ĐÚNG việc đó. " +
+    "Ví dụ BÁM LỜI: 'các bước hạch toán/kế toán' → 'a Vietnamese accountant reviewing financial documents and entering numbers into a spreadsheet at an office desk'; 'quản lý thời gian' → 'a person planning tasks in a notebook beside a laptop at a desk'; 'chạy bộ mỗi sáng' → 'a person jogging on a quiet residential street at sunrise'; 'nấu ăn tại nhà' → 'hands chopping fresh vegetables on a wooden board in a home kitchen'; 'tư vấn khách hàng' → 'two colleagues discussing over a laptop in a bright modern office'. " +
+    "TUYỆT ĐỐI TRÁNH cảnh phong cảnh/toàn cảnh chung chung LẠC chủ thể: KHÔNG aerial/drone/flycam, KHÔNG skyline/thành phố nhìn từ trên cao, KHÔNG đường phố-giao thông-thiên nhiên ĐỨNG MỘT MÌNH — TRỪ KHI đoạn lời THỰC SỰ nói về địa điểm/đi lại/du lịch đó. Mỗi cảnh phải có CHỦ THỂ rõ (người / bàn tay / vật đang được thao tác), không để cảnh trống hay lạc đề. prompt = câu tiếng Anh TẢ CẢNH gồm CHỦ THỂ + HÀNH ĐỘNG + BỐI CẢNH, KHÔNG chữ. ĐÂY LÀ LỰA CHỌN MẶC ĐỊNH — phần lớn cảnh nên là 'real-scene'. " +
     "CHỈ chọn các loại dưới đây khi cảnh quay người/đời-thực THỰC SỰ không thể hiện được điều cần nói: " +
     "'app-ui' = câu BẮT BUỘC phải thấy màn hình/giao diện app/phần mềm CỤ THỂ (vd thao tác trong Make.com, thông báo chuyển khoản +500.000đ trên điện thoại) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool. " +
     "'brand' = trọng tâm là NHẬN DIỆN logo MỘT thương hiệu cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). " +
@@ -309,7 +311,7 @@ export async function planShotsAccurate(ctx: {
             (factHint.trim() ? `ENTITY/SỐ THẬT (ưu tiên bám):\n"""${factHint.slice(0, 1200)}"""\n\n` : "") +
             `CÁC CẢNH (đoạn lời tương ứng):\n${segBlock}\n\n` +
             (preferRealScene
-              ? `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. MẶC ĐỊNH 'real-scene' (tả cảnh người/hành động/bối cảnh đời thực); app-ui/brand/chart CHỈ khi thật cần UI app/logo brand/biểu đồ; mỗi prompt là câu tiếng Anh tả cảnh dùng cho CẢ video stock LẪN ảnh AI.`
+              ? `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. MẶC ĐỊNH 'real-scene' tả cảnh người THẬT đang THAO TÁC đúng Ý đoạn lời (chủ thể + hành động + bối cảnh liên quan), TRÁNH phong cảnh/aerial/đường phố lạc đề; app-ui/brand/chart CHỈ khi thật cần UI app/logo brand/biểu đồ; mỗi prompt là câu tiếng Anh tả cảnh dùng cho CẢ video stock LẪN ảnh AI.`
               : `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. Mỗi prompt bám entity/số của đoạn lời đó; brand → entity+domain; app-ui → mô tả UI có chữ đúng tool; concept → cảnh điện ảnh không chữ.`),
         },
       ],
