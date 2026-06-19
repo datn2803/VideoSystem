@@ -81,6 +81,36 @@ export function pickPortraitFile(
   return { link: best.link, width: best.w, height: best.h };
 }
 
+// ── GATE RELEVANCE (C) — chống clip Pexels LẠC query (vd query 'person managing money' → trả
+//    'aerial city view' / 'luxury yacht' / 'ocean waves' không người). Pexels xếp theo relevance
+//    nhưng top-1 đôi khi là cảnh phong-cảnh/đời-sống chỉ khớp 1 từ phụ. Ta đọc SLUG trong page-url
+//    (mô tả nội dung clip) → bỏ clip có từ PHONG-CẢNH/ĐỜI-SỐNG mà query KHÔNG hề nhắc tới + không
+//    chia sẻ từ chủ thể nào. Hết clip hợp lệ → null → caller fallback ẢNH AI (đúng hơn 1 clip lạc).
+const SCENERY: ReadonlySet<string> = new Set([
+  "aerial", "drone", "flycam", "yacht", "yachts", "marina", "boat", "boats", "sailboat", "ship", "cruise",
+  "beach", "beaches", "ocean", "sea", "seaside", "seashore", "wave", "waves", "surf", "surfing",
+  "sunset", "sunrise", "mountain", "mountains", "forest", "jungle", "desert", "waterfall", "lake", "cliff",
+  "sky", "clouds", "cloud", "landscape", "scenery", "scenic", "nature", "horizon", "island", "tropical",
+  "vacation", "holiday", "resort", "meditation", "meditating", "meditate", "zen", "yoga", "spa", "sunbathing",
+]);
+function clipWords(s: string): string[] {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 1);
+}
+/** Lấy slug mô tả clip từ page-url Pexels (vd .../video/luxury-yachts-at-marina-12345/ → "luxury yachts at marina"). */
+function pexelsSlug(url: unknown): string {
+  const m = String(url || "").match(/pexels\.com\/video\/(.+?)-\d+\/?$/i);
+  return m ? m[1].replace(/-/g, " ") : "";
+}
+/** Clip LẠC khi: slug có từ phong-cảnh/đời-sống mà query KHÔNG nhắc, VÀ slug không chia sẻ từ chủ thể nào với query. */
+export function isOffTopicClip(slug: string, queryWords: ReadonlySet<string>): boolean {
+  const sw = clipWords(slug);
+  if (!sw.length) return false; // không có slug (API thiếu url / test) → đừng loại
+  const hasStrayScenery = sw.some((w) => SCENERY.has(w) && !queryWords.has(w));
+  if (!hasStrayScenery) return false;
+  const sharesSubject = sw.some((w) => queryWords.has(w) && !SCENERY.has(w));
+  return !sharesSubject; // có cảnh lạc VÀ không trùng chủ thể nào → loại
+}
+
 const clipCache = new Map<string, PexelsClip | null>(); // keyword+orientation → clip (trong process)
 let warnedNoKey = false;
 
@@ -123,23 +153,25 @@ export async function searchPexelsClip(
       clipCache.set(cacheKey, null);
       return null;
     }
-    const data = (await res.json()) as { videos?: Array<{ duration?: unknown; video_files?: unknown }> };
+    const data = (await res.json()) as { videos?: Array<{ duration?: unknown; video_files?: unknown; url?: unknown }> };
     const videos = Array.isArray(data?.videos) ? data.videos : [];
+    const queryWords = new Set(clipWords(q));
     for (const v of videos) {
       const file = pickPortraitFile(v?.video_files as Parameters<typeof pickPortraitFile>[0]);
-      if (file) {
-        const dur = Number(v?.duration);
-        const clip: PexelsClip = {
-          url: file.link,
-          durationSec: Number.isFinite(dur) && dur > 0 ? dur : 0,
-          width: file.width,
-          height: file.height,
-        };
-        clipCache.set(cacheKey, clip);
-        return clip;
-      }
+      if (!file) continue;
+      // GATE (C): bỏ clip phong-cảnh/đời-sống LẠC query (giữ thứ tự relevance của Pexels cho clip hợp lệ).
+      if (isOffTopicClip(pexelsSlug(v?.url), queryWords)) continue;
+      const dur = Number(v?.duration);
+      const clip: PexelsClip = {
+        url: file.link,
+        durationSec: Number.isFinite(dur) && dur > 0 ? dur : 0,
+        width: file.width,
+        height: file.height,
+      };
+      clipCache.set(cacheKey, clip);
+      return clip;
     }
-    clipCache.set(cacheKey, null); // miss có chủ đích → cache để khỏi gọi lại trong process
+    clipCache.set(cacheKey, null); // không clip nào KHỚP (hoặc toàn cảnh lạc) → cache + fallback ảnh AI
     return null;
   } catch {
     return null; // lỗi mạng/parse → fallback AI (KHÔNG cache: lần sau có thể thử lại)

@@ -224,6 +224,9 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   ok(/BÁM ĐÚNG Ý/.test(capturedSystem) && /CHỦ THỂ/.test(capturedSystem), "HYBRID: buộc bám Ý đoạn lời (chủ thể+hành động)");
   ok(/aerial/i.test(capturedSystem), "HYBRID: CẤM cảnh aerial/phong cảnh chung chung (chống lạc đề)");
   ok(/aerial|phong cảnh/.test(capturedUser), "HYBRID: user prompt nhắc tránh cảnh lạc");
+  // CHỐNG LẠC ĐỘNG-LỰC/GIÀU-SANG (bug 'báo cáo tài chính' → bãi biển): câu công việc/tiền phải ra
+  // người làm việc cụ thể, CẤM du thuyền/bãi biển/thiền.
+  ok(/yacht|du thuyền/i.test(capturedSystem) && /tự do tài chính/i.test(capturedSystem), "HYBRID: CẤM biểu tượng giàu-sang (yacht...) cho câu công việc/tiền/động lực");
   eq(pHybrid[0].imageType, "real-scene", "HYBRID: giữ real-scene từ director");
   eq(pHybrid[1].imageType, "app-ui", "HYBRID: app-ui vẫn AI (không ép real-scene)");
 
