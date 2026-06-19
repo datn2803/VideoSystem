@@ -43,6 +43,11 @@
         --bg-base1: #16161a;
         --bg-base2: #050506;
         --vignette-a: 0.55;
+        /* C2 HYBRID — tint NỀN hợp nhất tông: kéo clip Pexels (tông tự nhiên, sáng) VÀ ảnh AI
+           (moody cool) về CHUNG 1 tông điện ảnh xanh-tối. Cố ý dùng navy TRUNG TÍNH (không phải
+           accent bão hoà) để KHÔNG ám màu da/bệt màu — accent thương hiệu giữ ở overlay/caption.
+           Brand light-mode hạ tint này xuống (xem khối BrandKit JS). */
+        --bg-tint: rgba(12, 18, 38, 0.26);
         /* Chữ đặt TRỰC TIẾP trên nền (title-card/stat — ngoài pill caption):
            default trắng + shadow đậm cho nền tối; mode light đổi sang ink tối
            + shadow nhẹ (review T3: trắng-trên-sáng không đọc được). */
@@ -65,12 +70,24 @@
         position: absolute; inset: 0;
         width: 1080px; height: 1920px;
         object-fit: cover;
-        /* Cinematic color grade — ảnh GPT phẳng → punchy, có chiều sâu. */
-        filter: contrast(1.08) saturate(1.12) brightness(0.98);
+        /* Cinematic color grade — HỢP NHẤT TÔNG cho CẢ img.bg (ảnh AI) lẫn video.bg (clip Pexels).
+           Trước: saturate(1.12) TĂNG bão hoà → clip Pexels (vốn tươi/tự nhiên) càng đá tông ảnh AI
+           moody-cool. Giờ: GIẢM bão hoà + tối nhẹ + thêm chút contrast → clip Pexels dịu lại, hoà với
+           ảnh AI. Vẫn vừa phải (giữ chi tiết, không bệt) — tint xanh-tối phủ thêm ở #footagetint. */
+        filter: contrast(1.12) saturate(0.8) brightness(0.9);
         will-change: transform, opacity;
       }
       /* Footage (img tĩnh + video Pexels) start hidden; GSAP crossfades each in on its data-start. */
       #bglayer img.bg, #bglayer video.bg { opacity: 0; }
+
+      /* C2 HYBRID — lớp tint phủ NỀN (cả img AI lẫn video Pexels) kéo về tông xanh-tối CHUNG.
+         Phẳng, KHÔNG mix-blend-mode (nặng khi render software trên VPS). z-index:1 (trên #bglayer,
+         DƯỚI #grade z2 nhờ thứ tự DOM) → grade/vignette vẫn đè lên. pointer-events:none, không
+         data-* = CSS-owned, luôn hiện. Alpha vừa phải (giữ chi tiết). */
+      #footagetint {
+        position: absolute; inset: 0; pointer-events: none; z-index: 1;
+        background: var(--bg-tint);
+      }
 
       /* ── Cinematic overlay stack (decorative, always-on, no data-* = CSS-owned) ── */
       /* Color-grade tint: tối góc + ám accent rượu-vang nhẹ → tông MagentX. */
@@ -194,6 +211,9 @@
            own data-start / data-duration / data-track-index. -->
       <div id="bglayer"></div>
 
+      <!-- C2 HYBRID — tint phủ nền hợp nhất tông (img AI + video Pexels) → xanh-tối chung. -->
+      <div id="footagetint"></div>
+
       <!-- Cinematic overlays (decorative, CSS/GSAP-owned — no data-* timing). -->
       <div id="grade"></div>
       <div id="vignette"></div>
@@ -238,6 +258,8 @@
           rs.setProperty("--grade-glow", hexA(0.16));
           rs.setProperty("--grade-tint", hexA(0.10));
           rs.setProperty("--vignette-a", "0.22");
+          // Brand SÁNG → đừng phủ tint xanh-tối nặng (giữ nền sáng): hạ tint nền xuống mức rất nhẹ.
+          rs.setProperty("--bg-tint", "rgba(235, 240, 250, 0.08)");
           // Chữ trực-tiếp-trên-nền (title/stat) đổi sang ink tối + shadow sáng nhẹ
           // (T3: chữ trắng trên nền sáng không đọc được khi không có ảnh phủ).
           if (/^#[0-9a-f]{6}$/i.test(String(BK.ink || ""))) rs.setProperty("--title-ink", BK.ink);
