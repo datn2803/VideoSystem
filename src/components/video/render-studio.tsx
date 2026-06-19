@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Scissors,
 } from "lucide-react";
 import {
   renderConceptAction,
@@ -62,6 +63,13 @@ const CONCEPT_META: Record<ConceptKind, { label: string; icon: typeof Film; colo
     color: "text-purple-600",
     bgColor: "bg-purple-100",
     description: "Motion graphics + data viz (Creatomate)",
+  },
+  "auto-editor": {
+    label: "C4 Auto-Editor",
+    icon: Scissors,
+    color: "text-rose-600",
+    bgColor: "bg-rose-100",
+    description: "Ghép C1 talking-head + cutaway b-roll C2 (cần render C1 & C2 trước)",
   },
 };
 
@@ -179,7 +187,7 @@ export function RenderStudio({
             <div>
               <h3 className="font-semibold">Video Render Studio</h3>
               <p className="text-xs text-muted-foreground">
-                {doneCount}/3 concept đã render · Cost ${totalCost.toFixed(2)}
+                {doneCount}/4 concept đã render · Cost ${totalCost.toFixed(2)}
               </p>
             </div>
           </div>
@@ -209,8 +217,8 @@ export function RenderStudio({
 
         {error && <div className="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
 
-        <div className="grid grid-cols-3 gap-3">
-          {(["talking", "broll", "animation"] as ConceptKind[]).map((concept) => (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {(["talking", "broll", "animation", "auto-editor"] as ConceptKind[]).map((concept) => (
             <ConceptCard
               key={concept}
               concept={concept}

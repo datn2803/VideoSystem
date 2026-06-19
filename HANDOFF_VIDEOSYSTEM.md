@@ -10,6 +10,25 @@
 > để nếu phiên chat bị ngắt thì phiên sau resume được NGAY (xem GIAO THỨC RESUME cuối phần này).
 
 ## ⚡ TL;DR — ĐANG LÀM ĐẾN ĐÂU (checklist sống)
+
+### 🆕 C2 HYBRID + RENDER LOCAL (cập nhật 18/06/2026 — MỚI NHẤT, đọc trước)
+**ĐÃ XONG (đã merge `main` = `a040c90`):**
+- **C2 ACCURATE** (PR#1 `405e491`): ảnh b-roll bám kịch bản, logo brand THẬT, app-ui có chữ. Cờ `C2_ACCURATE=1`.
+- **Logo coverage** (PR#2): `resolveBrandDomain` (Logo.dev Search sk_ → KNOWN_DOMAINS → heuristic). Env `LOGODEV_SECRET`(sk_) + `LOGODEV_TOKEN`(pk_).
+- **C2 HYBRID** (PR#3): b-roll lai ảnh AI + clip VIDEO Pexels. Cờ `C2_HYBRID=1`.
+- **Render Docker LOCAL trên Mac** (PR#4): BỎ VPS. ngrok dev domain `babied-switch-copier.ngrok-free.dev` + `ngrok service` nền + Docker Desktop "start on login" → AUTO khi mở máy. Integration Hub→HyperFrames→Service URL = domain ngrok đó. Env render local: `RENDER_ENGINE=playwright` (bắt buộc cho video), `RENDER_MODE=live`.
+- **Real-scene đa dạng + FIX CODEC** (PR#5): Pexels phủ MỌI chủ đề (real-scene/concept/product → Pexels; brand/app-ui/chart → ảnh AI). Fix H.264→VP9/WebM (Chromium headless KHÔNG decode H.264 → trước đó clip ĐỨNG HÌNH). Đã verify clip CHẠY thật.
+- **Tối ưu tốc độ** (PR#6): tải+transcode SONG SONG + transcode 720 → render −27%. Nút thắt = frame-stepping video (bản chất nặng); muốn nhanh hơn nữa = đổi kiến trúc (ffmpeg ghép).
+- ⚠ **Sau MỖI lần merge PR đụng `hyperframes-service/` → PHẢI `cd hyperframes-service && docker compose up -d --build` render local mới có hiệu lực** (app Vercel auto-deploy, nhưng render service local phải rebuild tay).
+
+**ĐANG LÀM:** cải KHỚP LỜI (director real-scene bám chủ thể/hành động câu, hết cảnh lạc kiểu aerial-city) + ĐỒNG TÔNG (color-grade clip Pexels về tông video) — prompt đã giao Claude Code.
+
+**CÒN NỢ (lộ trình ra video như MẪU):** C3 v3 realistic (`BLUEPRINT_C3_V3_REALISTIC.md`) · AUTO-EDITOR ghép talking-head (`BLUEPRINT_AUTO_EDITOR.md`) · graph-driven nối storyboard→video chính (T2 `BLUEPRINT_GRAPH_DRIVEN.md`, 🟠 chờ Tommy quyết) · C1 talking-head (Tommy TỰ gen).
+
+**BLUEPRINT đã XONG (đề xuất DỌN):** `BLUEPRINT_C2_V2_ACCURATE.md` (PR#1) · `BLUEPRINT_C3_V2.md` (deploy+verify) · `BLUEPRINT_CONTENT_ENGINE.md` (7 commit). GIỮ: AUTO_EDITOR, C3_V3_REALISTIC, GRAPH_DRIVEN, TEST_GRAPH_DRIVEN, SCRIPT_UPGRADE, CLAUDE, MASTER_PLAN, PRD, README, SECURITY, THIRD_PARTY.
+
+---
+
 - 🏗 **ĐẠI TU RENDER & THIẾT KẾ (Jun 2026, máy Windows, kế hoạch `KE_HOACH_NANG_CAP_RENDER.md` ở repo chính C:\Users\Admin\VideoSystem)** — làm tuần tự 6 phase trên worktree `modest-mahavira-0b3db5`:
   - ✅ **Phase 0** (commit `b537125`): vendor `src/lib/content-graph/` (html-video) + `src/design/library/` (open-design: 15 design system + 5 directions + critique 5 chiều/blacklist) + `THIRD_PARTY.md` + `licenses/`; fix kv-store Windows (path.dirname); **secret re-scan FULL 92 commit: history remote MỚI SẠCH key thật** (3 key lộ nằm ở repo cũ — Tommy vẫn phải revoke, xem SECURITY.md); e2e MOCK local thông trọn pipeline (cách chạy: `npm run dev -- --port 3100` không cần .env → mock + KV file `.data/`).
   - ✅ **Phase 1** (commit `6e39a60`): `ScriptResult.storyboard?: ContentGraph` (Writer sinh BÊN CẠNH variantPrompts — backward-compat 100%) + `sanitizeStoryboard` (vá id/edge + anti-fab tự gắn '(ước tính)') + `src/lib/video/scene-planner.ts` (planScenes topoSort/scale + sceneTimesFromPlan) + `auditor.auditStoryboard` ($0, merge issues). Verify: 17/17 test tsx + e2e mock script mới ra graph 6 node hợp lệ. NỢ: verify headless production (chờ push).

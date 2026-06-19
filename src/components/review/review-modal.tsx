@@ -10,6 +10,7 @@ import {
   Mic,
   Film,
   Sparkles,
+  Scissors,
   Check,
   X,
   Loader2,
@@ -21,7 +22,7 @@ import {
   moveBackToDraftAction,
 } from "@/lib/review/actions";
 
-type Concept = "talking" | "broll" | "animation";
+type Concept = "talking" | "broll" | "animation" | "auto-editor";
 type Draft = {
   id: string;
   concept: Concept;
@@ -52,6 +53,7 @@ const CONCEPT_META: Record<Concept, { label: string; icon: typeof Mic; color: st
   talking: { label: "C1 Talking", icon: Mic, color: "bg-blue-100 text-blue-600" },
   broll: { label: "C2 B-roll", icon: Film, color: "bg-emerald-100 text-emerald-600" },
   animation: { label: "C3 Animation", icon: Sparkles, color: "bg-purple-100 text-purple-600" },
+  "auto-editor": { label: "C4 Auto-Editor", icon: Scissors, color: "bg-rose-100 text-rose-600" },
 };
 
 export function ReviewModal({
@@ -71,7 +73,8 @@ export function ReviewModal({
   if (!item) return null;
 
   const draftByConcept = (c: Concept) => item.drafts.find((d) => d.concept === c);
-  const allRendered = item.drafts.filter((d) => d.status === "done").length;
+  // Đếm 3 BASE concept (bỏ C4 auto-editor) → badge "Render: X/3" đúng như trước khi thêm C4.
+  const allRendered = item.drafts.filter((d) => d.status === "done" && d.concept !== "auto-editor").length;
 
   const handleApprove = () => {
     setAction("approve");
