@@ -52,26 +52,28 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
-        width: 1080px; height: 1920px; overflow: hidden; background: var(--bg2, #f3f0fb);
+        width: 1080px; height: 1920px; overflow: hidden; background: var(--bg2, #f4ede1);
         font-family: "Be Vietnam Pro", system-ui, sans-serif;
         -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
       }
       :root {
-        --bg1: #f4f0fc; --bg2: #e9e3f8; --accent: #7c3aed; --accent2: #a78bfa;
-        --ink: #1e1b2e; --sub: #6b6480; --card: #ffffff; --glow: rgba(124,58,237,0.16);
-        /* mode-dependent (theme JS ghi đè cho dark) — mặc định = light */
-        --card-border: rgba(120,90,210,0.08); --grid-dot: rgba(124,58,237,0.06);
+        /* PHASE 0 — COLOR SYSTEM (palette CHỐT): nền SÁNG/ấm + cam brand. JS applyTokens
+           ghi đè bằng BrandKit token (nguồn màu duy nhất); đây là default light/cam an toàn. */
+        --bg1: #faf7f2; --bg2: #f4ede1; --accent: #ff5a1f; --accent2: #d63e0a;
+        --ink: #1a1612; --sub: #4a4540; --card: #ffffff; --glow: rgba(255,90,31,0.16);
+        /* mode-dependent (theme JS ghi đè cho dark) — mặc định = light/cam */
+        --card-border: rgba(255,90,31,0.10); --grid-dot: rgba(255,90,31,0.06);
         --good: #16a34a; --bad: #dc2626; --warn: #d97706;
-        /* alpha-tint của ACCENT (Phase 2 token hoá): default = tím cũ; JS tính lại từ
-           accent thật của BrandKit/theme → đổi accent là MỌI tint đổi theo, hết tím cứng */
-        --acc-a03: rgba(124,58,237,0.03); --acc-a06: rgba(124,58,237,0.06);
-        --acc-a08: rgba(124,58,237,0.08); --acc-a10: rgba(124,58,237,0.10);
-        --acc-a12: rgba(124,58,237,0.12); --acc-a14: rgba(124,58,237,0.14);
-        --acc-a16: rgba(124,58,237,0.16); --acc-a18: rgba(124,58,237,0.18);
-        --acc-a25: rgba(124,58,237,0.25); --acc-a38: rgba(124,58,237,0.38);
-        /* hệ ELEVATION 2 lớp (depth premium): 1 bóng tight ghì thẻ + 1 bóng to mềm nâng thẻ */
-        --elev-1: 0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13);
-        --elev-2: 0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow);
+        /* alpha-tint của ACCENT (Phase 0: cam brand); JS tính lại từ accent thật của
+           BrandKit/theme → đổi accent là MỌI tint đổi theo, hết màu cứng */
+        --acc-a03: rgba(255,90,31,0.03); --acc-a06: rgba(255,90,31,0.06);
+        --acc-a08: rgba(255,90,31,0.08); --acc-a10: rgba(255,90,31,0.10);
+        --acc-a12: rgba(255,90,31,0.12); --acc-a14: rgba(255,90,31,0.14);
+        --acc-a16: rgba(255,90,31,0.16); --acc-a18: rgba(255,90,31,0.18);
+        --acc-a25: rgba(255,90,31,0.25); --acc-a38: rgba(255,90,31,0.38);
+        /* hệ ELEVATION 2 lớp (depth premium): bóng ẤM trung tính (hết ám tím) */
+        --elev-1: 0 2px 6px rgba(90,70,45,0.05), 0 16px 42px rgba(90,70,45,0.13);
+        --elev-2: 0 4px 12px rgba(90,70,45,0.10), 0 24px 58px var(--glow);
       }
       #root { position: relative; width: 1080px; height: 1920px; }
 
@@ -688,9 +690,10 @@
       // ── THEME: BRIGHT (0-2, mode light) + DARK PRO (3-4, mode dark). Builder chọn index theo industry. ──
       // Token mode-dependent: light/dark dùng default chung, theme có thể override riêng.
       const LIGHT_MODE = {
-        cardBorder: "rgba(120,90,210,0.08)", gridDot: "rgba(124,58,237,0.06)",
-        elev1: "0 2px 6px rgba(80,62,158,0.05), 0 16px 42px rgba(80,62,158,0.13)",
-        elev2: "0 4px 12px rgba(80,62,158,0.10), 0 24px 58px var(--glow)",
+        // PHASE 0: viền/chấm/bóng ẤM trung tính (hết ám tím) cho THEMES light fallback.
+        cardBorder: "rgba(255,90,31,0.10)", gridDot: "rgba(255,90,31,0.06)",
+        elev1: "0 2px 6px rgba(90,70,45,0.05), 0 16px 42px rgba(90,70,45,0.13)",
+        elev2: "0 4px 12px rgba(90,70,45,0.10), 0 24px 58px var(--glow)",
         good: "#16a34a", bad: "#dc2626", warn: "#d97706",
       };
       const DARK_MODE = {
@@ -700,13 +703,13 @@
         good: "#34d399", bad: "#f87171", warn: "#fbbf24",
       };
       const THEMES = [
-        // BRIGHT (công nghệ/đời sống — tươi, năng lượng)
-        { mode: "light", bg1: "#f4f0fc", bg2: "#e9e3f8", accent: "#7c3aed", accent2: "#a78bfa", ink: "#1e1b2e", sub: "#6b6480", card: "#ffffff", glow: "rgba(124,58,237,0.16)" },
-        { mode: "light", bg1: "#f8f2e9", bg2: "#f1e7d6", accent: "#7c3aed", accent2: "#f59e0b", ink: "#2b2238", sub: "#6b6480", card: "#fffdfa", glow: "rgba(124,58,237,0.14)" },
-        { mode: "light", bg1: "#eef1fb", bg2: "#e3e8f7", accent: "#6d28d9", accent2: "#60a5fa", ink: "#1b1d2e", sub: "#646b80", card: "#ffffff", glow: "rgba(109,40,217,0.15)" },
-        // DARK PRO (tài chính — nghiêm túc, chỉn chu, premium)
+        // PHASE 0 — BRIGHT/CAM (gu clip mẫu: nền SÁNG/ấm + cam brand; accent phụ vary nhẹ)
+        { mode: "light", bg1: "#faf7f2", bg2: "#f4ede1", accent: "#ff5a1f", accent2: "#d63e0a", ink: "#1a1612", sub: "#4a4540", card: "#ffffff", glow: "rgba(255,90,31,0.16)" },
+        { mode: "light", bg1: "#fbf6ee", bg2: "#f3e9d8", accent: "#e8590c", accent2: "#f59e0b", ink: "#1f1a14", sub: "#4a4540", card: "#fffdfa", glow: "rgba(232,89,12,0.15)" },
+        { mode: "light", bg1: "#faf6f0", bg2: "#f1e8da", accent: "#ff5a1f", accent2: "#d97706", ink: "#1a1612", sub: "#4a4540", card: "#ffffff", glow: "rgba(255,90,31,0.15)" },
+        // DARK PRO (VARIANT chọn tay — nghiêm túc, premium)
         { mode: "dark", bg1: "#0f0d17", bg2: "#17121f", accent: "#8b5cf6", accent2: "#22d3ee", ink: "#f4f2fb", sub: "#a39db8", card: "#1c1828", glow: "rgba(139,92,246,0.30)" },
-        // DARK TECH (công nghệ nghiêm túc — xanh dương/xanh lá)
+        // DARK TECH (VARIANT — xanh dương/xanh lá)
         { mode: "dark", bg1: "#0c0f17", bg2: "#121826", accent: "#38bdf8", accent2: "#34d399", ink: "#eef4fb", sub: "#93a0b5", card: "#161c28", glow: "rgba(56,189,248,0.26)" },
       ];
       // ── ÁP TOKEN (Phase 2): BrandKit tokens (Design Director) ƯU TIÊN; rỗng/hỏng → THEMES cũ.

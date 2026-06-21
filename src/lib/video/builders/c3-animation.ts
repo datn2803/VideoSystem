@@ -109,15 +109,12 @@ function themeFromSeed(seed: string): number {
   return h % 3; // 3 light theme trong animation.html (lavender/cream/mist)
 }
 
-/** Chọn THEME theo CHỦ ĐỀ (industry của profile) — chốt với Tommy:
- *  tài chính/ngân hàng → DARK PRO (nghiêm túc, chỉn chu, idx 3);
- *  công nghệ/đời sống/khác → BRIGHT tươi (idx 0-2, vary theo nội dung).
- *  Composition clamp idx về [0, THEMES-1] nên an toàn nếu VPS chưa cập nhật dark. */
-export function themeForTopic(industry: string, seed: string): number {
-  const ind = (industry || "").toLowerCase();
-  const isFinance = /bank|financ|tài chính|ngân hàng|fintech|chứng khoán|securit|invest|đầu tư|bảo hiểm|insur|tín dụng|\bvay\b|\bloan/.test(ind);
-  if (isFinance) return 3; // Dark Pro
-  return themeFromSeed(seed); // 0-2 Bright
+/** PHASE 0 — COLOR SYSTEM: BỎ ÉP finance→Dark Pro. Mọi chủ đề → theme BRIGHT/CAM
+ *  (idx 0-2, vary theo nội dung) để 3 nguồn cùng tông sáng như clip mẫu. Theme dark
+ *  (3-4) vẫn còn trong animation.html = VARIANT chọn tay/tương lai (không xoá).
+ *  Thực tế BrandKit `tokens` (light/cam) ưu tiên hơn theme này; giữ làm fallback. */
+export function themeForTopic(_industry: string, seed: string): number {
+  return themeFromSeed(seed); // 0-2 Bright/Cam
 }
 
 

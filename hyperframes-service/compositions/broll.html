@@ -10,7 +10,7 @@
     {"id":"voice_url","type":"string","label":"URL voice-over (mp3/wav)","default":""},
     {"id":"caption_groups","type":"string","label":"Caption karaoke (JSON [{start,end,words:[{text,start,end}]}])","default":"[]"},
     {"id":"caption_lines","type":"string","label":"Caption fallback (JSON mảng [{text,keyword,start,dur}])","default":"[{\"text\":\"Đây là caption mẫu tiếng Việt\",\"keyword\":\"caption mẫu\",\"start\":0.3,\"dur\":3}]"},
-    {"id":"accent_color","type":"color","label":"Màu nhấn (highlight từ khoá)","default":"#e11d2a"},
+    {"id":"accent_color","type":"color","label":"Màu nhấn (highlight từ khoá)","default":"#ff5a1f"},
     {"id":"tokens","type":"string","label":"BrandKit tokens JSON (Design Director) — rỗng=màu mặc định","default":""},
     {"id":"hook","type":"string","label":"Title-card hook đầu clip (rỗng=ẩn)","default":""},
     {"id":"stat","type":"string","label":"Stat insert JSON {label,value,unit} (null=ẩn)","default":""}
@@ -36,18 +36,24 @@
          từ accent; NỀN cũng token theo mode BrandKit (brand sáng ra NỀN SÁNG).
          Default = look MagentX hiện tại (nền tối + đỏ + ám rượu vang) khi không tokens. */
       :root {
-        --red: #e11d2a;
-        --grade-glow: rgba(160, 20, 35, 0.42);
-        --grade-tint: rgba(160, 20, 35, 0.30);
-        --red-glow: rgba(225, 29, 42, 0.5);
-        --bg-base1: #16161a;
-        --bg-base2: #050506;
-        --vignette-a: 0.55;
-        /* C2 HYBRID — tint NỀN hợp nhất tông: kéo clip Pexels (tông tự nhiên, sáng) VÀ ảnh AI
-           (moody cool) về CHUNG 1 tông điện ảnh xanh-tối. Cố ý dùng navy TRUNG TÍNH (không phải
-           accent bão hoà) để KHÔNG ám màu da/bệt màu — accent thương hiệu giữ ở overlay/caption.
-           Brand light-mode hạ tint này xuống (xem khối BrandKit JS). */
-        --bg-tint: rgba(12, 18, 38, 0.26);
+        --red: #ff5a1f;
+        /* PHASE 0 — COLOR SYSTEM: grade phái sinh từ accent, ĐẢO từ đỏ rượu-vang (tối)
+           sang CAM ẤM (sáng) theo gu clip mẫu. Tokens BrandKit (light) ghi đè runtime. */
+        --grade-glow: rgba(255, 122, 60, 0.22);
+        --grade-tint: rgba(255, 110, 48, 0.16);
+        --red-glow: rgba(255, 90, 31, 0.5);
+        --bg-base1: #1c1714;
+        --bg-base2: #0a0706;
+        --vignette-a: 0.30;
+        /* PHASE 0 — footage GRADE token-hoá (đảo SÁNG): brightness ≥1, saturate giữ tươi,
+           contrast nhẹ → footage sáng mà KHÔNG cháy/bệt (giữ chi tiết). Default = SÁNG/ẤM cho
+           tông brand; nhánh DARK VARIANT (kit dark chọn tay) set lại tối trong khối BrandKit JS. */
+        --bg-bright: 1.06;
+        --bg-sat: 1.04;
+        --bg-contrast: 1.05;
+        /* tint NỀN: Phase 0 đổi navy (lạnh, tối) → CAM ẤM nhẹ — hợp nhất tông cả ảnh AI lẫn clip
+           Pexels về SÁNG/CAM. Alpha vừa phải (giữ chi tiết, không ám bệt da). */
+        --bg-tint: rgba(255, 150, 90, 0.10);
         /* Chữ đặt TRỰC TIẾP trên nền (title-card/stat — ngoài pill caption):
            default trắng + shadow đậm cho nền tối; mode light đổi sang ink tối
            + shadow nhẹ (review T3: trắng-trên-sáng không đọc được). */
@@ -70,11 +76,10 @@
         position: absolute; inset: 0;
         width: 1080px; height: 1920px;
         object-fit: cover;
-        /* Cinematic color grade — HỢP NHẤT TÔNG cho CẢ img.bg (ảnh AI) lẫn video.bg (clip Pexels).
-           Trước: saturate(1.12) TĂNG bão hoà → clip Pexels (vốn tươi/tự nhiên) càng đá tông ảnh AI
-           moody-cool. Giờ: GIẢM bão hoà + tối nhẹ + thêm chút contrast → clip Pexels dịu lại, hoà với
-           ảnh AI. Vẫn vừa phải (giữ chi tiết, không bệt) — tint xanh-tối phủ thêm ở #footagetint. */
-        filter: contrast(1.12) saturate(0.8) brightness(0.9);
+        /* PHASE 0 — COLOR SYSTEM: grade token-hoá (--bg-bright/--bg-sat/--bg-contrast). Default ĐẢO
+           SÁNG (brightness 1.06 thay 0.9, saturate 1.04 thay 0.8) → ảnh AI + clip Pexels cùng SÁNG/CAM
+           như C1. Giữ chi tiết (không cháy). Tint cam ấm phủ thêm ở #footagetint. Dark variant (JS) hạ lại. */
+        filter: contrast(var(--bg-contrast)) saturate(var(--bg-sat)) brightness(var(--bg-bright));
         will-change: transform, opacity;
       }
       /* Footage (img tĩnh + video Pexels) start hidden; GSAP crossfades each in on its data-start. */
@@ -258,16 +263,23 @@
           rs.setProperty("--grade-glow", hexA(0.16));
           rs.setProperty("--grade-tint", hexA(0.10));
           rs.setProperty("--vignette-a", "0.22");
-          // Brand SÁNG → đừng phủ tint xanh-tối nặng (giữ nền sáng): hạ tint nền xuống mức rất nhẹ.
-          rs.setProperty("--bg-tint", "rgba(235, 240, 250, 0.08)");
+          // PHASE 0: brand SÁNG/CAM → tint nền CAM ẤM nhẹ (đồng tông brand), bỏ xanh-lạnh.
+          rs.setProperty("--bg-tint", "rgba(255, 150, 90, 0.12)");
           // Chữ trực-tiếp-trên-nền (title/stat) đổi sang ink tối + shadow sáng nhẹ
           // (T3: chữ trắng trên nền sáng không đọc được khi không có ảnh phủ).
           if (/^#[0-9a-f]{6}$/i.test(String(BK.ink || ""))) rs.setProperty("--title-ink", BK.ink);
           else rs.setProperty("--title-ink", "#1a1a22");
           rs.setProperty("--title-shadow", "0 2px 12px rgba(255,255,255,0.55), 0 1px 3px rgba(0,0,0,0.18)");
         } else {
+          // DARK VARIANT (kit dark chọn tay) — GIỮ look điện ảnh tối đã verify: footage tối lại
+          // (brightness<1, bớt bão hoà) + tint navy trung tính + vignette sâu + grade accent đậm.
           rs.setProperty("--grade-glow", hexA(0.42));
           rs.setProperty("--grade-tint", hexA(0.30));
+          rs.setProperty("--bg-bright", "0.92");
+          rs.setProperty("--bg-sat", "0.85");
+          rs.setProperty("--bg-contrast", "1.12");
+          rs.setProperty("--bg-tint", "rgba(12, 18, 38, 0.26)");
+          rs.setProperty("--vignette-a", "0.5");
         }
       })();
 

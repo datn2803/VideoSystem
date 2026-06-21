@@ -55,8 +55,10 @@ function extFromMime(mime: string): string {
 
 // ── B-roll ảnh AI theo topic (GPT Image) ──────────────────────────────────────
 // Hậu tố style cố định cho MỌI shot → bộ ảnh đồng nhất, không lộn xộn, KHÔNG chữ.
+// PHASE 0 — COLOR SYSTEM: tông NGUỒN ảnh đổi từ "moody cool-toned" (tối, lạnh) sang
+// SÁNG/ẤM (warm sunlit, gentle orange) → đồng tông C1 + brand cam, hết "C2 tối trầm".
 const BROLL_STYLE_SUFFIX =
-  ". Professional cinematic photograph, vertical 9:16 composition, dramatic directional lighting, rich detail and texture, photorealistic, consistent moody cool-toned color grade, modern realistic Vietnamese setting, shallow depth of field, no readable text, no captions, no watermark, no logo, no UI labels.";
+  ". Professional cinematic photograph, vertical 9:16 composition, bright soft natural lighting, airy and clean, rich detail and texture, photorealistic, consistent warm sunlit color grade with gentle orange highlights, modern realistic Vietnamese setting, shallow depth of field, no readable text, no captions, no watermark, no logo, no UI labels.";
 
 // Mỗi cảnh 1 CHỈ DẪN máy quay + LOẠI CHỦ THỂ khác nhau → ép ĐA DẠNG (không phải
 // cảnh nào cũng "người ngồi laptop") + minh hoạ ĐÚNG ý đoạn lời thoại (vật/màn hình/
