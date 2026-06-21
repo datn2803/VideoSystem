@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { assessFrame } from "./lib/vision.mjs";
 import { renderWithPlaywright, transcodeToWebm } from "./lib/render-engine.mjs";
+import { buildComposeGraph } from "./lib/compose-overlay.mjs";
 
 const execFileP = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -509,10 +510,11 @@ async function storeOutput(outFile, template) {
   return { url: `${SELF_PUBLIC_URL}/files/${name}`, durationSec, sizeBytes: stat.size };
 }
 
-// ── C4 AUTO-EDITOR (Phase 1): ghép C1 talking-head NỀN + cutaway b-roll C2 ──
+// ── C4 AUTO-EDITOR: ghép C1 talking-head NỀN + cutaway b-roll C2 (+ lớp chữ caption) ──
 // C1 nền + AUDIO C1 = master (giọng khớp môi). Cutaway C2 (TẮT TIẾNG, scale-cover 1080×1920) hiện
-// FULL-FRAME tại các đoạn cutaway_segments rồi cắt về mặt C1 (jump-cut). overlay enable=between(t,…)
-// → đè C2 đúng cửa sổ; C2 -stream_loop để cutaway luôn có nội dung; OUTPUT bound theo C1 (-t realDur).
+// FULL-FRAME tại các đoạn cutaway_segments rồi cắt về mặt C1 (jump-cut). CHỐNG LẶP HÌNH: mỗi cutaway
+// tua tới 1 CẢNH C2 KHÁC nhau (input -ss/-t riêng + setpts về đúng cửa sổ; round-robin coprime trải
+// khắp C2 — xem lib/compose-overlay.mjs) → cutaway liền kề khác cảnh, dùng hết cảnh, KHÔNG loop về đầu.
 // ⚠ duration THẬT lấy từ C1 bằng ffprobe (KHÔNG tính từ frame) → audio KHÔNG lệch tiếng.
 async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, captionGroups, keywords, accentColor }) {
   const id = crypto.randomBytes(8).toString("hex");
@@ -589,31 +591,27 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
       }
     }
 
-    // filter_complex: C1 nền → (cutaway C2) → (lớp chữ alpha). Luôn kết ở label [vout].
-    const chain = [`[0:v]${scaleCrop}[base]`];
-    let cur = "base";
-    if (segs.length) {
-      // overlay enable: TỔNG các between(t,…) — between trả 0/1, sum ≠ 0 trong BẤT KỲ cửa sổ nào → bật
-      // (idiom ffmpeg đúng; '+' là cộng số học, KHÔNG phải ';'). Đã verify render thật nhiều cutaway.
-      const expr = segs.map((s) => `between(t,${s.start.toFixed(2)},${s.end.toFixed(2)})`).join("+");
-      chain.push(`[1:v]${scaleCrop}[cut]`);
-      chain.push(`[base][cut]overlay=enable='${expr}'[cutv]`);
-      cur = "cutv";
+    // C4 CHỐNG LẶP HÌNH: mỗi cutaway lấy 1 ĐOẠN C2 ở 1 CẢNH KHÁC nhau (buildComposeGraph — round-robin
+    // coprime trải khắp C2) thay vì 1 overlay C2 chạy theo t. Cần c2Dur (ranh cảnh) → ffprobe; không
+    // đọc được → fallback overlay loop cũ (KHÔNG sập). filter_complex: C1 nền → cutaway → lớp chữ alpha.
+    const c2Dur = await probeDuration(c2File);
+    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption: !!capMov });
+    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway [${mode}${c2Dur ? ` c2=${c2Dur}s` : ""}] + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
+
+    // input 0 = C1; (distinct) input 1..N = N đoạn C2 -ss/-t (input-seek: CHỈ decode đoạn cần, KHÔNG
+    // buffer khổng lồ như filter split); (loop) input 1 = C2 -stream_loop; caption alpha (nếu có) = input cuối.
+    const c2Inputs = [];
+    if (mode === "distinct") {
+      for (const o of c2Offsets) c2Inputs.push("-ss", String(o.offset), "-t", String(o.readDur), "-i", c2File);
+    } else if (mode === "loop") {
+      c2Inputs.push("-stream_loop", "-1", "-i", c2File);
     }
-    if (capMov) {
-      // input 2 = lớp chữ alpha 1080×1920; overlay 0:0 (alpha → vùng trong suốt cho nền lộ ra).
-      chain.push(`[${cur}][2:v]overlay=0:0[vout]`);
-      cur = "vout";
-    }
-    if (cur !== "vout") chain[chain.length - 1] = chain[chain.length - 1].replace(new RegExp(`\\[${cur}\\]$`), "[vout]");
-    const filter = chain.join(";");
-    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
 
     const args = [
       "-y",
       "-i", c1File,
-      "-stream_loop", "-1", "-i", c2File, // C2 lặp vô hạn → cutaway luôn có nội dung; OUTPUT bound theo C1
-      ...(capMov ? ["-i", capMov] : []), // input 2 = lớp chữ alpha (nếu có)
+      ...c2Inputs,
+      ...(capMov ? ["-i", capMov] : []), // lớp chữ alpha (input cuối — index buildComposeGraph đã chốt)
       "-filter_complex", filter,
       "-map", "[vout]",
       "-map", "0:a?", // AUDIO = C1 (master, khớp môi); '?' = C1 không tiếng thì bỏ qua (không lỗi)
