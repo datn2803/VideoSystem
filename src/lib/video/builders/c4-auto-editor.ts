@@ -1,13 +1,16 @@
-// ── C4 "AUTO-EDITOR" (PHASE 1) — ghép C1 talking-head NỀN + cutaway b-roll C2 ──
+// ── C4 "AUTO-EDITOR" — ghép C1 talking-head NỀN + cutaway b-roll C2 ──
 // ADDITIVE: concept MỚI "auto-editor", KHÔNG đụng C1/C2/C3. Lấy C1+C2 đã render từ videoStore,
 // tính điểm chèn cutaway theo Whisper word-timing, rồi dispatch render-service /compose (ffmpeg).
-// AUDIO = giọng C1 xuyên suốt (master, khớp môi). PHASE 1 CHỈ ghép nền — CHƯA chữ/zoom.
+// AUDIO = giọng C1 xuyên suốt (master, khớp môi).
+// PHASE 1: ghép nền + cutaway. PHASE 2 (thêm): nhịp cutaway DÀY hơn + LỚP CHỮ chạy SUỐT
+// (caption karaoke + keyword IN HOA) qua groupWords/extractKeywords → /compose. CHƯA zoom (phase 3).
 //
 // THIẾT KẾ: planCutaways là PURE (unit-test offline). buildAutoEditor/pollAutoEditorJob dùng hub
 // (như C2) → dispatch /compose qua RenderProvider.compose; poll dùng CHUNG /jobs/:id (như pollBrollJob).
 import { videoStore, type VideoDraftRecord, type ConceptKind } from "../storage";
 import { toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { planCutaways } from "../cutaway-plan";
+import { groupWords, extractKeywords } from "../overlay-plan";
 import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
@@ -61,6 +64,10 @@ export async function buildAutoEditor(input: {
     words = null;
   }
   const cutawaySegments = planCutaways(words, totalDur);
+  // PHASE 2: lớp chữ chạy SUỐT — caption karaoke (gom Whisper words) + keyword IN HOA (số/từ nhấn).
+  // Không Whisper (words null) → groups rỗng → server bỏ lớp chữ (ghép như phase 1).
+  const captionGroups = groupWords(words);
+  const keywords = extractKeywords(captionGroups);
 
   const draft = await videoStore.create({
     scriptId: input.scriptId,
@@ -89,12 +96,19 @@ export async function buildAutoEditor(input: {
         sizeBytes: buf.length,
       }))!;
     }
-    const job = await provider.compose({ c1Url, c2Url, cutawaySegments, durationSec: Math.round(totalDur) });
+    const job = await provider.compose({
+      c1Url,
+      c2Url,
+      cutawaySegments,
+      durationSec: Math.round(totalDur),
+      captionGroups,
+      keywords,
+    });
     return (await videoStore.update(draft.id, {
       status: "rendering",
       progress: 10,
       providerJobId: job.jobId,
-      providerName: `auto-editor (${cutawaySegments.length} cutaway)`,
+      providerName: `auto-editor (${cutawaySegments.length} cutaway · ${captionGroups.length} caption · ${keywords.length} keyword)`,
       durationSec: Math.round(totalDur),
     }))!;
   } catch (e) {

@@ -514,7 +514,7 @@ async function storeOutput(outFile, template) {
 // FULL-FRAME tại các đoạn cutaway_segments rồi cắt về mặt C1 (jump-cut). overlay enable=between(t,…)
 // → đè C2 đúng cửa sổ; C2 -stream_loop để cutaway luôn có nội dung; OUTPUT bound theo C1 (-t realDur).
 // ⚠ duration THẬT lấy từ C1 bằng ffprobe (KHÔNG tính từ frame) → audio KHÔNG lệch tiếng.
-async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint }) {
+async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, captionGroups, keywords, accentColor }) {
   const id = crypto.randomBytes(8).toString("hex");
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "compose-"));
   try {
@@ -557,25 +557,63 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint }
     const fps = RENDER_FPS;
     const W = 1080, H = 1920;
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${fps}`;
-    let filter;
+
+    // ── PHASE 2: LỚP CHỮ overlay (caption karaoke + keyword IN HOA) chạy SUỐT (cả lúc mặt C1) ──
+    // Render composition captions-overlay.html ở chế độ ALPHA (WebM trong suốt) rồi đè lên [vout].
+    // BEST-EFFORT: lỗi lớp chữ → ghép KHÔNG chữ (vẫn ra video, không kéo sập cả job).
+    const capGroups = Array.isArray(captionGroups) ? captionGroups : [];
+    const kws = Array.isArray(keywords) ? keywords : [];
+    let capMov = null;
+    if (capGroups.length || kws.length) {
+      capMov = path.join(tmpDir, "caps.mov"); // qtrle/argb (alpha) — xem render-engine alpha mode
+      // Cap TƯỜNG MINH 600s (khớp cap nội bộ render-engine) — phòng video cực dài render lớp chữ
+      // hàng chục nghìn frame; short-form luôn ≤ ngần này nên không cắt chữ thực tế.
+      const capDur = Math.min(600, realDur);
+      try {
+        await renderWithPlaywright({
+          entryHtmlAbs: path.join(COMP_DIR, "captions-overlay.html"),
+          variables: {
+            duration: capDur,
+            caption_groups: JSON.stringify(capGroups),
+            keywords: JSON.stringify(kws),
+            accent_color: accentColor || "#FFD400",
+          },
+          quality: "draft",
+          outFile: capMov,
+          fps,
+          alpha: true,
+        });
+      } catch (e) {
+        console.error("[compose-caption-fail]", e?.message || e);
+        capMov = null;
+      }
+    }
+
+    // filter_complex: C1 nền → (cutaway C2) → (lớp chữ alpha). Luôn kết ở label [vout].
+    const chain = [`[0:v]${scaleCrop}[base]`];
+    let cur = "base";
     if (segs.length) {
       // overlay enable: TỔNG các between(t,…) — between trả 0/1, sum ≠ 0 trong BẤT KỲ cửa sổ nào → bật
       // (idiom ffmpeg đúng; '+' là cộng số học, KHÔNG phải ';'). Đã verify render thật nhiều cutaway.
       const expr = segs.map((s) => `between(t,${s.start.toFixed(2)},${s.end.toFixed(2)})`).join("+");
-      filter =
-        `[0:v]${scaleCrop}[base];` +
-        `[1:v]${scaleCrop}[cut];` +
-        `[base][cut]overlay=enable='${expr}'[vout]`;
-    } else {
-      // Không có cutaway hợp lệ → chỉ chuẩn hoá C1 9:16 (vẫn ra video + audio C1).
-      filter = `[0:v]${scaleCrop}[vout]`;
+      chain.push(`[1:v]${scaleCrop}[cut]`);
+      chain.push(`[base][cut]overlay=enable='${expr}'[cutv]`);
+      cur = "cutv";
     }
-    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway (fps=${fps})`);
+    if (capMov) {
+      // input 2 = lớp chữ alpha 1080×1920; overlay 0:0 (alpha → vùng trong suốt cho nền lộ ra).
+      chain.push(`[${cur}][2:v]overlay=0:0[vout]`);
+      cur = "vout";
+    }
+    if (cur !== "vout") chain[chain.length - 1] = chain[chain.length - 1].replace(new RegExp(`\\[${cur}\\]$`), "[vout]");
+    const filter = chain.join(";");
+    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
 
     const args = [
       "-y",
       "-i", c1File,
       "-stream_loop", "-1", "-i", c2File, // C2 lặp vô hạn → cutaway luôn có nội dung; OUTPUT bound theo C1
+      ...(capMov ? ["-i", capMov] : []), // input 2 = lớp chữ alpha (nếu có)
       "-filter_complex", filter,
       "-map", "[vout]",
       "-map", "0:a?", // AUDIO = C1 (master, khớp môi); '?' = C1 không tiếng thì bỏ qua (không lỗi)
@@ -656,19 +694,24 @@ app.post("/render", (req, res) => {
   return res.status(202).json({ jobId });
 });
 
-// POST /compose { c1_url, c2_url, cutaway_segments:[{start,dur}], duration? } → 202 { jobId }
-// C4 AUTO-EDITOR (Phase 1): ghép C1 nền + cutaway C2. ASYNC như /render; poll GET /jobs/:id (chung).
+// POST /compose { c1_url, c2_url, cutaway_segments:[{start,dur}], duration?, caption_groups?, keywords?, accent_color? }
+// C4 AUTO-EDITOR: ghép C1 nền + cutaway C2 + (phase2) LỚP CHỮ caption karaoke + keyword IN HOA chạy
+// SUỐT. ASYNC như /render; poll GET /jobs/:id (chung).
 app.post("/compose", (req, res) => {
   const auth = checkAuth(req);
   if (!auth.ok) return res.status(auth.code).json({ ok: false, error: auth.error });
 
-  const { c1_url, c2_url, cutaway_segments, duration } = req.body || {};
+  const { c1_url, c2_url, cutaway_segments, duration, caption_groups, keywords, accent_color } = req.body || {};
   if (typeof c1_url !== "string" || !/^https?:\/\//i.test(c1_url))
     return res.status(400).json({ ok: false, error: "c1_url phải là URL http(s)" });
   if (typeof c2_url !== "string" || !/^https?:\/\//i.test(c2_url))
     return res.status(400).json({ ok: false, error: "c2_url phải là URL http(s)" });
   if (cutaway_segments != null && !Array.isArray(cutaway_segments))
     return res.status(400).json({ ok: false, error: "cutaway_segments phải là mảng [{start,dur}]" });
+  if (caption_groups != null && !Array.isArray(caption_groups))
+    return res.status(400).json({ ok: false, error: "caption_groups phải là mảng" });
+  if (keywords != null && !Array.isArray(keywords))
+    return res.status(400).json({ ok: false, error: "keywords phải là mảng" });
 
   pruneJobs();
   const jobId = crypto.randomUUID();
@@ -682,6 +725,9 @@ app.post("/compose", (req, res) => {
       c2Url: c2_url,
       cutawaySegments: cutaway_segments || [],
       durationHint: duration,
+      captionGroups: caption_groups || [],
+      keywords: keywords || [],
+      accentColor: typeof accent_color === "string" ? accent_color : undefined,
     });
     try {
       const { url, durationSec, sizeBytes } = await storeOutput(outFile, "auto-editor");
