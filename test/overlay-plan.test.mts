@@ -54,4 +54,33 @@ import { eq, ok, done } from "./assert.mjs";
   eq(extractKeywords(null).length, 0, "null → []");
 }
 
+// ── 5) groupWords: KHÔNG để cụm 1 từ lẻ trơ (gộp vào cụm liền kề), trừ khi tổng chỉ 1 từ ──
+{
+  // 6 từ đều → groupWords cũ cho [5]+[1] ("w5" trơ). Sau fix: không cụm nào < 2 từ.
+  const six = Array.from({ length: 6 }, (_, i) => ({ text: "w" + i, start: i * 0.3, end: i * 0.3 + 0.25 }));
+  const g6 = groupWords(six);
+  ok(g6.every((x) => x.words.length >= 2), "6 từ → không cụm 1 từ lẻ");
+  ok(g6.every((x) => x.words.length <= 5), "6 từ → vẫn tôn trọng maxWords=5");
+  eq(g6.reduce((n, x) => n + x.words.length, 0), 6, "6 từ → không mất/nhân từ");
+
+  // Từ KẾT CÂU đứng lẻ ("Một." flush ngay) → phải gộp với cụm sau, không trơ.
+  const sent = [
+    { text: "Một.", start: 0.0, end: 0.4 },
+    { text: "viên", start: 0.5, end: 0.8 },
+    { text: "thuốc", start: 0.9, end: 1.2 },
+  ];
+  ok(groupWords(sent).every((x) => x.words.length >= 2), "từ kết câu lẻ → được gộp");
+
+  // Từ cuối sau khoảng lặng (giống bug 'tay' trong test 1) → gộp, không trơ.
+  const gapLast = [
+    { text: "Nhập", start: 1.1, end: 1.4 },
+    { text: "liệu", start: 1.4, end: 1.7 },
+    { text: "tay", start: 3.0, end: 3.3 }, // gap 1.3s → cũ tách 'tay' trơ
+  ];
+  ok(groupWords(gapLast).every((x) => x.words.length >= 2), "từ cuối sau khoảng lặng → gộp, không trơ");
+
+  // Tổng CHỈ 1 từ → giữ nguyên (không có gì để gộp).
+  eq(groupWords([{ text: "Rồi.", start: 0, end: 0.5 }])[0].words.length, 1, "tổng 1 từ → giữ nguyên");
+}
+
 done("overlay-plan");
