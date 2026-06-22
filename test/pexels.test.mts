@@ -143,6 +143,15 @@ const mkFetch = (route: (url: string) => { ok?: boolean; body?: unknown }) =>
   ok(!isOffTopicClip("people relaxing on the beach", Q("people relaxing on the beach vacation")), "câu nói VỀ biển → clip biển GIỮ (scenery ∈ query)");
   // slug rỗng (API thiếu url) → KHÔNG loại (backward-compat)
   ok(!isOffTopicClip("", Q("anything here")), "slug rỗng → không loại");
+
+  // FIX B — học thuật/khoa học LẠC khi minh hoạ AI/công nghệ (gốc bug 'dùng AI' → công thức hoá học)
+  ok(isOffTopicClip("chemistry formula on a blackboard", Q("person using a laptop at a desk")), "công thức hoá học → lạc query dùng laptop");
+  ok(isOffTopicClip("scientist working in a laboratory with beakers", Q("automate tasks with software")), "lab/scientist → lạc query tự động hoá");
+  ok(isOffTopicClip("physics equations on a chalkboard", Q("person reviewing a banking app on phone")), "công thức vật lý → lạc query app ngân hàng");
+  // query CHỦ ĐÍCH về hoá học/khoa học → clip hoá học GIỮ (academic ∈ query)
+  ok(!isOffTopicClip("chemistry teacher writing a formula", Q("chemistry class formula lesson")), "câu VỀ hoá học → clip hoá học GIỮ (academic ∈ query)");
+  // GUARD — từ CHUNG (data/charts/analyst) KHÔNG nằm trong ACADEMIC → KHÔNG bị over-drop (hợp lệ tài chính/AI)
+  ok(!isOffTopicClip("data analyst reviewing charts on a screen", Q("analyze data charts on a laptop")), "data/charts → KHÔNG học thuật, giữ");
 }
 
 // ── 6) searchPexelsClip — gate (C) bỏ clip lạc, chọn clip khớp; toàn lạc → null (fallback AI) ──
