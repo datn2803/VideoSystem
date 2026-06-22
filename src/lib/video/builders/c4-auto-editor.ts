@@ -10,7 +10,7 @@
 import { videoStore, type VideoDraftRecord, type ConceptKind } from "../storage";
 import { toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { planCutaways } from "../cutaway-plan";
-import { groupWords, extractKeywords } from "../overlay-plan";
+import { groupWords } from "../overlay-plan";
 import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
@@ -64,10 +64,10 @@ export async function buildAutoEditor(input: {
     words = null;
   }
   const cutawaySegments = planCutaways(words, totalDur);
-  // PHASE 2: lớp chữ chạy SUỐT — caption karaoke (gom Whisper words) + keyword IN HOA (số/từ nhấn).
+  // Lớp chữ: CHỈ caption karaoke (Tommy chốt BỎ keyword IN HOA — gọn, giống editor TikTok pro,
+  // hết "93" trùng caption). maxWords:4 → cụm 2–4 từ/cụm (chuẩn pro; mergeShortGroups ép ≥2 từ).
   // Không Whisper (words null) → groups rỗng → server bỏ lớp chữ (ghép như phase 1).
-  const captionGroups = groupWords(words);
-  const keywords = extractKeywords(captionGroups);
+  const captionGroups = groupWords(words, { maxWords: 4 });
 
   const draft = await videoStore.create({
     scriptId: input.scriptId,
@@ -102,13 +102,13 @@ export async function buildAutoEditor(input: {
       cutawaySegments,
       durationSec: Math.round(totalDur),
       captionGroups,
-      keywords,
+      // keywords KHÔNG truyền nữa (đã bỏ keyword IN HOA); type giữ optional nên không vỡ.
     });
     return (await videoStore.update(draft.id, {
       status: "rendering",
       progress: 10,
       providerJobId: job.jobId,
-      providerName: `auto-editor (${cutawaySegments.length} cutaway · ${captionGroups.length} caption · ${keywords.length} keyword)`,
+      providerName: `auto-editor (${cutawaySegments.length} cutaway · ${captionGroups.length} caption)`,
       durationSec: Math.round(totalDur),
     }))!;
   } catch (e) {

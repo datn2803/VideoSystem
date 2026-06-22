@@ -93,6 +93,17 @@ const SCENERY: ReadonlySet<string> = new Set([
   "sky", "clouds", "cloud", "landscape", "scenery", "scenic", "nature", "horizon", "island", "tropical",
   "vacation", "holiday", "resort", "meditation", "meditating", "meditate", "zen", "yoga", "spa", "sunbathing",
 ]);
+// HỌC THUẬT/KHOA HỌC — cảnh hay LẠC khi minh hoạ AI/công nghệ/kinh doanh (gốc bug 'dùng AI' → CÔNG THỨC
+// HOÁ HỌC/bảng đen/lab). Bỏ clip có các từ này khi query KHÔNG nhắc (như SCENERY). CỐ Ý chỉ chứa từ
+// RÕ khoa-học (chemistry/lab/công thức/thí nghiệm…), TRÁNH từ chung (data/graph/study/research/chart)
+// vì chúng hợp lệ cho tài chính/AI → không thêm vào đây để khỏi false-drop.
+const ACADEMIC: ReadonlySet<string> = new Set([
+  "chalkboard", "blackboard", "laboratory", "lab", "beaker", "beakers", "flask", "flasks",
+  "microscope", "telescope", "chemistry", "chemical", "chemicals", "physics", "biology",
+  "scientific", "scientist", "scientists", "formula", "formulae", "formulas",
+  "equation", "equations", "periodic", "molecule", "molecules", "atom", "atoms",
+  "experiment", "experiments",
+]);
 function clipWords(s: string): string[] {
   return String(s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 1);
 }
@@ -101,14 +112,16 @@ function pexelsSlug(url: unknown): string {
   const m = String(url || "").match(/pexels\.com\/video\/(.+?)-\d+\/?$/i);
   return m ? m[1].replace(/-/g, " ") : "";
 }
-/** Clip LẠC khi: slug có từ phong-cảnh/đời-sống mà query KHÔNG nhắc, VÀ slug không chia sẻ từ chủ thể nào với query. */
+/** Clip LẠC khi: slug có từ phong-cảnh/đời-sống HOẶC học-thuật/khoa-học mà query KHÔNG nhắc, VÀ slug
+ *  không chia sẻ từ chủ thể nào với query. (gate PR#8 + mở rộng học-thuật để chặn cảnh hoá-học lạc đề). */
 export function isOffTopicClip(slug: string, queryWords: ReadonlySet<string>): boolean {
   const sw = clipWords(slug);
   if (!sw.length) return false; // không có slug (API thiếu url / test) → đừng loại
-  const hasStrayScenery = sw.some((w) => SCENERY.has(w) && !queryWords.has(w));
-  if (!hasStrayScenery) return false;
-  const sharesSubject = sw.some((w) => queryWords.has(w) && !SCENERY.has(w));
-  return !sharesSubject; // có cảnh lạc VÀ không trùng chủ thể nào → loại
+  const isStray = (w: string) => SCENERY.has(w) || ACADEMIC.has(w);
+  const hasStray = sw.some((w) => isStray(w) && !queryWords.has(w));
+  if (!hasStray) return false;
+  const sharesSubject = sw.some((w) => queryWords.has(w) && !isStray(w));
+  return !sharesSubject; // có cảnh lạc (phong-cảnh/học-thuật) VÀ không trùng chủ thể nào → loại
 }
 
 const clipCache = new Map<string, PexelsClip | null>(); // keyword+orientation → clip (trong process)

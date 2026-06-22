@@ -83,4 +83,12 @@ import { eq, ok, done } from "./assert.mjs";
   eq(groupWords([{ text: "Rồi.", start: 0, end: 0.5 }])[0].words.length, 1, "tổng 1 từ → giữ nguyên");
 }
 
+// ── 6) groupWords maxWords:4 — C4 dùng cụm 2–4 từ (chuẩn editor pro) ──
+{
+  const many = Array.from({ length: 11 }, (_, i) => ({ text: "w" + i, start: i * 0.3, end: i * 0.3 + 0.25 }));
+  const g = groupWords(many, { maxWords: 4 });
+  ok(g.every((x) => x.words.length >= 2 && x.words.length <= 4), "maxWords:4 → mọi cụm 2–4 từ");
+  eq(g.reduce((n, x) => n + x.words.length, 0), 11, "maxWords:4 → không mất từ");
+}
+
 done("overlay-plan");
