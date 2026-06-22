@@ -156,8 +156,45 @@ function patchComposition(html, durationSec, voiceUrl) {
 // late). Images load instantly (vs remote Pexels VIDEO which buffers/seeks every
 // frame → timeout/OOM on a 2-vCPU VPS), and Ken Burns gives them motion. Each
 // image is sequential — cumulative start, its own data-duration. Last image
+// FIX GRADE ADAPTIVE: đo luma nguồn mỗi ẢNH b-roll (ffmpeg scale 1×1 gray = trung bình) → brightness BÙ
+// để footage xấp xỉ tông C1 SÁNG. Cảnh TỐI kéo MẠNH (tới MAX), cảnh đã sáng giữ ~1.0. Video bỏ qua (tông
+// tự nhiên). Best-effort: lỗi/không đo được → bỏ (broll.html rơi về --bg-bright chung). Đo SONG SONG.
+// Trả map url(string) → clipBright(number). TARGET/MAX chỉnh được qua env (BROLL_GRADE_TARGET/_MAX).
+async function probeBgLuminance(bgUrls, bgTypes, tmpDir) {
+  const TARGET = Number(process.env.BROLL_GRADE_TARGET) || 165;
+  const MIN = 1.0, MAX = Number(process.env.BROLL_GRADE_MAX) || 1.8;
+  const map = {};
+  if (!Array.isArray(bgUrls) || !bgUrls.length) return map;
+  await mapWithConcurrency(bgUrls.map((_, i) => i), 4, async (i) => {
+    const url = bgUrls[i];
+    if (bgTypes?.[i] === "video") return;                 // video: giữ tông tự nhiên
+    if (!/^https?:\/\//i.test(String(url))) return;        // chỉ đo ẢNH remote (bỏ video webm local)
+    if (map[url] != null) return;                          // url trùng → đã đo
+    // TIMEOUT (AbortController) như hàm dl(): 1 ảnh tải treo KHÔNG được chặn worker/làm chậm render.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.BROLL_PROBE_TIMEOUT_MS) || 8000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) return;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length < 512) return;
+      const f = path.join(tmpDir, `probe-${i}.img`);
+      await fs.writeFile(f, buf);
+      const { stdout } = await execFileP(
+        "ffmpeg", ["-v", "error", "-i", f, "-vf", "scale=1:1:flags=area", "-pix_fmt", "gray", "-f", "rawvideo", "-"],
+        { encoding: "buffer", maxBuffer: 1024 }
+      );
+      await fs.rm(f, { force: true }).catch(() => {});
+      const luma = stdout && stdout.length ? stdout[0] : 0;
+      if (luma > 0) map[url] = Math.round(Math.max(MIN, Math.min(MAX, TARGET / luma)) * 1000) / 1000;
+    } catch { /* best-effort (timeout/lỗi tải/ffmpeg) → bỏ, dùng --bg-bright chung */ }
+    finally { clearTimeout(timer); }
+  });
+  return map;
+}
+
 // extends to cover any rounding gap so footage never cuts to gradient early.
-function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
+function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur, lumaMap) {
   if (!Array.isArray(bgUrls) || bgUrls.length === 0) return html; // no footage → template gradient fallback
   // bgTypes song song bgUrls ("image"|"video"). Thiếu/cũ (payload C2 trước HYBRID) → coi TẤT CẢ
   // là "image" → hành vi <img> cũ y nguyên (backward-compat tuyệt đối).
@@ -206,7 +243,9 @@ function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur) {
     if (types[i] === "video") {
       return `<video ${common} muted playsinline preload="auto" src="${escAttr(url)}"></video>`;
     }
-    return `<img ${common} src="${escAttr(url)}">`;
+    // GRADE ADAPTIVE: bake --clip-bright (server đo luma) → brightness bù riêng từng ảnh; thiếu → --bg-bright.
+    const cb = lumaMap && lumaMap[url] ? ` style="--clip-bright:${lumaMap[url]}"` : "";
+    return `<img ${common}${cb} src="${escAttr(url)}">`;
   });
   // Insert the footage tags inside #bglayer (replace its empty body).
   return html.replace(/(<div id="bglayer">)(\s*<\/div>)/, `$1${tags.join("")}</div>`);
@@ -339,7 +378,9 @@ async function renderTemplate({ template, variables, quality }) {
           bgUrls = dl.urls;
           tempVideoFiles = dl.files;
         }
-        patched = injectBrollImages(patched, bgUrls, bgTypes, shotDurations, durSec);
+        // GRADE ADAPTIVE: đo luma nguồn mỗi ảnh → brightness bù (cảnh tối sáng mạnh hơn) bake vào <img>.
+        const lumaMap = await probeBgLuminance(bgUrls, bgTypes, tmpDir);
+        patched = injectBrollImages(patched, bgUrls, bgTypes, shotDurations, durSec, lumaMap);
       }
       // animation: bake ảnh cutout hero vào static src (media pass scan compile-time →
       // runtime setAttribute là quá muộn). Rỗng → giữ src="" → runtime JS tự remove imgHero.

@@ -10,7 +10,7 @@
 import { videoStore, type VideoDraftRecord, type ConceptKind } from "../storage";
 import { toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { planCutaways } from "../cutaway-plan";
-import { groupWords } from "../overlay-plan";
+import { groupWords, resolveCaptionWindows } from "../overlay-plan";
 import { hub } from "@/lib/integration-hub/hub";
 import { audioStore } from "@/lib/audio/storage";
 import { scriptStore } from "@/lib/scripts/storage";
@@ -67,7 +67,8 @@ export async function buildAutoEditor(input: {
   // Lớp chữ: CHỈ caption karaoke (Tommy chốt BỎ keyword IN HOA — gọn, giống editor TikTok pro,
   // hết "93" trùng caption). maxWords:4 → cụm 2–4 từ/cụm (chuẩn pro; mergeShortGroups ép ≥2 từ).
   // Không Whisper (words null) → groups rỗng → server bỏ lớp chữ (ghép như phase 1).
-  const captionGroups = groupWords(words, { maxWords: 4 });
+  // resolveCaptionWindows: clamp end mỗi cụm ≤ start cụm kế → KHÔNG 2 cụm caption đè nhau (bug "NAT8n…").
+  const captionGroups = resolveCaptionWindows(groupWords(words, { maxWords: 4 }));
 
   const draft = await videoStore.create({
     scriptId: input.scriptId,

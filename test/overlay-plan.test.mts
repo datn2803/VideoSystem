@@ -1,7 +1,7 @@
 /**
  * Unit-test overlay-plan (C4 phase 2 — caption groups + keyword) — PURE, offline.
  */
-import { groupWords, extractKeywords } from "../src/lib/video/overlay-plan.ts";
+import { groupWords, extractKeywords, resolveCaptionWindows } from "../src/lib/video/overlay-plan.ts";
 import { eq, ok, done } from "./assert.mjs";
 
 // ── 1) groupWords: ngắt theo ≥5 từ / hết câu / khoảng lặng >0.4s ──
@@ -89,6 +89,20 @@ import { eq, ok, done } from "./assert.mjs";
   const g = groupWords(many, { maxWords: 4 });
   ok(g.every((x) => x.words.length >= 2 && x.words.length <= 4), "maxWords:4 → mọi cụm 2–4 từ");
   eq(g.reduce((n, x) => n + x.words.length, 0), 11, "maxWords:4 → không mất từ");
+}
+
+// ── 7) resolveCaptionWindows — chống 2 cụm caption ĐÈ nhau (end clamp ≤ start cụm kế) ──
+{
+  const groups = [
+    { start: 0.0, end: 2.0, words: [{ text: "a", start: 0, end: 2 }] },    // end 2.0 > next 1.5 → clamp
+    { start: 1.5, end: 3.0, words: [{ text: "b", start: 1.5, end: 3 }] },  // end 3.0 > next 3.2-0.06 → clamp
+    { start: 3.2, end: 3.5, words: [{ text: "c", start: 3.2, end: 3.5 }] }, // cuối → giữ
+  ];
+  const r = resolveCaptionWindows(groups, { margin: 0.06 });
+  for (let i = 0; i + 1 < r.length; i++) ok(r[i].end <= r[i + 1].start, `cụm ${i} end ≤ start cụm kế (không đè)`);
+  eq(r[r.length - 1].end, 3.5, "cụm cuối giữ end nguyên");
+  ok(r.every((g, i) => g.start === groups[i].start && g.words.length === groups[i].words.length), "giữ start + words");
+  eq(resolveCaptionWindows(null).length, 0, "null → []");
 }
 
 done("overlay-plan");

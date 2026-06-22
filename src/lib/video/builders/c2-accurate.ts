@@ -105,6 +105,31 @@ export const KNOWN_DOMAINS: Record<string, string> = {
   vietcombank: "vietcombank.com.vn",
 };
 
+// ── FIX b-roll ĐÚNG NGỮ CẢNH: câu NHẮC TOOL/APP cụ thể → ép imageType='app-ui' (ảnh AI render GIAO
+//    DIỆN tool), KHÔNG real-scene cảnh người chung. Danh sách CURATED (tránh từ chung 'make'/'be'/'google'
+//    đứng 1 mình gây nhiễu). detectToolMention bơm HINT vào prompt director (nhánh hybrid). PURE. ──
+const TOOL_KEYWORDS: readonly string[] = [
+  "n8n", "make.com", "zapier", "notion", "airtable", "coda", "canva", "capcut",
+  "chatgpt", "openai", "gemini", "claude", "midjourney", "shopify", "stripe", "slack", "discord", "telegram",
+  "google sheets", "google sheet", "google forms", "google form", "google drive", "google ads", "google analytics", "gmail",
+  "facebook ads", "facebook lead", "lead ads", "tiktok ads", "tiktok shop", "messenger",
+  "sepay", "vnpay", "momo", "zalopay", "zalo oa", "kiotviet", "misa", "sapo", "haravan", "pancake", "ladipage",
+  "dashboard", "chatbot", "webhook", "automation", "workflow", "landing page", "crm", "spreadsheet",
+];
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Phát hiện câu/kịch bản NHẮC TỚI tool/app cụ thể (word-boundary, case-insensitive). Trả danh sách
+ *  tool khớp (rỗng nếu không có). Dùng làm HINT cho director ưu tiên 'app-ui'. PURE → unit-test. */
+export function detectToolMention(text: string): string[] {
+  const t = String(text || "");
+  if (!t.trim()) return [];
+  const found = new Set<string>();
+  for (const kw of TOOL_KEYWORDS) {
+    if (new RegExp(`\\b${escRe(kw)}\\b`, "i").test(t)) found.add(kw);
+  }
+  return Array.from(found);
+}
+
 /** Suy domain từ tên brand: known-map → nếu đã là domain → giữ → else thử '.com'. */
 export function guessDomain(entity: string | undefined): string | null {
   const e = (entity || "").trim().toLowerCase();
@@ -298,6 +323,8 @@ export async function planShotsAccurate(ctx: {
     "ĐẶC BIỆT 2 — câu CÔNG NGHỆ / AI / TỰ ĐỘNG HOÁ / TIN TỨC / KỸ NĂNG trừu tượng → tả NGƯỜI đang DÙNG/THAO TÁC công nghệ đó (gõ laptop, lướt điện thoại, họp, làm ở văn phòng). TUYỆT ĐỐI KHÔNG cảnh HỌC THUẬT/KHOA HỌC lạc đề: KHÔNG bảng đen/công thức toán-lý-hoá, KHÔNG phòng thí nghiệm/ống nghiệm/hoá chất/kính hiển vi, KHÔNG lớp học lý thuyết — TRỪ KHI lời THỰC SỰ nói về toán/lý/hoá/khoa học/giáo dục đó. " +
     "FALLBACK TRUNG TÍNH — KHI KHÔNG CHẮC cảnh nào khớp lời: chọn 'real-scene' AN TOÀN = người làm việc với laptop / văn phòng hiện đại / thao tác điện thoại / ghi chép ở bàn — thà TRUNG TÍNH còn hơn SAI chủ đề (KHÔNG BAO GIỜ chèn cảnh lạc đề). " +
     "Ví dụ: 'dùng AI mỗi ngày' → 'a person using an AI chatbot on a laptop at a desk'; 'ngay cả đài lớn/VTV cũng dùng' → 'a person working on a laptop in a modern office' (KHÔNG bảng đen/công thức/lab). " +
+    // FIX NGỮ CẢNH TECH: câu nhắc TOOL/APP cụ thể → app-ui MÀN HÌNH tool (không real-scene người chung).
+    "ĐẶC BIỆT 3 — câu NHẮC TỚI TOOL/APP/NỀN TẢNG cụ thể (n8n, Make, Zapier, Google Forms/Sheets, Facebook Ads, dashboard, CRM, chatbot, automation, workflow…): BẮT BUỘC chọn 'app-ui' tả MÀN HÌNH/GIAO DIỆN tool đó đang thao tác ĐÚNG việc đang nói — UI hiện đại, SÁNG, sạch, label rõ — KHÔNG real-scene cảnh người chung chung, KHÔNG cảnh người-đi-bộ/đời-thường cho câu về tool. Ví dụ: 'Zapier nối Facebook Lead Ads với Google Sheets' → 'a laptop screen showing a Zapier workflow connecting Facebook Lead Ads to Google Sheets, clean modern bright dashboard UI, legible labels'; 'n8n tự động lấy data khách hàng' → 'a laptop screen showing an n8n automation workflow with connected nodes pulling customer data into a spreadsheet, bright modern UI'; 'lấy data khách hàng về CRM' → 'a laptop screen showing a CRM dashboard filling with new customer leads, clean bright UI'. " +
     "CHỈ chọn các loại dưới đây khi cảnh quay người/đời-thực THỰC SỰ không thể hiện được điều cần nói: " +
     "'app-ui' = câu BẮT BUỘC phải thấy màn hình/giao diện app/phần mềm CỤ THỂ (vd thao tác trong Make.com, thông báo chuyển khoản +500.000đ trên điện thoại) → prompt mô tả UI realistic CÓ chữ ĐÚNG tool. " +
     "'brand' = trọng tâm là NHẬN DIỆN logo MỘT thương hiệu cụ thể → cần logo thật; entity=tên brand, domain=domain đoán (sepay.vn, make.com, zalo.me, notion.so). " +
@@ -307,6 +334,12 @@ export async function planShotsAccurate(ctx: {
     "Mỗi prompt là câu tiếng Anh tả cảnh, dùng cho CẢ tìm video stock LẪN sinh ảnh AI. ";
   try {
     const segBlock = segments.map((s, i) => `${i + 1}. ${s || topic}`).join("\n");
+    // FIX NGỮ CẢNH: tool nhắc trong kịch bản → HINT director ưu tiên 'app-ui'. CHỈ nhánh hybrid;
+    // nhánh accurate (preferRealScene=false) KHÔNG đụng → golden test byte-identical không vỡ.
+    const toolHints = preferRealScene ? detectToolMention(`${scriptText}\n${factHint}`) : [];
+    const toolHintLine = toolHints.length
+      ? `CÔNG CỤ NHẮC TỚI trong kịch bản: ${toolHints.join(", ")} → các CẢNH nói về tool này PHẢI là 'app-ui' tả MÀN HÌNH/UI tool đó (sáng, hiện đại), KHÔNG cảnh người chung.\n\n`
+      : "";
     const res = await llm.complete({
       model: writerModel,
       system: sysIntro + (preferRealScene ? typesHybrid : typesAccurate) + sysOutro,
@@ -318,7 +351,7 @@ export async function planShotsAccurate(ctx: {
             (factHint.trim() ? `ENTITY/SỐ THẬT (ưu tiên bám):\n"""${factHint.slice(0, 1200)}"""\n\n` : "") +
             `CÁC CẢNH (đoạn lời tương ứng):\n${segBlock}\n\n` +
             (preferRealScene
-              ? `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. MẶC ĐỊNH 'real-scene' tả cảnh người THẬT đang THAO TÁC đúng Ý đoạn lời (chủ thể + hành động + bối cảnh liên quan), TRÁNH phong cảnh/aerial/đường phố lạc đề; câu về công việc/tiền/số liệu (kể cả 'tự do tài chính'/'người giàu') phải tả NGƯỜI làm việc cụ thể, KHÔNG du thuyền/bãi biển/hồ bơi/thiền; app-ui/brand/chart CHỈ khi thật cần UI app/logo brand/biểu đồ; mỗi prompt là câu tiếng Anh tả cảnh dùng cho CẢ video stock LẪN ảnh AI.`
+              ? toolHintLine + `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. MẶC ĐỊNH 'real-scene' tả cảnh người THẬT đang THAO TÁC đúng Ý đoạn lời (chủ thể + hành động + bối cảnh liên quan), TRÁNH phong cảnh/aerial/đường phố lạc đề; câu về công việc/tiền/số liệu (kể cả 'tự do tài chính'/'người giàu') phải tả NGƯỜI làm việc cụ thể, KHÔNG du thuyền/bãi biển/hồ bơi/thiền; app-ui/brand/chart CHỈ khi thật cần UI app/logo brand/biểu đồ; mỗi prompt là câu tiếng Anh tả cảnh dùng cho CẢ video stock LẪN ảnh AI.`
               : `Trả JSON mảng ĐÚNG ${count} object {imageType, entity, domain, prompt}. Mỗi prompt bám entity/số của đoạn lời đó; brand → entity+domain; app-ui → mô tả UI có chữ đúng tool; concept → cảnh điện ảnh không chữ.`),
         },
       ],

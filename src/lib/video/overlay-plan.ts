@@ -43,6 +43,24 @@ export function groupWords(
 }
 
 /**
+ * resolveCaptionWindows — CHỐNG 2 cụm caption ĐÈ nhau cùng vị trí: clamp end mỗi cụm ≤ start cụm KẾ
+ * trừ 1 margin nhỏ → tại mọi thời điểm chỉ 1 cụm hiện. Giữ thứ tự + words + start; CHỈ co end (không
+ * bao giờ < start). Cụm cuối giữ end nguyên. PURE — caller (C4) dùng trước khi gửi /compose. */
+export function resolveCaptionWindows(
+  groups: CaptionGroup[] | null,
+  opts: { margin?: number } = {}
+): CaptionGroup[] {
+  const margin = opts.margin ?? 0.06;
+  const gs = Array.isArray(groups) ? groups : [];
+  return gs.map((g, i) => {
+    const next = gs[i + 1];
+    if (!next) return g;
+    const end = Math.max(g.start, Math.min(g.end, next.start - margin)); // không chạm start cụm kế
+    return end === g.end ? g : { ...g, end: r2(end) };
+  });
+}
+
+/**
  * mergeShortGroups — KHÔNG để caption 1 từ trơ (vd "viên" đứng lẻ, "...cũng vừa" cụt). Gộp cụm
  * < minWords từ vào cụm liền kề: ưu tiên hàng xóm CHƯA chạm maxWords (gộp thẳng); nếu cả hai đã đầy
  * → REBALANCE (kéo 1 từ từ hàng xóm sang cụm lẻ) → vẫn tôn trọng maxWords. Còn đúng 1 cụm (tổng ít

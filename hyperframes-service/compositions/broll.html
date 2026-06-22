@@ -78,8 +78,11 @@
         object-fit: cover;
         /* PHASE 0 — COLOR SYSTEM: grade token-hoá (--bg-bright/--bg-sat/--bg-contrast). Default ĐẢO
            SÁNG (brightness 1.06 thay 0.9, saturate 1.04 thay 0.8) → ảnh AI + clip Pexels cùng SÁNG/CAM
-           như C1. Giữ chi tiết (không cháy). Tint cam ấm phủ thêm ở #footagetint. Dark variant (JS) hạ lại. */
-        filter: contrast(var(--bg-contrast)) saturate(var(--bg-sat)) brightness(var(--bg-bright));
+           như C1. Giữ chi tiết (không cháy). Tint cam ấm phủ thêm ở #footagetint.
+           GRADE ADAPTIVE (mode LIGHT): --clip-bright (server bake per-ảnh theo luma nguồn — cảnh TỐI kéo
+           mạnh hơn, cảnh sáng giữ ~1.0) ƯU TIÊN; thiếu → rơi về --bg-bright. Dark variant: JS GỠ inline
+           --clip-bright khỏi <img> → rơi về --bg-bright 0.92 (footage tối lại, adaptive không can thiệp). */
+        filter: contrast(var(--bg-contrast)) saturate(var(--bg-sat)) brightness(var(--clip-bright, var(--bg-bright)));
         will-change: transform, opacity;
       }
       /* Footage (img tĩnh + video Pexels) start hidden; GSAP crossfades each in on its data-start. */
@@ -280,6 +283,10 @@
           rs.setProperty("--bg-contrast", "1.12");
           rs.setProperty("--bg-tint", "rgba(12, 18, 38, 0.26)");
           rs.setProperty("--vignette-a", "0.5");
+          // GRADE ADAPTIVE chỉ dành cho mode LIGHT. Dark variant cố ý làm footage TỐI (--bg-bright 0.92):
+          // gỡ inline --clip-bright (server bake, luôn ≥1.0) khỏi mỗi <img> để var(--clip-bright,--bg-bright)
+          // RƠI VỀ --bg-bright 0.92 → footage tối lại như look điện ảnh đã verify (không bị adaptive kéo sáng).
+          document.querySelectorAll("#bglayer img.bg").forEach((el) => el.style.removeProperty("--clip-bright"));
         }
       })();
 
@@ -469,11 +476,14 @@
       // Caption entrance pops + deterministic HARD-KILL ở thời điểm kết thúc của
       // mỗi cụm → caption không bị kẹt khi karaoke word-tween còn treo class .on
       // (1 cụm hiển thị 1 lúc; seekable, không callback/Date.now).
-      capInfo.forEach((c) => {
+      capInfo.forEach((c, ci) => {
+        // CHỈ 1 cụm/thời điểm: hard-kill cụm i TRƯỚC khi cụm i+1 vào → hết 2 dòng đè cùng vị trí.
+        const nextStart = ci + 1 < capInfo.length ? capInfo[ci + 1].start : Infinity;
+        const killAt = Math.max(c.start + 0.12, Math.min(c.end, nextStart - 0.06));
         tl.fromTo(c.sel,
           { y: 40, opacity: 0, scale: 0.92 },
           { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.6)" }, c.start);
-        tl.set(c.sel, { opacity: 0, visibility: "hidden" }, c.end);
+        tl.set(c.sel, { opacity: 0, visibility: "hidden" }, killAt);
       });
 
       // Karaoke: toggle each word's `.on` class at its word timestamp. Uses tl.set
