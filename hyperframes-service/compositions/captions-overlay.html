@@ -92,9 +92,12 @@
       const tl = gsap.timeline({ paused: true });
       gsap.defaults({ ease: "power3.out" });
 
-      capInfo.forEach((c) => {
+      capInfo.forEach((c, i) => {
+        // CHỈ 1 cụm/thời điểm: hard-kill cụm i TRƯỚC khi cụm i+1 vào → hết 2 dòng đè cùng vị trí.
+        const nextStart = i + 1 < capInfo.length ? capInfo[i + 1].start : Infinity;
+        const killAt = Math.max(c.start + 0.12, Math.min(c.end, nextStart - 0.06));
         tl.fromTo(c.sel, { y: 40, opacity: 0, scale: 0.92 }, { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.6)" }, c.start);
-        tl.set(c.sel, { opacity: 0, visibility: "hidden" }, c.end); // hard-kill cuối cụm (không kẹt .on)
+        tl.set(c.sel, { opacity: 0, visibility: "hidden" }, killAt); // hard-kill (không kẹt .on, không chồng)
       });
       // Karaoke: bật .on từ đang đọc, tắt khi hết (tl.set deterministic, seekable — không callback).
       wordTweens.forEach((w) => {
