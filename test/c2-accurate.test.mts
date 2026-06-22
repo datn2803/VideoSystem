@@ -12,6 +12,7 @@ import {
   fetchBrandLogo,
   resolveBrandDomain,
   planShotsAccurate,
+  detectToolMention,
   SUFFIX_NOTEXT,
   SUFFIX_TEXT,
   type DirectorLLM,
@@ -286,6 +287,17 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   eq(await resolveBrandDomain("GlobalCorpZz", { fetchImpl: guard }), "globalcorpzz.com", "không key → heuristic .com (không fetch)");
 
   if (saveSecret === undefined) delete process.env.LOGODEV_SECRET; else process.env.LOGODEV_SECRET = saveSecret;
+}
+
+// ── detectToolMention — câu nhắc tool → list tool (để director ưu tiên app-ui); KHÔNG false-match từ chung ──
+{
+  ok(detectToolMention("giờ n8n sẽ tự động lấy data khách hàng").includes("n8n"), "n8n → khớp");
+  const z = detectToolMention("dùng Zapier kết nối Facebook Lead Ads với Google Sheets");
+  ok(z.includes("zapier") && z.includes("google sheets") && z.includes("facebook lead"), "Zapier + Google Sheets + Facebook Lead → khớp");
+  ok(detectToolMention("xây dựng một workflow automation cho CRM").length >= 2, "workflow/automation/crm → khớp");
+  eq(detectToolMention("hôm nay trời đẹp, cảm xúc dâng trào").length, 0, "câu cảm xúc không tool → []");
+  eq(detectToolMention("").length, 0, "rỗng → []");
+  eq(detectToolMention("làm việc chăm chỉ mỗi ngày").length, 0, "KHÔNG false-match (không có 'make'/'work' từ chung)");
 }
 
 done("c2-accurate");
