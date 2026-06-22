@@ -1,8 +1,6 @@
 import crypto from "node:crypto";
 import { store } from "@/lib/integration-hub/storage";
-import { decryptSecret } from "@/lib/integration-hub/vault";
 import { getOrCreateBrandKit } from "@/lib/design/director";
-import { mixVoiceWithMusic } from "@/lib/audio/mix-service";
 import { hub } from "@/lib/integration-hub/hub";
 import { recordLLMUsage } from "@/lib/agents/usage";
 import { footageStore } from "@/lib/footage/storage";
@@ -12,7 +10,7 @@ import { blobUpload } from "@/lib/backend/blob-store";
 import { kvRead, kvWrite } from "@/lib/backend/kv-store";
 import { videoStore, type VideoDraftRecord } from "../storage";
 import { getEngine } from "../engine";
-import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage, recordExtraUsage } from "../cost-guard";
+import { isLive, allowSelfHostRender, assertDailyCap, recordPaidUsage } from "../cost-guard";
 import { withRetry, pickRenderProvider, toAbsoluteUrl, generatePlaceholderMp4 } from "./_shared";
 import { RENDER_PIPELINE_VERSION } from "../render-version";
 import type { ImageProvider } from "@/lib/integration-hub/types";
@@ -327,114 +325,8 @@ async function generateBrollImages(
   };
 }
 
-// ── Caption karaoke đồng bộ audio (OpenAI Whisper word-level) ─────────────────
-type Word = { text: string; start: number; end: number };
-type CaptionGroup = { start: number; end: number; words: Word[] };
-
-/**
- * Lấy OpenAI API key từ image provider (openai-image) — tái dùng key đã cấu hình
- * cho GPT Image để gọi Whisper, không cần env riêng. null nếu provider khác/thiếu.
- */
-async function getOpenAIKey(): Promise<string | null> {
-  const p = await pickImageProvider();
-  if (!p || p.name !== "openai-image") return null;
-  const enc = await store.getCredential(p.id);
-  if (!enc) return null;
-  try {
-    return decryptSecret(enc);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Transcribe voice-over qua OpenAI Whisper API (word-level timestamps). Trả mảng
- * Word sạch (bỏ token nhạc/rỗng). null nếu lỗi/thiếu key → caller fallback chia đều.
- * Chạy trong app (có sẵn audio bytes + key) → VPS không cần Whisper/Python nặng.
- */
-async function transcribeWords(audioUrl: string, openaiKey: string): Promise<Word[] | null> {
-  try {
-    const audioRes = await fetch(audioUrl);
-    if (!audioRes.ok) return null;
-    const buf = Buffer.from(await audioRes.arrayBuffer());
-    const form = new FormData();
-    form.append("file", new Blob([buf], { type: "audio/mpeg" }), "voice.mp3");
-    form.append("model", "whisper-1");
-    form.append("response_format", "verbose_json");
-    form.append("timestamp_granularities[]", "word");
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { authorization: `Bearer ${openaiKey}` },
-      body: form,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { words?: { word: string; start: number; end: number }[] };
-    if (!Array.isArray(data.words) || data.words.length === 0) return null;
-    // Clean: bỏ token nhạc/rỗng (theo transcript-guide.md).
-    const words: Word[] = data.words
-      .map((w) => ({ text: String(w.word || "").trim(), start: Number(w.start) || 0, end: Number(w.end) || 0 }))
-      .filter((w) => w.text && !/^[♪�♪-♯]+$/.test(w.text));
-    return words.length ? words : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Gom word → nhóm caption karaoke 3-5 từ/nhóm (conversational, theo captions.md).
- * Ngắt khi: hết câu (dấu .!?…), khoảng lặng >0.4s, hoặc đủ 5 từ. Mỗi nhóm có
- * start/end và word timing để template highlight từ đang đọc.
- */
-function groupWords(words: Word[]): CaptionGroup[] {
-  const groups: CaptionGroup[] = [];
-  let cur: Word[] = [];
-  const flush = () => {
-    if (cur.length) {
-      groups.push({ start: cur[0].start, end: cur[cur.length - 1].end, words: cur });
-      cur = [];
-    }
-  };
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    cur.push(w);
-    const endsSentence = /[.!?…]$/.test(w.text);
-    const next = words[i + 1];
-    const gap = next ? next.start - w.end : 0;
-    if (cur.length >= 5 || endsSentence || gap > 0.4) flush();
-  }
-  flush();
-  return groups;
-}
-
-type CaptionLine = { text: string; start: number; dur: number; keyword?: string };
-
-/**
- * Tách văn bản voice-over thành các dòng caption ngắn (~8 từ), phân bổ start/dur
- * theo tỉ lệ độ dài chữ trên tổng thời lượng. Dùng cho template HyperFrames broll.
- */
-function buildCaptionLines(text: string, totalDur: number): CaptionLine[] {
-  const clean = (text || "").trim();
-  if (!clean) return [];
-  const sentences = clean
-    .split(/(?<=[.!?…])\s+|\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const chunks: string[] = [];
-  for (const sen of sentences) {
-    const words = sen.split(/\s+/);
-    if (words.length <= 10) chunks.push(sen);
-    else for (let i = 0; i < words.length; i += 8) chunks.push(words.slice(i, i + 8).join(" "));
-  }
-  if (chunks.length === 0) return [];
-  const totalChars = chunks.reduce((sum, c) => sum + c.length, 0) || 1;
-  let t = 0;
-  return chunks.map((c) => {
-    const dur = Math.max(1.2, (c.length / totalChars) * totalDur);
-    const line: CaptionLine = { text: c, start: Math.round(t * 100) / 100, dur: Math.round(dur * 100) / 100 };
-    t += dur;
-    return line;
-  });
-}
+// (FIX A — đã GỠ Whisper/caption helpers cũ: getOpenAIKey/transcribeWords/groupWords/buildCaptionLines
+//  + type Word/CaptionGroup/CaptionLine. C2 giờ HÌNH SẠCH (không caption/giọng nung) → caption do C4 overlay lo.)
 
 /** Cache key C2 (Phase 3): content + audio + NHẠC + BrandKit + live-mode (ảnh AI có/không).
  *  musicId trong hash → thêm/xoá nhạc là render mới (không dính video cũ từ cache). */
@@ -507,50 +399,24 @@ export async function buildBroll(input: {
         audio?.durationMs && audio.durationMs > 0
           ? Math.round(audio.durationMs / 1000)
           : script.script.estimatedDurationSec || 30;
-      // voice_url / bg_urls PHẢI là URL công khai (service ở VPS tải qua mạng).
-      let voiceUrl = toAbsoluteUrl(audio?.storagePath) || "";
-      // Whisper transcribe trên VOICE GỐC (trước khi mix nhạc) — timing chuẩn hơn.
-      const voiceUrlRaw = voiceUrl;
-      // Nhạc nền MiniMax (Phase 5, tuỳ chọn): có track "music" → mix duck -18dB.
-      if (voiceUrl && audio && music) {
-        const musicUrl = toAbsoluteUrl(music.storagePath);
-        if (musicUrl) {
-          const mixed = await mixVoiceWithMusic({ id: audio.id, url: voiceUrl }, { id: music.id, url: musicUrl });
-          if (mixed) voiceUrl = mixed;
-        }
-      }
-
       // B-roll CHUYÊN NGHIỆP: ẢNH AI sinh theo topic (GPT Image), style đồng nhất,
       // 9:16, KHÔNG chữ. Cost-guard RENDER_LIVE + cache + retry trong helper.
       // Không bật / thiếu provider → bgUrls rỗng → template dùng gradient (KHÔNG throw).
       const topic = script.topic || script.script.hook || "";
-      // Nguồn caption + chỉ đạo ảnh = READ SCRIPT (hook+body+cta) → ảnh/caption KHỚP giọng đọc
-      // (giọng C2 giờ là "full"). Fallback voiceOver b-roll cũ nếu read script rỗng.
+      // Nguồn CHỈ ĐẠO ẢNH = READ SCRIPT (hook+body+cta) → ảnh khớp ý từng đoạn lời.
       const captionSource =
         [script.script.hook, script.script.body, script.script.cta].filter(Boolean).join(" ").trim() ||
         script.script.variantPrompts.broll.voiceOver ||
         script.script.caption ||
         "";
-      const openaiKey = await getOpenAIKey();
-
-      // Chạy SONG SONG sinh ảnh AI + transcribe Whisper → tiết kiệm thời gian,
-      // tránh vượt Vercel maxDuration 60s (nếu nối tiếp dễ timeout → "unexpected response").
-      // Whisper = call OpenAI TRẢ PHÍ (nhỏ) → gate isLive + trần ngày (P0.3 + L1);
-      // dryrun rơi về caption_lines chia đều (pipeline vẫn chạy).
-      const whisperEst = ((duration || 60) / 60) * (Number(process.env.WHISPER_COST_PER_MIN_USD) || 0.006);
-      const useWhisper = isLive() && !!voiceUrlRaw && !!openaiKey;
-      if (useWhisper) await assertDailyCap(whisperEst, "Whisper C2");
       // C2 ACCURATE: entity/số THẬT cho director = sources (claim) + dataPoints (số minh hoạ).
       const factHint = [
         ...(script.script.sources || []).map((s) => s.claim),
         ...((script.script.variantPrompts.animation?.dataPoints || []) as string[]),
       ].filter(Boolean).join(" · ");
-      const [imgResult, words] = await Promise.all([
-        // allowVideo: chỉ path hyperframes mới nhận clip Pexels (sau cờ C2_HYBRID). Creatomate giữ ảnh.
-        generateBrollImages(input.scriptId, topic, captionSource, shotList, duration, factHint, { allowVideo: true }),
-        useWhisper ? transcribeWords(voiceUrlRaw, openaiKey!) : Promise.resolve(null),
-      ]);
-      if (words) await recordExtraUsage("openai-whisper", whisperEst);
+      // FIX A — C2 chỉ là NGUYÊN LIỆU HÌNH cho C4: KHÔNG caption/giọng nung vào C2 → KHỎI Whisper + mix nhạc
+      // (caption do C4 overlay riêng, giọng = C1 master). allowVideo: path hyperframes nhận clip Pexels (C2_HYBRID).
+      const imgResult = await generateBrollImages(input.scriptId, topic, captionSource, shotList, duration, factHint, { allowVideo: true });
 
       // FAIL-FAST: nếu CÓ ý định sinh ảnh (RENDER_LIVE + provider) nhưng ra 0 ảnh →
       // đây là LỖI người dùng cần biết, KHÔNG render câm ra video đen im lặng.
@@ -568,45 +434,22 @@ export async function buildBroll(input: {
       const bgTypes = imgResult.images.map((c) => c.type);
       const hasVideo = bgTypes.includes("video");
 
-      // Caption karaoke ĐỒNG BỘ audio: Whisper word-level → nhóm 3-5 từ.
-      // Lỗi/thiếu key → fallback caption_lines chia đều (bên dưới).
-      const captionGroups: CaptionGroup[] = words ? groupWords(words) : [];
-
-      // PHASE 3b — title-card (hook) + stat insert.
-      // hook: luôn có → broll.html dựng title-card reveal đầu clip.
-      // stat: CHỈ khi parse được SỐ THẬT từ dataPoints (anti-fabrication) → không thì null (không hiện insert).
-      const hook = script.script.hook || "";
-      const dataPoints = (script.script.variantPrompts.animation?.dataPoints || []) as string[];
-      let stat: { label: string; value: string; unit: string } | null = null;
-      for (const raw of dataPoints) {
-        const str = String(raw || "").trim();
-        const m = str.match(/(\d[\d.,]*)/);
-        if (!m) continue;
-        const value = m[1];
-        const numIdx = m.index ?? 0;
-        const colon = str.indexOf(":");
-        const label = (colon >= 0 && colon < numIdx ? str.slice(0, colon) : str.slice(0, numIdx))
-          .replace(/[:\-–—]\s*$/, "")
-          .trim();
-        const unit = str.slice(numIdx + value.length).replace(/^[\s:.\-–—]+/, "").trim();
-        stat = { label: label.slice(0, 36), value, unit: unit.slice(0, 20) };
-        break;
-      }
-
+      // FIX A — C2 HÌNH SẠCH (nguyên liệu cutaway cho C4): KHÔNG nung caption-karaoke + giọng + title-card
+      // (hook) + stat vào C2. Trước: caption nung-C2 + caption overlay-C4 = 2 lớp đè ("NAT8n"). Giờ C2 chỉ
+      // ra HÌNH (b-roll + grade); C4 tự lo caption (overlay) + giọng (C1 master). → cutaway sạch, hết đè.
       const variables: Record<string, unknown> = {
         duration,
         bg_type: "image", // (legacy enum — composition đọc per-clip qua bg_types bên dưới)
         bg_urls: JSON.stringify(bgUrls),
         bg_types: JSON.stringify(bgTypes), // C2 HYBRID: loại mỗi nền (image|video) song song bg_urls
         shot_durations: JSON.stringify(shotDurations),
-        voice_url: voiceUrl,
-        // caption_groups: karaoke sync (ưu tiên); caption_lines: fallback chia đều.
-        caption_groups: JSON.stringify(captionGroups),
-        caption_lines: JSON.stringify(buildCaptionLines(captionSource, duration)),
+        voice_url: "",        // C2 không giọng (C4 dùng giọng C1 master)
+        caption_groups: "[]", // C2 không caption nung (C4 overlay caption riêng)
+        caption_lines: "[]",
+        hook: "",             // C2 không title-card (chữ nung)
+        stat: "",             // C2 không stat insert (chữ nung)
         accent_color: kit?.tokens.accent || "#e11d2a",
         tokens: tokensJson,
-        hook, // title-card reveal đầu clip
-        stat: JSON.stringify(stat), // stat insert (null nếu không có số thật)
       };
 
       const job = await renderer.render({ templateId: "broll", variables });

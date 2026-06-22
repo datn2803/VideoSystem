@@ -44,6 +44,9 @@ import { eq, ok, done } from "./assert.mjs";
   ok(suffixFor("app-ui") === SUFFIX_TEXT, "app-ui → suffix CHO PHÉP chữ");
   ok(/legible/i.test(suffixFor("brand")), "brand suffix cho phép chữ (legible)");
   ok(/legible/i.test(suffixFor("chart")), "chart suffix cho phép chữ");
+  // FIX B — SÁNG TỪ GỐC: suffix ép tông sáng (chống revert âm thầm về moody/dark-mode → C2 tối).
+  ok(/bright|sunlit|warm/i.test(SUFFIX_NOTEXT) && !/moody/i.test(SUFFIX_NOTEXT), "SUFFIX_NOTEXT SÁNG (bright/sunlit), KHÔNG còn 'moody'");
+  ok(/light-mode/i.test(SUFFIX_TEXT) && /not dark/i.test(SUFFIX_TEXT), "SUFFIX_TEXT ép LIGHT-MODE (NOT dark)");
 }
 
 // ── 3) guessDomain ────────────────────────────────────────────────────────
@@ -230,6 +233,9 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   ok(/yacht|du thuyền/i.test(capturedSystem) && /tự do tài chính/i.test(capturedSystem), "HYBRID: CẤM biểu tượng giàu-sang (yacht...) cho câu công việc/tiền/động lực");
   eq(pHybrid[0].imageType, "real-scene", "HYBRID: giữ real-scene từ director");
   eq(pHybrid[1].imageType, "app-ui", "HYBRID: app-ui vẫn AI (không ép real-scene)");
+  // FIX B/C — hybrid: ép app-ui LIGHT-MODE + cảnh SÁNG + CẤM cảnh sinh hoạt cá nhân lạc đề (carton/đi dạo).
+  ok(/light-mode/i.test(capturedSystem), "HYBRID: app-ui ép LIGHT-MODE (chống dark-mode → C2 tối)");
+  ok(/carton/i.test(capturedSystem) && /SÁNG/.test(capturedSystem), "HYBRID: CẤM cảnh sinh hoạt lạc đề (carton) + ép SÁNG (FIX C)");
 
   // (b) preferRealScene mặc định (false) → prompt director Y NGUYÊN bản cũ.
   // HARD INVARIANT: pin CHÍNH XÁC TỪNG BYTE (không chỉ substring) — system+user được ráp từ mảnh
