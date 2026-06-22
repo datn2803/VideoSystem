@@ -39,7 +39,36 @@ export function groupWords(
     if (cur.length >= maxWords || endsSentence || gap > gapSec) flush();
   }
   flush();
-  return groups;
+  return mergeShortGroups(groups, maxWords);
+}
+
+/**
+ * mergeShortGroups — KHÔNG để caption 1 từ trơ (vd "viên" đứng lẻ, "...cũng vừa" cụt). Gộp cụm
+ * < minWords từ vào cụm liền kề: ưu tiên hàng xóm CHƯA chạm maxWords (gộp thẳng); nếu cả hai đã đầy
+ * → REBALANCE (kéo 1 từ từ hàng xóm sang cụm lẻ) → vẫn tôn trọng maxWords. Còn đúng 1 cụm (tổng ít
+ * từ) thì giữ nguyên. PURE — chỉ sắp xếp lại words, không đổi text/timing từng từ.
+ */
+function mergeShortGroups(groups: CaptionGroup[], maxWords: number, minWords = 2): CaptionGroup[] {
+  if (groups.length <= 1) return groups; // 0-1 cụm → không có hàng xóm để gộp
+  const arr = groups.map((g) => g.words.slice());
+  let guard = 0;
+  for (let again = true; again && guard < 2000; ) {
+    again = false;
+    guard++;
+    for (let i = 0; i < arr.length; i++) {
+      if (arr[i].length >= minWords) continue;
+      if (arr.length === 1) break; // còn đúng 1 cụm → đành giữ (tổng quá ít từ)
+      const prev = i > 0 ? arr[i - 1] : null;
+      const next = i < arr.length - 1 ? arr[i + 1] : null;
+      if (prev && prev.length < maxWords) { prev.push(...arr[i]); arr.splice(i, 1); }
+      else if (next && next.length < maxWords) { next.unshift(...arr[i]); arr.splice(i, 1); }
+      else if (prev) { const m = prev.pop(); if (m) arr[i].unshift(m); } // prev đầy → kéo 1 từ sang
+      else if (next) { const m = next.shift(); if (m) arr[i].push(m); }  // chỉ có next, đầy → kéo sang
+      again = true;
+      break;
+    }
+  }
+  return arr.map((words) => ({ start: r2(words[0].start), end: r2(words[words.length - 1].end), words }));
 }
 
 /**
