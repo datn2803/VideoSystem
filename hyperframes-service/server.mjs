@@ -162,7 +162,9 @@ function patchComposition(html, durationSec, voiceUrl) {
 // Trả map url(string) → clipBright(number). TARGET/MAX chỉnh được qua env (BROLL_GRADE_TARGET/_MAX).
 async function probeBgLuminance(bgUrls, bgTypes, tmpDir) {
   const TARGET = Number(process.env.BROLL_GRADE_TARGET) || 165;
-  const MIN = 1.0, MAX = Number(process.env.BROLL_GRADE_MAX) || 1.8;
+  // MAX 1.6 (giảm từ 1.8): nguồn ảnh giờ ĐÃ SÁNG từ gốc (prompt ép light-mode/bright) → grade chỉ bù NHẸ,
+  // tránh kéo mạnh gây xám/bệt/cháy. Cảnh tối còn sót vẫn được nâng tới 1.6.
+  const MIN = 1.0, MAX = Number(process.env.BROLL_GRADE_MAX) || 1.6;
   const map = {};
   if (!Array.isArray(bgUrls) || !bgUrls.length) return map;
   await mapWithConcurrency(bgUrls.map((_, i) => i), 4, async (i) => {
