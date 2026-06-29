@@ -603,6 +603,25 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
     const W = 1080, H = 1920;
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${fps}`;
 
+    // ── KHUÔN SPLIT-SCREEN (Phase B, ADDITIVE) ──────────────────────────────────────────────────
+    // SPLIT_SCREEN=1 → tại cutaway: nửa TRÊN (topFrac) b-roll C2 + nửa DƯỚI MẶT C1 (cùng lúc, lip-sync).
+    // TẮT (mặc định) → fallback cutaway-full (đường đã verify, KHÔNG đổi hành vi hiện tại). Tỉ lệ + vị trí
+    // crop mặt env-chỉnh. Dims CHẴN (yuv420p yêu cầu). topH chẵn → bottomH=H-topH chẵn (H chẵn).
+    const even = (n) => Math.round(n / 2) * 2;
+    const splitOn = process.env.SPLIT_SCREEN === "1";
+    let split = null;
+    if (splitOn) {
+      const topFrac = Math.max(0.4, Math.min(0.7, Number(process.env.BROLL_SPLIT_TOP_FRAC) || 0.55));
+      const topH = even(H * topFrac);                 // ~1056 (55%)
+      const bottomH = H - topH;                        // ~864 (45%)
+      const faceY = even(Math.max(0, Math.min(H - bottomH, Number(process.env.BROLL_SPLIT_FACE_Y) || 180)));
+      split = {
+        topH,
+        topScaleCrop: `scale=${W}:${topH}:force_original_aspect_ratio=increase,crop=${W}:${topH},setsar=1,fps=${fps}`,
+        faceCrop: `crop=${W}:${bottomH}:0:${faceY}`,   // band MẶT C1 (full width → không scale ngang → không méo)
+      };
+    }
+
     // ── PHASE 2: LỚP CHỮ overlay (caption karaoke + keyword IN HOA) chạy SUỐT (cả lúc mặt C1) ──
     // Render composition captions-overlay.html ở chế độ ALPHA (WebM trong suốt) rồi đè lên [vout].
     // BEST-EFFORT: lỗi lớp chữ → ghép KHÔNG chữ (vẫn ra video, không kéo sập cả job).
@@ -638,13 +657,13 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
     // coprime trải khắp C2) thay vì 1 overlay C2 chạy theo t. Cần c2Dur (ranh cảnh) → ffprobe; không
     // đọc được → fallback overlay loop cũ (KHÔNG sập). filter_complex: C1 nền → cutaway → lớp chữ alpha.
     const c2Dur = await probeDuration(c2File);
-    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption: !!capMov });
+    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption: !!capMov, split });
     console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway [${mode}${c2Dur ? ` c2=${c2Dur}s` : ""}] + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
 
     // input 0 = C1; (distinct) input 1..N = N đoạn C2 -ss/-t (input-seek: CHỈ decode đoạn cần, KHÔNG
     // buffer khổng lồ như filter split); (loop) input 1 = C2 -stream_loop; caption alpha (nếu có) = input cuối.
     const c2Inputs = [];
-    if (mode === "distinct") {
+    if (mode === "distinct" || mode === "split") {
       for (const o of c2Offsets) c2Inputs.push("-ss", String(o.offset), "-t", String(o.readDur), "-i", c2File);
     } else if (mode === "loop") {
       c2Inputs.push("-stream_loop", "-1", "-i", c2File);
