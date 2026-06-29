@@ -62,4 +62,19 @@ const segs = [{ start: 3, end: 4.5 }, { start: 6, end: 7.5 }, { start: 9, end: 1
   ok(/\[0:v\]scale[^;]*\[vout\]/.test(nn.filter), "none: [0:v]…[vout]");
 }
 
+// ── 6) FIX2 (gate cảnh đen) — c2Offsets truyền sẵn + segs đã lọc → DÙNG nguyên, không tự tính ──
+{
+  // giả lập: composeAutoEditor đã loại cutaway giữa (cảnh đen) → còn segs[0],segs[2] + offset tương ứng.
+  const kept = [segs[0], segs[2]];
+  const pre = [{ offset: 1.1, readDur: 1.75 }, { offset: 13.3, readDur: 1.75 }];
+  const g = buildComposeGraph({ scaleCrop: SC, segs: kept, c2Dur: 20, hasCaption: false, split: SPLIT, c2Offsets: pre });
+  eq(JSON.stringify(g.c2Offsets), JSON.stringify(pre), "FIX2: dùng c2Offsets truyền sẵn (KHÔNG planC2Offsets lại)");
+  ok(/\[top0\]overlay=x=0:y=0:enable='between\(t,3\.00,4\.50\)'/.test(g.filter), "FIX2: cutaway còn lại #0 overlay đúng cửa sổ");
+  ok(/\[top1\]overlay=x=0:y=0:enable='between\(t,9\.00,10\.50\)'/.test(g.filter), "FIX2: cutaway còn lại #1 = segs[2] (giữ round-robin)");
+  ok(!/top2/.test(g.filter) && !/between\(t,6\.00,7\.50\)/.test(g.filter), "FIX2: cutaway ĐEN (giữa) bị BỎ → KHÔNG overlay, C1 full ở cửa sổ đó");
+  // bỏ trống c2Offsets → vẫn tự tính (đường thuần) — KHÔNG khớp pre.
+  const auto = buildComposeGraph({ scaleCrop: SC, segs: kept, c2Dur: 20, hasCaption: false, split: SPLIT }).c2Offsets;
+  ok(JSON.stringify(auto) !== JSON.stringify(pre), "FIX2: bỏ trống c2Offsets → tự planC2Offsets như cũ");
+}
+
 done("compose-overlay");
