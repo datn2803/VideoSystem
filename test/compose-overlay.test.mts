@@ -77,4 +77,38 @@ const segs = [{ start: 3, end: 4.5 }, { start: 6, end: 7.5 }, { start: 9, end: 1
   ok(JSON.stringify(auto) !== JSON.stringify(pre), "FIX2: bỏ trống c2Offsets → tự planC2Offsets như cũ");
 }
 
+// ── 7) MIXED (Phase C) — full-khung CHỦ ĐẠO + split THƯA theo splitEvery ──
+{
+  // splitEvery=0 + split!=null → KHÔNG cutaway nào split = full khung hết (giống mẫu).
+  const d0 = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: false, split: SPLIT, splitEvery: 0 });
+  eq(d0.mode, "distinct", "splitEvery=0 → full khung hết (distinct, KHÔNG split)");
+  ok(!/split=2/.test(d0.filter), "splitEvery=0: KHÔNG split=2 (không tách mặt)");
+
+  // splitEvery=1 → MỌI cutaway split (tương thích ngược SPLIT_SCREEN=1).
+  const a1 = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: false, split: SPLIT, splitEvery: 1 });
+  eq(a1.mode, "split", "splitEvery=1 → mọi cutaway split (legacy)");
+
+  // splitEvery=2 + 3 cutaway → chỉ cutaway #1 (k=1, (1+1)%2==0) split; #0,#2 full khung. mode=mixed.
+  const m = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: true, split: SPLIT, splitEvery: 2 });
+  eq(m.mode, "mixed", "splitEvery=2 + 3 cutaway → mixed");
+  ok(/\[0:v\]scale[^;]*,split=2\[base\]\[c1full\]/.test(m.filter), "mixed: vẫn tách c1face cho cửa sổ split");
+  // seg0 = FULL khung (scale 1080:1920, overlay KHÔNG x/y)
+  ok(/\[1:v\]scale=1080:1920[^;]*\[seg0\]/.test(m.filter), "mixed: cutaway #0 scale FULL khung");
+  ok(/\[seg0\]overlay=enable='between\(t,3\.00,4\.50\)'/.test(m.filter), "mixed: cutaway #0 overlay FULL (không y=0)");
+  // seg1 = SPLIT (scale topH=1056, overlay x=0:y=0)
+  ok(/\[2:v\]scale=1080:1056[^;]*\[seg1\]/.test(m.filter), "mixed: cutaway #1 scale nửa TRÊN (topH)");
+  ok(/\[seg1\]overlay=x=0:y=0:enable='between\(t,6\.00,7\.50\)'/.test(m.filter), "mixed: cutaway #1 b-roll y=0 (split)");
+  // seg2 = FULL
+  ok(/\[3:v\]scale=1080:1920[^;]*\[seg2\]/.test(m.filter), "mixed: cutaway #2 scale FULL khung");
+  // c1face overlay CHỈ ở cửa sổ split (#1) — không gồm #0,#2
+  ok(/\[c1face\]overlay=x=0:y=1056:enable='between\(t,6\.00,7\.50\)'\[mixv\]/.test(m.filter), "mixed: MẶT C1 chỉ overlay ở cửa sổ split (#1)");
+  ok(!/between\(t,3\.00,4\.50\)\+/.test(m.filter.split("c1face")[1] || ""), "mixed: cửa sổ full KHÔNG có overlay mặt");
+  ok(/\[4:v\]overlay=0:0\[vout\]/.test(m.filter), "mixed: caption = input N+1 (=4)");
+
+  // INVARIANT: c2Offsets (round-robin) GIỮ NGUYÊN dù mode (full/split/mixed)
+  const off0 = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: false, split: SPLIT, splitEvery: 0 }).c2Offsets;
+  const offM = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: false, split: SPLIT, splitEvery: 2 }).c2Offsets;
+  eq(JSON.stringify(off0), JSON.stringify(offM), "mixed: round-robin c2Offsets không đổi theo splitEvery");
+}
+
 done("compose-overlay");
