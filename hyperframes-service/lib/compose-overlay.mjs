@@ -42,19 +42,24 @@ export function planC2Offsets(segs, c2Dur) {
 
 /**
  * Dựng filter_complex + kế hoạch input. input 0 = C1.
- *  - mode "split"   : cutaway = SPLIT 2 tầng — nửa TRÊN b-roll C2 (mỗi cutaway 1 cảnh khác) + nửa DƯỚI
+ *  - mode "split"   : MỌI cutaway = SPLIT 2 tầng — nửa TRÊN b-roll C2 (mỗi cutaway 1 cảnh khác) + nửa DƯỚI
  *                     MẶT C1 (crop, lip-sync). input 1..N = N đoạn C2; caption (nếu có) = input N+1.
+ *  - mode "mixed"   : TRỘN per-cutaway — đa số FULL khung (giống mẫu jump-cut), một phần THƯA dùng split
+ *                     (lấp headroom). splitEvery=N → cutaway thứ N,2N,… là split, còn lại full. (Phase C.)
  *  - mode "distinct": cutaway = C2 che FULL khung (mỗi đoạn 1 cảnh khác); caption = input N+1.
  *  - mode "loop"    : input 1 = C2 (-stream_loop) [fallback khi c2Dur lỗi]; caption = input 2.
  *  - mode "none"    : không có cutaway; caption (nếu có) = input 1.
- * `split` = null → full-cutaway (đường cũ); { topScaleCrop, faceCrop, topH } → khuôn split-screen.
+ * `split` = null → full-cutaway (đường cũ); { topScaleCrop, faceCrop, topH } → có khuôn split-screen.
+ * `splitEvery` quyết bao nhiêu cutaway dùng split (CHỈ khi split!=null): bỏ trống → 1 (MỌI cutaway split,
+ *   tương thích ngược SPLIT_SCREEN=1 + test cũ); 0 → KHÔNG cutaway nào split (full khung hết); N≥2 → cứ
+ *   cutaway thứ N một cái split (mixed). cutaway k (0-based) là split khi (k+1)%every===0.
  * `c2Offsets` (tuỳ chọn) = mảng {offset,readDur} TÍNH SẴN, 1:1 với `segs` — caller (composeAutoEditor) đã
  *   round-robin RỒI LỌC cảnh ĐEN (FIX 2) → truyền vào để dùng nguyên (KHÔNG tự planC2Offsets nữa). Bỏ trống
  *   → tự tính như cũ (đường thuần, test). LƯU Ý: nếu truyền thì độ dài PHẢI khớp segs (caller đảm bảo).
- * @param {{ scaleCrop:string, segs:{start:number,end:number}[], c2Dur:number, hasCaption:boolean, split:({topScaleCrop:string,faceCrop:string,topH:number}|null), c2Offsets?:({offset:number,readDur:number}[]|null) }} a
- * @returns {{ mode:"split"|"distinct"|"loop"|"none", c2Offsets:({offset:number,readDur:number}[]|null), filter:string, captionIdx:(number|null) }}
+ * @param {{ scaleCrop:string, segs:{start:number,end:number}[], c2Dur:number, hasCaption:boolean, split:({topScaleCrop:string,faceCrop:string,topH:number}|null), splitEvery?:number, c2Offsets?:({offset:number,readDur:number}[]|null) }} a
+ * @returns {{ mode:"split"|"mixed"|"distinct"|"loop"|"none", c2Offsets:({offset:number,readDur:number}[]|null), filter:string, captionIdx:(number|null) }}
  */
-export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split, c2Offsets: c2OffsetsIn }) {
+export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split, splitEvery, c2Offsets: c2OffsetsIn }) {
   const list = Array.isArray(segs) ? segs : [];
   const distinct = list.length > 0 && Number.isFinite(c2Dur) && c2Dur > 1.5;
   const f2 = (x) => Number(x).toFixed(2);
@@ -64,7 +69,13 @@ export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split, c
   let mode = "none";
   let c2Offsets = null;
 
-  if (distinct && split) {
+  // every: split!=null & bỏ trống → 1 (mọi cutaway split, tương thích ngược); 0 → không split; N → mỗi N.
+  const every = !split ? 0 : (splitEvery === undefined || splitEvery === null) ? 1 : Math.max(0, Number(splitEvery) || 0);
+  const splitFlags = list.map((_, k) => every > 0 && (k + 1) % every === 0);
+  const allSplit = list.length > 0 && splitFlags.every(Boolean);
+  const anySplit = splitFlags.some(Boolean);
+
+  if (distinct && allSplit) {
     // ── KHUÔN SPLIT-SCREEN (Phase B): cutaway = nửa TRÊN b-roll C2 + nửa DƯỚI MẶT C1 (cùng lúc). ──
     // [0:v] split=2 → base (C1 full, hiện NGOÀI cutaway) + c1face (crop band MẶT, hiện nửa dưới khi cutaway).
     // c1face dùng [0:v] (KHÔNG tốn input mới) → lip-sync vì là frame C1 tại đúng t.
@@ -87,6 +98,30 @@ export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split, c
     const sumExpr = list.map((s) => `between(t,${f2(s.start)},${f2(s.end)})`).join("+");
     chain.push(`[${cur}][c1face]overlay=x=0:y=${split.topH}:enable='${sumExpr}'[splitv]`);
     cur = "splitv";
+  } else if (distinct && anySplit) {
+    // ── MIXED (Phase C): full-khung CHỦ ĐẠO + split THƯA (giống mẫu jump-cut). Mỗi cutaway: full hoặc
+    // split tuỳ splitFlags. c1face (crop MẶT) chỉ overlay ở các cửa sổ split (1 lần, enable=SUM split-wins).
+    mode = "mixed";
+    c2Offsets = Array.isArray(c2OffsetsIn) ? c2OffsetsIn : planC2Offsets(list, c2Dur);
+    chain.push(`[0:v]${scaleCrop},split=2[base][c1full]`);
+    chain.push(`[c1full]${split.faceCrop}[c1face]`);
+    // seg: cutaway split → fill nửa TRÊN (topH); full → che FULL khung. setpts dịch về đúng cửa sổ.
+    list.forEach((s, k) => {
+      const inIdx = nextInput++;
+      const sc = splitFlags[k] ? split.topScaleCrop : scaleCrop;
+      chain.push(`[${inIdx}:v]${sc},setpts=PTS-STARTPTS+${Number(s.start).toFixed(3)}/TB[seg${k}]`);
+    });
+    // overlay: split → y=0 (nửa trên); full → 0:0 (cả khung). eof_action=pass → hết đoạn về nền C1.
+    list.forEach((s, k) => {
+      const out = `o${k}`;
+      const xy = splitFlags[k] ? "x=0:y=0:" : "";
+      chain.push(`[${cur}][seg${k}]overlay=${xy}enable='between(t,${f2(s.start)},${f2(s.end)})':eof_action=pass[${out}]`);
+      cur = out;
+    });
+    // 1 overlay MẶT C1 nửa DƯỚI chỉ trong các cửa sổ SPLIT (cutaway full không có → C2 che cả khung).
+    const splitWins = list.filter((_, k) => splitFlags[k]).map((s) => `between(t,${f2(s.start)},${f2(s.end)})`).join("+");
+    chain.push(`[${cur}][c1face]overlay=x=0:y=${split.topH}:enable='${splitWins}'[mixv]`);
+    cur = "mixv";
   } else if (distinct) {
     mode = "distinct";
     c2Offsets = Array.isArray(c2OffsetsIn) ? c2OffsetsIn : planC2Offsets(list, c2Dur);

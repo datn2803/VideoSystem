@@ -177,10 +177,13 @@ function patchComposition(html, durationSec, voiceUrl) {
 // tự nhiên). Best-effort: lỗi/không đo được → bỏ (broll.html rơi về --bg-bright chung). Đo SONG SONG.
 // Trả map url(string) → clipBright(number). TARGET/MAX chỉnh được qua env (BROLL_GRADE_TARGET/_MAX).
 async function probeBgLuminance(bgUrls, bgTypes, tmpDir) {
-  const TARGET = Number(process.env.BROLL_GRADE_TARGET) || 165;
-  // MAX 1.6 (giảm từ 1.8): nguồn ảnh giờ ĐÃ SÁNG từ gốc (prompt ép light-mode/bright) → grade chỉ bù NHẸ,
-  // tránh kéo mạnh gây xám/bệt/cháy. Cảnh tối còn sót vẫn được nâng tới 1.6.
-  const MIN = 1.0, MAX = Number(process.env.BROLL_GRADE_MAX) || 1.6;
+  const TARGET = Number(process.env.BROLL_GRADE_TARGET) || 195;
+  // KÉO SÁNG (khớp mẫu YAVG ~143): TARGET 195 + MAX 2.0 (nới từ 1.6) → cảnh tối app-ui kéo mạnh hơn về
+  // sáng. Kết hợp broll.html giảm dark-cap #grade. clip = clamp(TARGET/luma) theo luma TRUNG BÌNH ảnh:
+  // ảnh nền-TRẮNG (luma cao) giữ ~1.0 (KHÔNG cháy); ảnh nền-TỐI kéo mạnh tới MAX. MAX cap 2.0 (không 2.3)
+  // để hạn chế cháy vùng-sáng-cục-bộ của dashboard nền-tối hiếm gặp (FIX1 vốn ép light-mode → ít gặp).
+  // Env BROLL_GRADE_TARGET/_MAX chỉnh tiếp.
+  const MIN = 1.0, MAX = Number(process.env.BROLL_GRADE_MAX) || 2.0;
   const map = {};
   if (!Array.isArray(bgUrls) || !bgUrls.length) return map;
   await mapWithConcurrency(bgUrls.map((_, i) => i), 4, async (i) => {
@@ -619,18 +622,26 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
     const W = 1080, H = 1920;
     const scaleCrop = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1,fps=${fps}`;
 
-    // ── KHUÔN SPLIT-SCREEN (Phase B, ADDITIVE) ──────────────────────────────────────────────────
-    // SPLIT_SCREEN=1 → tại cutaway: nửa TRÊN (topFrac) b-roll C2 + nửa DƯỚI MẶT C1 (cùng lúc, lip-sync).
-    // TẮT (mặc định) → fallback cutaway-full (đường đã verify, KHÔNG đổi hành vi hiện tại). Tỉ lệ + vị trí
-    // crop mặt env-chỉnh. Dims CHẴN (yuv420p yêu cầu). topH chẵn → bottomH=H-topH chẵn (H chẵn).
+    // ── CUTAWAY: FULL khung (giống mẫu jump-cut) CHỦ ĐẠO + split THƯA (Phase B+C, ADDITIVE) ──────────
+    // Mẫu (final-video-edit/6-reference-style) = cutaway FULL khung jump-cut, KHÔNG split. Nên mặc định
+    // full khung; split chỉ XEN THƯA (lấp headroom khi C1 trống đầu). Điều khiển bằng SPLIT_SCREEN_EVERY:
+    //   • =0 → KHÔNG split, MỌI cutaway full khung (bám mẫu nhất). ← CODE default khi KHÔNG set env.
+    //   • =N≥2 → cứ N cutaway thì 1 cái split (full chủ đạo + split thưa). ← .env.example SHIP =4 (khuyến nghị).
+    //   • =1 → MỌI cutaway split (tương thích ngược SPLIT_SCREEN=1 cũ — không hồi quy).
+    // Tương thích ngược: thiếu SPLIT_SCREEN_EVERY mà SPLIT_SCREEN=1 → coi như every=1 (toàn split như trước).
+    // Tỉ lệ + vị trí crop mặt env-chỉnh. Dims CHẴN (yuv420p). topH chẵn → bottomH=H-topH chẵn (H chẵn).
     const even = (n) => Math.round(n / 2) * 2;
-    const splitOn = process.env.SPLIT_SCREEN === "1";
+    const everyEnv = process.env.SPLIT_SCREEN_EVERY;
+    const splitEvery = (everyEnv != null && everyEnv !== "")
+      ? Math.max(0, parseInt(everyEnv, 10) || 0)
+      : (process.env.SPLIT_SCREEN === "1" ? 1 : 0);   // legacy fallback
     let split = null;
-    if (splitOn) {
-      const topFrac = Math.max(0.4, Math.min(0.7, Number(process.env.BROLL_SPLIT_TOP_FRAC) || 0.55));
-      const topH = even(H * topFrac);                 // ~1056 (55%)
-      const bottomH = H - topH;                        // ~864 (45%)
-      const faceY = even(Math.max(0, Math.min(H - bottomH, Number(process.env.BROLL_SPLIT_FACE_Y) || 180)));
+    if (splitEvery >= 1) {
+      // topFrac 0.5 (cân full/nửa-dưới cho mặt rộng hơn — bớt "mặt bị mép b-roll cắt ngang"); env-chỉnh.
+      const topFrac = Math.max(0.4, Math.min(0.7, Number(process.env.BROLL_SPLIT_TOP_FRAC) || 0.5));
+      const topH = even(H * topFrac);                 // ~960 (50%)
+      const bottomH = H - topH;                        // ~960 (50%) — mặt C1 rộng hơn
+      const faceY = even(Math.max(0, Math.min(H - bottomH, Number(process.env.BROLL_SPLIT_FACE_Y) || 120)));
       split = {
         topH,
         topScaleCrop: `scale=${W}:${topH}:force_original_aspect_ratio=increase,crop=${W}:${topH},setsar=1,fps=${fps}`,
@@ -694,25 +705,33 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
         offsetsUse = keepIdx.map((i) => planned[i]);
       }
     }
-    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs: segsUse, c2Dur, hasCaption: !!capMov, split, c2Offsets: offsetsUse });
+    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs: segsUse, c2Dur, hasCaption: !!capMov, split, splitEvery, c2Offsets: offsetsUse });
     console.log(`[compose] C1 ${realDur}s + ${segsUse.length}/${segs.length} cutaway [${mode}${c2Dur ? ` c2=${c2Dur}s` : ""}] + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
 
     // input 0 = C1; (distinct) input 1..N = N đoạn C2 -ss/-t (input-seek: CHỈ decode đoạn cần, KHÔNG
     // buffer khổng lồ như filter split); (loop) input 1 = C2 -stream_loop; caption alpha (nếu có) = input cuối.
     const c2Inputs = [];
-    if (mode === "distinct" || mode === "split") {
+    if (mode === "distinct" || mode === "split" || mode === "mixed") {
       for (const o of c2Offsets) c2Inputs.push("-ss", String(o.offset), "-t", String(o.readDur), "-i", c2File);
     } else if (mode === "loop") {
       c2Inputs.push("-stream_loop", "-1", "-i", c2File);
     }
 
+    // A4 — TÔNG ẤM NHẸ toàn khung (đồng tông mẫu, VAVG ~136): colorbalance đẩy nhẹ đỏ + giảm nhẹ xanh.
+    // Mild (không ngả cam da). Default BẬT; BROLL_WARM=0 tắt; BROLL_WARM_FILTER override công thức.
+    let filterFinal = filter, vmap = "[vout]";
+    if (process.env.BROLL_WARM !== "0") {
+      const warm = process.env.BROLL_WARM_FILTER || "colorbalance=rm=0.04:rh=0.03:bs=-0.03:bh=-0.04,eq=saturation=1.04";
+      filterFinal = `${filter};[vout]${warm}[voutw]`;
+      vmap = "[voutw]";
+    }
     const args = [
       "-y",
       "-i", c1File,
       ...c2Inputs,
       ...(capMov ? ["-i", capMov] : []), // lớp chữ alpha (input cuối — index buildComposeGraph đã chốt)
-      "-filter_complex", filter,
-      "-map", "[vout]",
+      "-filter_complex", filterFinal,
+      "-map", vmap,
       "-map", "0:a?", // AUDIO = C1 (master, khớp môi); '?' = C1 không tiếng thì bỏ qua (không lỗi)
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
       "-pix_fmt", "yuv420p", "-movflags", "+faststart",

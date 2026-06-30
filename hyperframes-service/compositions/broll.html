@@ -45,6 +45,10 @@
         --bg-base1: #1c1714;
         --bg-base2: #0a0706;
         --vignette-a: 0.30;
+        /* #grade dark linear-cap (đỉnh/đáy) token-hoá — light mode GIẢM mạnh để khớp sáng mẫu (~143),
+           dark variant GIỮ cap cao (look điện ảnh). Đây là thủ phạm kéo tụt sáng TB lớn nhất nếu để cao. */
+        --grade-dtop: 0.34;
+        --grade-dbot: 0.48;
         /* PHASE 0 — footage GRADE token-hoá (đảo SÁNG): brightness ≥1, saturate giữ tươi,
            contrast nhẹ → footage sáng mà KHÔNG cháy/bệt (giữ chi tiết). Default = SÁNG/ẤM cho
            tông brand; nhánh DARK VARIANT (kit dark chọn tay) set lại tối trong khối BrandKit JS. */
@@ -103,7 +107,7 @@
         position: absolute; inset: 0; pointer-events: none; z-index: 2;
         background:
           radial-gradient(130% 100% at 78% 112%, var(--grade-tint), rgba(0,0,0,0) 48%),
-          linear-gradient(180deg, rgba(8,8,12,0.34) 0%, rgba(8,8,12,0.0) 30%, rgba(5,5,8,0.48) 100%);
+          linear-gradient(180deg, rgba(8,8,12,var(--grade-dtop)) 0%, rgba(8,8,12,0.0) 30%, rgba(5,5,8,var(--grade-dbot)) 100%);
         /* (bỏ mix-blend-mode: rất nặng khi render software trên VPS → dùng overlay thường) */
       }
       /* Vignette: hút mắt vào trung tâm, rìa tối điện ảnh. */
@@ -265,7 +269,12 @@
           rs.setProperty("--bg-base2", BK.bg2 && /^#[0-9a-f]{6}$/i.test(BK.bg2) ? BK.bg2 : BK.bg1);
           rs.setProperty("--grade-glow", hexA(0.16));
           rs.setProperty("--grade-tint", hexA(0.10));
-          rs.setProperty("--vignette-a", "0.22");
+          // KÉO SÁNG MAX (khớp mẫu YAVG ~143): nâng bg-bright + GIẢM dark-cap #grade + vignette nhẹ.
+          // (cảnh tối được server bake --clip-bright kéo mạnh hơn — xem BROLL_GRADE_TARGET/_MAX.)
+          rs.setProperty("--bg-bright", "1.24");
+          rs.setProperty("--grade-dtop", "0.05");
+          rs.setProperty("--grade-dbot", "0.09");
+          rs.setProperty("--vignette-a", "0.06");
           // PHASE 0: brand SÁNG/CAM → tint nền CAM ẤM nhẹ (đồng tông brand), bỏ xanh-lạnh.
           rs.setProperty("--bg-tint", "rgba(255, 150, 90, 0.12)");
           // Chữ trực-tiếp-trên-nền (title/stat) đổi sang ink tối + shadow sáng nhẹ
