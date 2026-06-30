@@ -219,11 +219,13 @@ const mkFetch = (route: (url: string) => MockOpt) =>
     llm: captureLlm, writerModel: "x",
   };
 
-  // (a) preferRealScene=true → director ƯU TIÊN real-scene; giữ phân loại trả về
+  // (a) preferRealScene=true → director ƯU TIÊN 'app-ui' (đảo ưu tiên FIX 1); giữ phân loại trả về
   const pHybrid = await planShotsAccurate({ ...base, preferRealScene: true });
-  ok(/real-scene/.test(capturedSystem), "HYBRID: system prompt CÓ nhắc 'real-scene'");
-  ok(/MẶC ĐỊNH/.test(capturedSystem), "HYBRID: real-scene là MẶC ĐỊNH cho đa số cảnh");
-  ok(/MẶC ĐỊNH|real-scene/.test(capturedUser), "HYBRID: user prompt cũng hướng real-scene");
+  ok(/real-scene/.test(capturedSystem), "HYBRID: system prompt CÓ nhắc 'real-scene' (ngoại lệ cho câu về người)");
+  ok(/MẶC ĐỊNH/.test(capturedSystem), "HYBRID: có lớp MẶC ĐỊNH cho đa số cảnh");
+  // FIX 1 (đảo ưu tiên) — kênh tool/automation → 'app-ui' (màn hình tool LIGHT-MODE) là MẶC ĐỊNH, KHÔNG còn real-scene.
+  ok(/MẶC ĐỊNH chọn 'app-ui'/.test(capturedSystem), "HYBRID: app-ui là LỰA CHỌN MẶC ĐỊNH (đảo ưu tiên cho kênh tool)");
+  ok(/MẶC ĐỊNH|real-scene/.test(capturedUser), "HYBRID: user prompt cũng hướng chọn cảnh đúng");
   // ĐỘ KHỚP LỜI: hybrid prompt phải BUỘC bám chủ thể+hành động của câu + CẤM cảnh phong cảnh/aerial lạc.
   ok(/BÁM ĐÚNG Ý/.test(capturedSystem) && /CHỦ THỂ/.test(capturedSystem), "HYBRID: buộc bám Ý đoạn lời (chủ thể+hành động)");
   ok(/aerial/i.test(capturedSystem), "HYBRID: CẤM cảnh aerial/phong cảnh chung chung (chống lạc đề)");

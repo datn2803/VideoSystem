@@ -48,9 +48,13 @@ export function planC2Offsets(segs, c2Dur) {
  *  - mode "loop"    : input 1 = C2 (-stream_loop) [fallback khi c2Dur lỗi]; caption = input 2.
  *  - mode "none"    : không có cutaway; caption (nếu có) = input 1.
  * `split` = null → full-cutaway (đường cũ); { topScaleCrop, faceCrop, topH } → khuôn split-screen.
+ * `c2Offsets` (tuỳ chọn) = mảng {offset,readDur} TÍNH SẴN, 1:1 với `segs` — caller (composeAutoEditor) đã
+ *   round-robin RỒI LỌC cảnh ĐEN (FIX 2) → truyền vào để dùng nguyên (KHÔNG tự planC2Offsets nữa). Bỏ trống
+ *   → tự tính như cũ (đường thuần, test). LƯU Ý: nếu truyền thì độ dài PHẢI khớp segs (caller đảm bảo).
+ * @param {{ scaleCrop:string, segs:{start:number,end:number}[], c2Dur:number, hasCaption:boolean, split:({topScaleCrop:string,faceCrop:string,topH:number}|null), c2Offsets?:({offset:number,readDur:number}[]|null) }} a
  * @returns {{ mode:"split"|"distinct"|"loop"|"none", c2Offsets:({offset:number,readDur:number}[]|null), filter:string, captionIdx:(number|null) }}
  */
-export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split }) {
+export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split, c2Offsets: c2OffsetsIn }) {
   const list = Array.isArray(segs) ? segs : [];
   const distinct = list.length > 0 && Number.isFinite(c2Dur) && c2Dur > 1.5;
   const f2 = (x) => Number(x).toFixed(2);
@@ -65,7 +69,7 @@ export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split })
     // [0:v] split=2 → base (C1 full, hiện NGOÀI cutaway) + c1face (crop band MẶT, hiện nửa dưới khi cutaway).
     // c1face dùng [0:v] (KHÔNG tốn input mới) → lip-sync vì là frame C1 tại đúng t.
     mode = "split";
-    c2Offsets = planC2Offsets(list, c2Dur);
+    c2Offsets = Array.isArray(c2OffsetsIn) ? c2OffsetsIn : planC2Offsets(list, c2Dur);
     chain.push(`[0:v]${scaleCrop},split=2[base][c1full]`);
     chain.push(`[c1full]${split.faceCrop}[c1face]`); // crop MẶT (giữ tỉ lệ, không méo)
     list.forEach((s, k) => {
@@ -85,7 +89,7 @@ export function buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption, split })
     cur = "splitv";
   } else if (distinct) {
     mode = "distinct";
-    c2Offsets = planC2Offsets(list, c2Dur);
+    c2Offsets = Array.isArray(c2OffsetsIn) ? c2OffsetsIn : planC2Offsets(list, c2Dur);
     chain.push(`[0:v]${scaleCrop}[base]`);
     // setpts: dịch mỗi đoạn C2 về đúng cửa sổ cutaway trên timeline output → overlay enable khớp.
     list.forEach((s, k) => {

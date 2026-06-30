@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { assessFrame } from "./lib/vision.mjs";
 import { renderWithPlaywright, transcodeToWebm } from "./lib/render-engine.mjs";
-import { buildComposeGraph } from "./lib/compose-overlay.mjs";
+import { buildComposeGraph, planC2Offsets } from "./lib/compose-overlay.mjs";
 
 const execFileP = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -90,6 +90,22 @@ function withRenderLock(fn) {
 }
 
 // ── ffprobe duration (seconds) ──
+// FIX 2 — đo luma 1 FRAME video tại giây `atSec` (1px gray → 1 byte = luma trung bình). Dùng phát hiện
+// cảnh C2 GẦN ĐEN cho cutaway split (nửa trên đen thui). Lỗi/đọc rỗng → trả 255 (coi SÁNG → KHÔNG loại nhầm).
+async function probeFrameLuma(file, atSec) {
+  try {
+    const { stdout } = await execFileP(
+      "ffmpeg",
+      ["-v", "error", "-ss", String(Math.max(0, atSec)), "-i", file, "-frames:v", "1",
+        "-vf", "scale=1:1:flags=area", "-pix_fmt", "gray", "-f", "rawvideo", "-"],
+      { encoding: "buffer", maxBuffer: 1024, timeout: Number(process.env.BROLL_PROBE_TIMEOUT_MS) || 8000 }
+    );
+    return stdout && stdout.length ? stdout[0] : 255;
+  } catch {
+    return 255;
+  }
+}
+
 async function probeDuration(file) {
   try {
     const { stdout } = await execFileP("ffprobe", [
@@ -657,8 +673,29 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
     // coprime trải khắp C2) thay vì 1 overlay C2 chạy theo t. Cần c2Dur (ranh cảnh) → ffprobe; không
     // đọc được → fallback overlay loop cũ (KHÔNG sập). filter_complex: C1 nền → cutaway → lớp chữ alpha.
     const c2Dur = await probeDuration(c2File);
-    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs, c2Dur, hasCaption: !!capMov, split });
-    console.log(`[compose] C1 ${realDur}s + ${segs.length} cutaway [${mode}${c2Dur ? ` c2=${c2Dur}s` : ""}] + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
+
+    // FIX 2 — LOẠI CẢNH ĐEN: mỗi cutaway hé 1 đoạn C2 ở offset round-robin; nếu frame đó GẦN ĐEN (luma <
+    // ngưỡng) → nửa TRÊN split đen thui (hoặc full-cutaway đen). Tính offset TRƯỚC (cùng round-robin với
+    // buildComposeGraph) → đo luma GIỮA cửa sổ → lọc segs+offsets SONG SONG: cutaway tối bị BỎ (mặt/C1
+    // full ở cửa sổ đó), các cutaway còn lại GIỮ NGUYÊN offset round-robin. Ngưỡng env BROLL_DARK_LUMA_MIN.
+    let segsUse = segs;
+    let offsetsUse; // undefined → buildComposeGraph tự planC2Offsets (không có cảnh đen → y như cũ)
+    if (Number.isFinite(c2Dur) && c2Dur > 1.5 && segs.length) {
+      const planned = planC2Offsets(segs, c2Dur);
+      const DARK = Number(process.env.BROLL_DARK_LUMA_MIN) || 30;
+      const lumas = new Array(planned.length).fill(255);
+      await mapWithConcurrency(planned.map((_, i) => i), 4, async (i) => {
+        lumas[i] = await probeFrameLuma(c2File, planned[i].offset + planned[i].readDur / 2);
+      });
+      const keepIdx = planned.map((_, i) => i).filter((i) => lumas[i] >= DARK);
+      if (keepIdx.length < segs.length) {
+        console.log(`[compose] FIX2 loại ${segs.length - keepIdx.length}/${segs.length} cutaway cảnh ĐEN (luma<${DARK}) → C1 full ở cửa sổ đó`);
+        segsUse = keepIdx.map((i) => segs[i]);
+        offsetsUse = keepIdx.map((i) => planned[i]);
+      }
+    }
+    const { mode, c2Offsets, filter } = buildComposeGraph({ scaleCrop, segs: segsUse, c2Dur, hasCaption: !!capMov, split, c2Offsets: offsetsUse });
+    console.log(`[compose] C1 ${realDur}s + ${segsUse.length}/${segs.length} cutaway [${mode}${c2Dur ? ` c2=${c2Dur}s` : ""}] + ${capMov ? `chữ(${capGroups.length} cụm,${kws.length} keyword)` : "KHÔNG chữ"} (fps=${fps})`);
 
     // input 0 = C1; (distinct) input 1..N = N đoạn C2 -ss/-t (input-seek: CHỈ decode đoạn cần, KHÔNG
     // buffer khổng lồ như filter split); (loop) input 1 = C2 -stream_loop; caption alpha (nếu có) = input cuối.
