@@ -13,6 +13,7 @@ import {
   resolveBrandDomain,
   planShotsAccurate,
   detectToolMention,
+  enforceAppUiShots,
   SUFFIX_NOTEXT,
   SUFFIX_TEXT,
   type DirectorLLM,
@@ -306,6 +307,40 @@ const mkFetch = (route: (url: string) => MockOpt) =>
   eq(detectToolMention("hôm nay trời đẹp, cảm xúc dâng trào").length, 0, "câu cảm xúc không tool → []");
   eq(detectToolMention("").length, 0, "rỗng → []");
   eq(detectToolMention("làm việc chăm chỉ mỗi ngày").length, 0, "KHÔNG false-match (không có 'make'/'work' từ chung)");
+}
+
+// ── enforceAppUiShots (FIX B 02/07) — ÉP app-ui DETERMINISTIC sau director (không tin LLM) ──
+{
+  const mk = (t: string, prompt = "a person typing on a laptop in a dark room"): import("@/lib/video/builders/c2-accurate").ShotPlan =>
+    ({ imageType: t as never, prompt });
+  const segs = [
+    "n8n sẽ tự lấy data khách hàng từ Google Forms, đồng bộ vào CRM HubSpot.", // tool rõ
+    "Phí nền tảng hoàn toàn là 0 đồng, chi phí hạ tầng giảm hơn 50%.",          // business, KHÔNG tool, KHÔNG đời-thường
+    "Tan làm về nhà sớm, cả gia đình vui vẻ ăn bữa cơm cùng nhau.",             // đời thường THẬT
+    "Áp dụng AI và tự động hóa giúp tối ưu 30% chi phí vận hành.",              // automation → tool keyword
+  ];
+  // Mô phỏng ĐÚNG lỗi prod: gemini trả real-scene cho MỌI shot
+  const bad = [mk("real-scene"), mk("real-scene"), mk("real-scene"), mk("real-scene")];
+  const r = enforceAppUiShots(bad, segs);
+  eq(r.plans[0].imageType, "app-ui", "ÉP: shot nhắc tool (n8n/forms/crm) → app-ui");
+  ok(/laptop screen/.test(r.plans[0].prompt) && /light-mode/i.test(r.plans[0].prompt), "ÉP: prompt template MÀN HÌNH light-mode");
+  ok(/n8n|Google Forms|CRM/i.test(r.plans[0].prompt), "ÉP: prompt bám tool trong segment");
+  eq(r.plans[1].imageType, "app-ui", "ÉP: business không-tool không-đời-thường → app-ui (kênh tool)");
+  eq(r.plans[2].imageType, "real-scene", "GIỮ: segment đời thường thật (tan làm/gia đình) → real-scene (Pexels)");
+  eq(r.plans[3].imageType, "app-ui", "ÉP: 'tự động hóa' (automation) → app-ui");
+  eq(r.forced, 3, "forced đếm đúng 3/4");
+  eq(r.tally["app-ui"], 3, "tally app-ui=3");
+  eq(r.tally["real-scene"], 1, "tally real-scene=1");
+  // brand/chart/app-ui GIỮ NGUYÊN (không đụng loại ngoài Pexels-bound)
+  const keep = enforceAppUiShots([mk("brand", "logo"), mk("chart", "bar chart"), mk("app-ui", "ui")], segs);
+  eq(keep.forced, 0, "brand/chart/app-ui không bị ép");
+  eq(keep.plans[0].imageType, "brand", "brand giữ nguyên");
+  // 2 tool trong segment → prompt nối "connected to"
+  const two = enforceAppUiShots([mk("concept")], ["dùng Zapier nối Google Sheets tự động"]);
+  ok(/connected to/.test(two.plans[0].prompt), "2 tool → 'connected to'");
+  // segment human NHƯNG có tool → vẫn ép app-ui (tool thắng)
+  const ht = enforceAppUiShots([mk("real-scene")], ["tan làm vẫn để n8n chạy workflow tự động"]);
+  eq(ht.plans[0].imageType, "app-ui", "tool THẮNG đời-thường (nhắc n8n → app-ui)");
 }
 
 done("c2-accurate");

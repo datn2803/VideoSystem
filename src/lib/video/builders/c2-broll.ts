@@ -18,6 +18,7 @@ import {
   isC2Accurate,
   c2AccurateQuality,
   planShotsAccurate,
+  enforceAppUiShots,
   suffixFor,
   fetchBrandLogo,
   brandScenePrompt,
@@ -226,6 +227,7 @@ async function generateBrollImages(
   let accurate = isC2Accurate() || hybrid;
   let accQuality = accurate ? c2AccurateQuality() : undefined;
   let plans: ShotPlan[] | null = null;
+  const segments = splitIntoSegments(voiceOver, count); // dùng chung: director + luật ép app-ui
   if (accurate) {
     try {
       const directorLlm = await hub.llm();
@@ -234,7 +236,7 @@ async function generateBrollImages(
         topic,
         scriptText: voiceOver,
         factHint,
-        segments: splitIntoSegments(voiceOver, count),
+        segments,
         fallbackPrompts: prompts,
         count,
         llm: directorLlm,
@@ -244,6 +246,15 @@ async function generateBrollImages(
         // Pure accurate (C2_ACCURATE, hybrid off) → false → prompt director Y NGUYÊN bản cũ.
         preferRealScene: hybrid,
       });
+      // FIX B (02/07/2026) — KHÔNG TIN LLM: gemini-3.1-pro-preview từng phớt lờ "MẶC ĐỊNH app-ui" →
+      // trả real-scene/concept cho MỌI shot → toàn Pexels video người tối/lạc đề. Ép DETERMINISTIC
+      // sau parse: shot nhắc tool / không rõ đời-thường → 'app-ui' (ảnh AI light-mode, KHÔNG Pexels).
+      // Prompt+type đổi → hash ảnh đổi → không ăn cache real-scene cũ. Tắt khẩn: C2_FORCE_APPUI=0.
+      if (plans && hybrid && process.env.C2_FORCE_APPUI !== "0") {
+        const enforced = enforceAppUiShots(plans, segments);
+        plans = enforced.plans;
+        console.log(`[c2-hybrid] ÉP app-ui deterministic: ${enforced.forced}/${plans.length} shot | tally: ${JSON.stringify(enforced.tally)}`);
+      }
     } catch (e) {
       console.error("[c2-accurate] điều phối lỗi → fallback C2 cũ:", e instanceof Error ? e.message : e);
       accurate = false;

@@ -295,7 +295,8 @@
           // GRADE ADAPTIVE chỉ dành cho mode LIGHT. Dark variant cố ý làm footage TỐI (--bg-bright 0.92):
           // gỡ inline --clip-bright (server bake, luôn ≥1.0) khỏi mỗi <img> để var(--clip-bright,--bg-bright)
           // RƠI VỀ --bg-bright 0.92 → footage tối lại như look điện ảnh đã verify (không bị adaptive kéo sáng).
-          document.querySelectorAll("#bglayer img.bg").forEach((el) => el.style.removeProperty("--clip-bright"));
+          // FIX C: video giờ cũng được bake --clip-bright → dark variant gỡ CẢ img LẪN video.
+          document.querySelectorAll("#bglayer img.bg, #bglayer video.bg").forEach((el) => el.style.removeProperty("--clip-bright"));
         }
       })();
 
