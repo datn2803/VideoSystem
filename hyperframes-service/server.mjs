@@ -650,7 +650,11 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
       const zw = even(W * Z);                          // 1296 (Z=1.2)
       const zh = even(H * Z);                          // 2304 (Z=1.2)
       const cropX = even((zw - W) / 2);                // 108 — center NGANG (mặt giữa khung)
-      const faceY = even(Math.max(0, Math.min(zh - bottomH, Number(process.env.BROLL_SPLIT_FACE_Y) || 440)));
+      // faceY: KHÔNG dùng `|| 440` — env =0 là giá trị hợp lệ (mép đỉnh khung phóng), `||` sẽ nuốt thành 440
+      // (ngược ý người chỉnh "cắt cằm → giảm FACE_Y"). Chỉ rơi về default khi unset/rỗng/không phải số.
+      const fyRaw = process.env.BROLL_SPLIT_FACE_Y;
+      const fyNum = fyRaw != null && fyRaw !== "" && Number.isFinite(Number(fyRaw)) ? Number(fyRaw) : 440;
+      const faceY = even(Math.max(0, Math.min(zh - bottomH, fyNum)));
       split = {
         topH,
         topScaleCrop: `scale=${W}:${topH}:force_original_aspect_ratio=increase,crop=${W}:${topH},setsar=1,fps=${fps}`,
