@@ -188,9 +188,19 @@ async function probeBgLuminance(bgUrls, bgTypes, tmpDir) {
   if (!Array.isArray(bgUrls) || !bgUrls.length) return map;
   await mapWithConcurrency(bgUrls.map((_, i) => i), 4, async (i) => {
     const url = bgUrls[i];
-    if (bgTypes?.[i] === "video") return;                 // video: giữ tông tự nhiên
-    if (!/^https?:\/\//i.test(String(url))) return;        // chỉ đo ẢNH remote (bỏ video webm local)
     if (map[url] != null) return;                          // url trùng → đã đo
+    if (bgTypes?.[i] === "video") {
+      // FIX C (điều tra 02/07/2026) — VIDEO cũng được grade adaptive: trước đây bị BỎ → clip Pexels
+      // tối (~52) chỉ ăn --bg-bright, không được kéo. Đo 1 frame GIỮA clip bằng probeFrameLuma:
+      // sau downloadFootageVideos url là webm LOCAL (tên file trong COMP_DIR); còn remote (dl fail)
+      // → ffmpeg đọc thẳng URL. probeFrameLuma lỗi trả 255 → skip (giữ --bg-bright, không kéo bậy).
+      const src = /^https?:\/\//i.test(String(url)) ? String(url) : path.join(COMP_DIR, String(url));
+      const at = Number(process.env.BROLL_VIDEO_PROBE_AT) || 1.5;
+      const luma = await probeFrameLuma(src, at);
+      if (luma > 0 && luma < 255) map[url] = Math.round(Math.max(MIN, Math.min(MAX, TARGET / luma)) * 1000) / 1000;
+      return;
+    }
+    if (!/^https?:\/\//i.test(String(url))) return;        // ảnh: chỉ đo remote
     // TIMEOUT (AbortController) như hàm dl(): 1 ảnh tải treo KHÔNG được chặn worker/làm chậm render.
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), Number(process.env.BROLL_PROBE_TIMEOUT_MS) || 8000);
@@ -262,7 +272,9 @@ function injectBrollImages(html, bgUrls, bgTypes, shotDurations, totalDur, lumaM
     // C2 HYBRID: clip Pexels → <video> (muted/playsinline/preload=auto; frame-stepping điều khiển qua
     // currentTime + __prepareFrame chờ 'seeked'). Ảnh AI → <img> + Ken-Burns như cũ.
     if (types[i] === "video") {
-      return `<video ${common} muted playsinline preload="auto" src="${escAttr(url)}"></video>`;
+      // FIX C: video cũng bake --clip-bright (probeFrameLuma frame giữa clip) → broll.html .bg kéo sáng.
+      const cbv = lumaMap && lumaMap[url] ? ` style="--clip-bright:${lumaMap[url]}"` : "";
+      return `<video ${common}${cbv} muted playsinline preload="auto" src="${escAttr(url)}"></video>`;
     }
     // GRADE ADAPTIVE: bake --clip-bright (server đo luma) → brightness bù riêng từng ảnh; thiếu → --bg-bright.
     const cb = lumaMap && lumaMap[url] ? ` style="--clip-bright:${lumaMap[url]}"` : "";

@@ -131,6 +131,94 @@ export function detectToolMention(text: string): string[] {
   return Array.from(found);
 }
 
+// ── FIX B (điều tra 02/07/2026) — ÉP 'app-ui' DETERMINISTIC sau director (nhánh hybrid) ──
+// GỐC: gemini-3.1-pro-preview (writerModel prod) PHỚT LỜ system prompt "MẶC ĐỊNH app-ui" → trả
+// real-scene/concept cho MỌI shot → rơi đường Pexels → video người stock TỐI + LẠC đề automation.
+// (gpt-4o nghe 30/30 app-ui với cùng prompt — nhưng KHÔNG tin LLM nữa: cưỡng chế bằng code.)
+// Luật (CHỈ đụng loại Pexels-bound {real-scene, concept, product}; brand/chart/app-ui GIỮ NGUYÊN):
+//   1) segment nhắc TOOL (detectToolMention) → ép 'app-ui' + prompt template MÀN HÌNH tool đó (light-mode).
+//   2) segment KHÔNG rõ người/cảm-xúc/đời-thường (HUMAN_SCENE_RE) → kênh này toàn tool/automation →
+//      ép 'app-ui' màn hình tool CHÍNH của kịch bản (fallback: automation dashboard chung, light-mode).
+//   3) segment RÕ đời-thường + KHÔNG nhắc tool → GIỮ nguyên (real-scene → Pexels như cũ).
+// PURE → unit-test offline. Prompt/imageType đổi → hash ảnh đổi → KHÔNG ăn cache real-scene cũ.
+
+/** Lời shot RÕ RÀNG về người/cảm xúc/đời thường (giữ real-scene). Từ CỤ THỂ, tránh false-positive
+ *  với từ business chung ("khách hàng", "nhân viên" — vẫn là ngữ cảnh tool → không nằm đây). */
+const HUMAN_SCENE_RE =
+  /(cảm giác|cảm xúc|nhẹ nhõm|hạnh phúc|vui vẻ|niềm vui|stress|mệt mỏi|áp lực|gia đình|vợ|chồng|con nhỏ|con cái|bạn bè|cà phê|cafe|ăn uống|nấu ăn|bữa cơm|du lịch|nghỉ ngơi|nghỉ dưỡng|thư giãn|đi dạo|đi bộ|tập gym|chạy bộ|về nhà|tan làm|gặp gỡ|trò chuyện|tâm sự|ôm con|đón con)/i;
+
+/** Template MÀN HÌNH theo tool (tiếng Anh, light-mode; suffixFor('app-ui') sẽ nối SUFFIX_TEXT sau). */
+const TOOL_SCREEN_DESC: Record<string, string> = {
+  "n8n": "an n8n automation workflow with connected nodes running",
+  "make.com": "a Make.com scenario builder with connected modules",
+  "zapier": "a Zapier workflow (Zap) connecting business apps",
+  "google sheets": "a Google Sheets spreadsheet filling with customer data rows",
+  "google sheet": "a Google Sheets spreadsheet filling with customer data rows",
+  "spreadsheet": "a spreadsheet filling with customer data rows",
+  "google forms": "a Google Forms responses dashboard collecting new submissions",
+  "google form": "a Google Forms responses dashboard collecting new submissions",
+  "crm": "a CRM dashboard filling with new customer leads",
+  "chatgpt": "an AI chatbot drafting a contextual reply to a customer email",
+  "openai": "an AI chatbot drafting a contextual reply to a customer email",
+  "gemini": "an AI assistant interface drafting a reply",
+  "claude": "an AI assistant interface drafting a reply",
+  "chatbot": "a chatbot conversation panel replying to customers automatically",
+  "dashboard": "a business analytics dashboard with KPI charts",
+  "automation": "an automation workflow with connected nodes running",
+  "workflow": "an automation workflow with connected nodes running",
+  "webhook": "an automation workflow receiving webhook events",
+  "facebook ads": "a Facebook Ads manager dashboard with campaign metrics",
+  "google ads": "a Google Ads dashboard with campaign metrics",
+  "google analytics": "a Google Analytics dashboard with traffic charts",
+  "gmail": "an email inbox with an AI-drafted reply ready to send",
+  "shopify": "an online store admin dashboard with incoming orders",
+  "kiotviet": "a store management dashboard with sales data",
+  "sapo": "a store management dashboard with sales data",
+  "haravan": "a store management dashboard with sales data",
+  "sepay": "a payment dashboard showing a successful bank transfer notification",
+  "vnpay": "a payment dashboard showing a successful transaction",
+  "momo": "a mobile payment app showing a successful transaction",
+  "zalopay": "a mobile payment app showing a successful transaction",
+};
+const screenDescFor = (tool: string): string => TOOL_SCREEN_DESC[tool] || `the ${tool} interface in use`;
+
+const PEXELS_BOUND: ReadonlySet<ImageType> = new Set<ImageType>(["real-scene", "concept", "product"]);
+
+/** Ép app-ui deterministic cho plans (nhánh hybrid). Trả plans MỚI + tally imageType + số shot bị ép. */
+export function enforceAppUiShots(
+  plans: ShotPlan[],
+  segments: string[],
+): { plans: ShotPlan[]; tally: Record<string, number>; forced: number } {
+  // Tool CHÍNH của kịch bản (fallback cho segment không nhắc tool cụ thể).
+  const scriptTools = detectToolMention(segments.join(" "));
+  const mainDesc = scriptTools.length
+    ? screenDescFor(scriptTools[0])
+    : "an automation dashboard with workflow metrics";
+  let forced = 0;
+  const out = plans.map((p, i) => {
+    if (!PEXELS_BOUND.has(p.imageType)) return p; // brand/chart/app-ui: giữ nguyên
+    const seg = segments[i] || "";
+    const segTools = detectToolMention(seg);
+    if (!segTools.length && HUMAN_SCENE_RE.test(seg)) return p; // đời thường thật → giữ real-scene
+    forced++;
+    const desc = segTools.length
+      ? segTools.length >= 2
+        ? `${screenDescFor(segTools[0])} connected to ${segTools[1]}`
+        : screenDescFor(segTools[0])
+      : mainDesc;
+    return {
+      ...p,
+      imageType: "app-ui" as ImageType,
+      entity: segTools[0] || scriptTools[0] || p.entity,
+      domain: undefined,
+      prompt: `a laptop screen showing ${desc}, clean WHITE light-mode UI, bright, legible labels, NOT dark mode`,
+    };
+  });
+  const tally: Record<string, number> = {};
+  for (const p of out) tally[p.imageType] = (tally[p.imageType] || 0) + 1;
+  return { plans: out, tally, forced };
+}
+
 /** Suy domain từ tên brand: known-map → nếu đã là domain → giữ → else thử '.com'. */
 export function guessDomain(entity: string | undefined): string | null {
   const e = (entity || "").trim().toLowerCase();
