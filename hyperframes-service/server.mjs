@@ -637,15 +637,29 @@ async function composeAutoEditor({ c1Url, c2Url, cutawaySegments, durationHint, 
       : (process.env.SPLIT_SCREEN === "1" ? 1 : 0);   // legacy fallback
     let split = null;
     if (splitEvery >= 1) {
-      // topFrac 0.5 (cân full/nửa-dưới cho mặt rộng hơn — bớt "mặt bị mép b-roll cắt ngang"); env-chỉnh.
-      const topFrac = Math.max(0.4, Math.min(0.7, Number(process.env.BROLL_SPLIT_TOP_FRAC) || 0.5));
-      const topH = even(H * topFrac);                 // ~960 (50%)
-      const bottomH = H - topH;                        // ~960 (50%) — mặt C1 rộng hơn
-      const faceY = even(Math.max(0, Math.min(H - bottomH, Number(process.env.BROLL_SPLIT_FACE_Y) || 120)));
+      // topFrac 0.45 → nửa DƯỚI (mặt C1) ~55% như mẫu (mặt to hơn b-roll trên). env-chỉnh.
+      const topFrac = Math.max(0.4, Math.min(0.7, Number(process.env.BROLL_SPLIT_TOP_FRAC) || 0.45));
+      const topH = even(H * topFrac);                 // ~864 (45%)
+      const bottomH = H - topH;                        // ~1056 (55%) — mặt C1 nửa dưới
+      // MẶT ZOOM LẤP ĐẦY nửa dưới (bỏ trần/khoảng-trắng trên đầu): PHÓNG TO C1 đều Z (X=Y → KHÔNG méo)
+      // rồi crop cửa sổ nửa-dưới vào vùng MẶT. Z env-chỉnh [1.2,2.0]; faceY = mép TRÊN cửa sổ crop (toạ độ
+      // khung ĐÃ phóng). Chốt theo render C1 host thật (mặt giữa-trên): Z=1.2 + faceY=440 → cắt NHẸ đỉnh
+      // tóc (như mẫu), mắt/mũi/miệng/CẰM trọn + vai, HẾT trần. ⚠ Phụ thuộc KHUNG C1: mặt nhỏ/xa hơn →
+      // tăng Z; còn lọt trần → tăng faceY; cắt cằm → giảm faceY.
+      const Z = Math.max(1.2, Math.min(2.0, Number(process.env.BROLL_SPLIT_FACE_ZOOM) || 1.2));
+      const zw = even(W * Z);                          // 1296 (Z=1.2)
+      const zh = even(H * Z);                          // 2304 (Z=1.2)
+      const cropX = even((zw - W) / 2);                // 108 — center NGANG (mặt giữa khung)
+      // faceY: KHÔNG dùng `|| 440` — env =0 là giá trị hợp lệ (mép đỉnh khung phóng), `||` sẽ nuốt thành 440
+      // (ngược ý người chỉnh "cắt cằm → giảm FACE_Y"). Chỉ rơi về default khi unset/rỗng/không phải số.
+      const fyRaw = process.env.BROLL_SPLIT_FACE_Y;
+      const fyNum = fyRaw != null && fyRaw !== "" && Number.isFinite(Number(fyRaw)) ? Number(fyRaw) : 440;
+      const faceY = even(Math.max(0, Math.min(zh - bottomH, fyNum)));
       split = {
         topH,
         topScaleCrop: `scale=${W}:${topH}:force_original_aspect_ratio=increase,crop=${W}:${topH},setsar=1,fps=${fps}`,
-        faceCrop: `crop=${W}:${bottomH}:0:${faceY}`,   // band MẶT C1 (full width → không scale ngang → không méo)
+        // scale ĐỀU (zw:zh, cùng Z) → KHÔNG méo; crop nửa-dưới (W×bottomH) vào MẶT (center ngang, faceY dọc).
+        faceCrop: `scale=${zw}:${zh},crop=${W}:${bottomH}:${cropX}:${faceY}`,
       };
     }
 
