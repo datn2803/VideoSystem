@@ -11,7 +11,9 @@ const SC = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,
 const SPLIT = {
   topH: 1056,
   topScaleCrop: "scale=1080:1056:force_original_aspect_ratio=increase,crop=1080:1056,setsar=1,fps=24",
-  faceCrop: "crop=1080:864:0:180",
+  // faceCrop kiểu ZOOM MẶT (fix trần-nhà-trống): scale ĐỀU rồi crop cửa sổ mặt — chuỗi ĐA-filter
+  // pass-through nguyên vẹn (buildComposeGraph không parse nội dung faceCrop).
+  faceCrop: "scale=1404:2496,crop=1080:864:162:360",
 };
 const segs = [{ start: 3, end: 4.5 }, { start: 6, end: 7.5 }, { start: 9, end: 10.5 }];
 
@@ -38,7 +40,7 @@ const segs = [{ start: 3, end: 4.5 }, { start: 6, end: 7.5 }, { start: 9, end: 1
   const s = buildComposeGraph({ scaleCrop: SC, segs, c2Dur: 20, hasCaption: true, split: SPLIT });
   eq(s.mode, "split", "split!=null + distinct → split");
   ok(/\[0:v\]scale[^;]*,split=2\[base\]\[c1full\]/.test(s.filter), "split: [0:v] split=2 → base + c1full");
-  ok(/\[c1full\]crop=1080:864:0:180\[c1face\]/.test(s.filter), "split: crop band MẶT C1");
+  ok(/\[c1full\]scale=1404:2496,crop=1080:864:162:360\[c1face\]/.test(s.filter), "split: ZOOM+crop MẶT C1 (chuỗi đa-filter pass-through)");
   ok(/\[1:v\]scale=1080:1056[^;]*\[top0\]/.test(s.filter), "split: C2 seg scale nửa TRÊN (topH)");
   ok(/\[top0\]overlay=x=0:y=0:enable='between\(t,3\.00,4\.50\)'/.test(s.filter), "split: b-roll overlay y=0 đúng cửa sổ");
   ok(/\[c1face\]overlay=x=0:y=1056:enable='between\(t,3\.00,4\.50\)\+between\(t,6\.00,7\.50\)\+between\(t,9\.00,10\.50\)'/.test(s.filter), "split: MẶT C1 overlay y=topH, enable=SUM mọi cutaway");
